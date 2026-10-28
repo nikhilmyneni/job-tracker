@@ -1,0 +1,8 @@
+node_modules/
+.clasp.json
+.clasprc.json
+*.log
+.DS_Store
+# never commit personal data
+*.pdf
+cv*.txt

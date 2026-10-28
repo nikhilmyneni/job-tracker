@@ -1,0 +1,19 @@
+{
+  "name": "job-tracker-sheets",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Free job application tracker: Google Sheets + Apps Script + Gmail, with optional Gemini job matching and tailored resumes.",
+  "license": "MIT",
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "check": "node -e \"new Function(require('fs').readFileSync('src/Code.gs','utf8'))\" && echo syntax ok",
+    "login": "clasp login",
+    "push": "clasp push",
+    "pull": "clasp pull",
+    "open": "clasp open",
+    "logs": "clasp logs"
+  },
+  "devDependencies": {
+    "@google/clasp": "^2.4.2"
+  }
+}
