@@ -73,5 +73,33 @@ td { padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top
 .log { margin: 0; padding-left: 18px; font-size: 12px; color: var(--muted); max-height: 12rem; overflow: auto; }
 .cols2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr)); gap: 20px; }
 .loading { color: var(--muted); padding: 40px 0; text-align: center; }
+/* Resume overlay: always white paper, A4, prints alone */
+#resume-view { position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 10; display: flex; flex-direction: column; }
+#resume-view[hidden] { display: none; }
+.rv-bar { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line); }
+.rv-acts { display: flex; gap: 8px; margin-left: auto; flex-wrap: wrap; }
+.rv-scroll { flex: 1; overflow: auto; padding: 20px 12px 40px; }
+.sheet { width: 210mm; min-height: 297mm; margin: 0 auto; background: #fff; color: #111; padding: 12mm 16mm; box-shadow: 0 6px 30px rgba(0,0,0,.35);
+  font: 10.5pt/1.32 Georgia, "Times New Roman", serif; outline: none; }
+.sheet.busy { color: #888; display: flex; align-items: center; justify-content: center; font-family: var(--sans); }
+.sheet h1 { font-size: 2em; font-weight: 400; text-align: center; margin: 0 0 2px; }
+.sheet .r-head { text-align: center; font-style: italic; margin: 0 0 2px; }
+.sheet .r-contact { text-align: center; font-size: .86em; color: #444; margin: 0 0 6px; }
+.sheet h2 { font-size: 1em; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; margin: 10px 0 4px; padding-bottom: 2px; border-bottom: 1px solid #111; }
+.sheet p { margin: 0 0 3px; }
+.sheet .r-line { display: flex; justify-content: space-between; gap: 12px; margin-top: 5px; }
+.sheet .r-line b { font-weight: 700; }
+.sheet .r-line i { color: #555; white-space: nowrap; }
+.sheet ul { margin: 1px 0 2px; padding-left: 16px; }
+.sheet li { margin: 0 0 1px; }
+@media print {
+  @page { size: A4; margin: 0; }
+  body { background: #fff; }
+  body > *:not(#resume-view) { display: none !important; }
+  #resume-view { position: static; background: none; display: block; }
+  .rv-bar { display: none; }
+  .rv-scroll { padding: 0; overflow: visible; }
+  .sheet { box-shadow: none; margin: 0; min-height: 0; }
+}
 @media (max-width: 640px) { .hide-sm { display: none; } .row { grid-template-columns: 1fr; } }
 </style>

@@ -4,7 +4,7 @@ A free, hassle-free job application tracker for freshers. It's one web page, and
 
 - **Tracks applications from Gmail** (read-only): applied → test → interview → offer / rejected, plus "Ghosted" after 21 days of silence
 - **Recommends jobs** from your LinkedIn / Naukri / Internshala / Indeed alert emails, scored against your CV *(free Gemini key)*
-- **Tailored one-page resume PDF** for each recommended job, saved to your Google Drive *(free Gemini key)*
+- **Tailored one-page resume** for any recommended job, on request. It opens in your browser, you can edit it there, and save it as PDF. Nothing is stored in Drive *(free Gemini key)*
 - **Daily summary email** on the days and at the time you choose, with a pause switch
 - **One page** with counts, reply rate, best channel, recommended jobs, a stage funnel, applications per week, reply rate per channel, all applications (sortable, editable) and settings
 

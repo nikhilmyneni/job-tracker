@@ -25,7 +25,6 @@
   const errText = (e) => String((e && e.message) || e || 'Something went wrong').replace(/^Exception:\s*/, '');
   const fmtHour = (n) => `${((n + 11) % 12) + 1} ${n >= 12 ? 'PM' : 'AM'}`;
   const isHttp = (u) => /^https?:\/\//.test(String(u || ''));
-  const isDrive = (u) => /^https:\/\/(drive|docs)\.google\.com\//.test(String(u || ''));
   const pill = (v, extra) => h('span', { class: 'pill s-' + String(extra || v).replace(/[^A-Za-z-]/g, '') }, v);
   const emptyRow = (cols, text) => h('tr', {}, h('td', { colSpan: cols, class: 'empty' }, text));
   /** withSettings: also redraw the settings form (otherwise unsaved edits there are kept). */
@@ -118,11 +117,7 @@
     body.replaceChildren(...rows.map(j => {
       const acts = h('div', { class: 'acts' });
       if (j.status === 'New' && isHttp(j.link)) acts.append(h('a', { class: 'btn', href: j.link, target: '_blank', rel: 'noopener noreferrer' }, 'Apply now ↗'));
-      if (isDrive(j.resume_url)) acts.append(h('a', { class: 'btn ghost', href: j.resume_url, target: '_blank', rel: 'noopener noreferrer' }, 'Open resume ↗'));
-      else if (canResume) {
-        const b = h('button', { class: 'btn ghost', type: 'button', onclick: () => busy(b, 'Writing…', async () => setState(await api('makeResume', j.id))) }, 'Make resume');
-        acts.append(b);
-      }
+      if (j.has_resume || canResume) acts.append(h('button', { class: 'btn ghost', type: 'button', onclick: () => openResume(j) }, j.has_resume ? 'Open resume' : 'Make resume'));
       if (j.status === 'New') {
         const ap = h('button', { class: 'link', type: 'button', onclick: () => busy(ap, '…', async () => setState(await api('setJobStatus', j.id, 'Applied'))) }, 'Mark applied');
         const sk = h('button', { class: 'link', type: 'button', onclick: () => busy(sk, '…', async () => setState(await api('setJobStatus', j.id, 'Skipped'))) }, 'Skip');
@@ -227,7 +222,7 @@
     $('s-enabled').checked = st.enabled; $('s-enabled-txt').textContent = st.enabled ? 'On' : 'Off';
     draftDays = { ...st.days }; drawDays();
     $('s-hour').value = String(st.hour); $('s-jobs').value = String(st.jobsPerDay);
-    $('s-email').checked = st.emailSummary; $('s-resumes').checked = st.makeResumes;
+    $('s-email').checked = st.emailSummary;
     $('s-since').value = st.since; $('s-locations').value = st.locations; $('s-prefs').value = st.prefs;
     $('s-model').value = st.geminiModel; $('s-key').value = '';
     $('s-key').placeholder = st.hasKey ? 'Saved ✓ (leave empty to keep it)' : 'Paste your free key';
@@ -244,6 +239,73 @@
     $('s-days').replaceChildren(...DAYS.map(d => h('button', { class: 'day', type: 'button', 'aria-pressed': String(!!draftDays[d]),
       onclick: () => { draftDays[d] = !draftDays[d]; drawDays(); } }, d)));
   }
+
+  // ---------- resume (shown and printed in the browser) ----------
+  let rvJob = null, rvData = null, lastFocus = null;
+  const A4_PX = 297 / 25.4 * 96;
+  async function openResume(job, regenerate) {
+    rvJob = job; rvData = null;
+    if (!regenerate) lastFocus = document.activeElement;
+    $('resume-view').hidden = false;
+    $('rv-title').textContent = `Resume · ${job.company} – ${job.role}`;
+    const sheet = $('rv-sheet');
+    sheet.className = 'sheet busy'; sheet.contentEditable = 'false';
+    sheet.replaceChildren(job.has_resume && !regenerate ? 'Opening…' : 'Writing your resume for this job… (about 20 seconds)');
+    ['rv-print', 'rv-again'].forEach(id => { $(id).disabled = true; });
+    $('rv-close').focus();
+    try {
+      const out = await api('getResume', job.id, !!regenerate);
+      if (rvJob !== job) return; // closed or switched meanwhile
+      rvData = out.resume;
+      renderResume(out.resume);
+      if (!job.has_resume || regenerate) { job.has_resume = true; renderJobs(); }
+    } catch (e) {
+      sheet.replaceChildren(errText(e));
+    } finally {
+      if (rvJob === job) ['rv-print', 'rv-again'].forEach(id => { $(id).disabled = !rvData && id === 'rv-print'; });
+    }
+  }
+  function renderResume(r) {
+    const sheet = $('rv-sheet');
+    const sec = (title, ...kids) => [h('h2', {}, title), ...kids];
+    const line = (left, right) => h('div', { class: 'r-line' }, h('b', {}, left), right ? h('i', {}, right) : '');
+    const bullets = (items) => items.length ? h('ul', {}, ...items.map(b => h('li', {}, b))) : '';
+    const parts = [h('h1', {}, r.name)];
+    if (r.headline) parts.push(h('p', { class: 'r-head' }, r.headline));
+    if (r.contact.length) parts.push(h('p', { class: 'r-contact' }, r.contact.join('  •  ')));
+    if (r.summary) parts.push(...sec('Summary', h('p', {}, r.summary)));
+    if (r.skills.length) parts.push(...sec('Skills', ...r.skills.map(g => h('p', {}, g.group ? h('b', {}, g.group + ': ') : '', g.items.join(', ')))));
+    if (r.experience.length) parts.push(...sec('Experience', ...r.experience.flatMap(x => [line(x.title + (x.org ? ', ' + x.org : ''), x.dates), bullets(x.bullets)])));
+    if (r.projects.length) parts.push(...sec('Projects', ...r.projects.flatMap(x => [line(x.name + (x.tech ? ' — ' + x.tech : ''), x.dates), bullets(x.bullets)])));
+    if (r.education.length) parts.push(...sec('Education', ...r.education.flatMap(x => [line(x.school, x.dates), x.degree ? h('p', {}, h('i', {}, x.degree)) : '', x.details ? h('p', {}, x.details) : ''])));
+    if (r.certifications.length) parts.push(...sec('Certifications', bullets(r.certifications)));
+    if (r.extras.length) parts.push(...sec('Activities', bullets(r.extras)));
+    sheet.className = 'sheet'; sheet.contentEditable = 'true';
+    sheet.replaceChildren(...parts);
+    // shrink the type until it fits one A4 page
+    let pt = 10.5;
+    sheet.style.fontSize = pt + 'pt';
+    while (sheet.scrollHeight > A4_PX + 1 && pt > 8.5) { pt -= 0.25; sheet.style.fontSize = pt + 'pt'; }
+    $('rv-note').textContent = sheet.scrollHeight > A4_PX + 1
+      ? 'A bit longer than one page. Trim some text (click to edit) before saving.'
+      : 'Click any text to edit it before saving. Edits aren’t stored.';
+  }
+  function closeResume() {
+    rvJob = null; rvData = null;
+    $('resume-view').hidden = true;
+    if (lastFocus && lastFocus.focus) lastFocus.focus();
+  }
+  $('rv-close').addEventListener('click', closeResume);
+  $('rv-again').addEventListener('click', () => { if (rvJob && confirm('Write this resume again? The current one will be replaced.')) openResume(rvJob, true); });
+  $('rv-print').addEventListener('click', () => {
+    if (!rvData || !rvJob) return;
+    const safe = (x) => String(x || '').replace(/[^A-Za-z0-9]+/g, '_').replace(/^_|_$/g, '');
+    const title = document.title;
+    document.title = `${safe(rvData.name)}_Resume_${safe(rvJob.company)}_${safe(rvJob.role)}`;
+    window.print();
+    setTimeout(() => { document.title = title; }, 1000);
+  });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('resume-view').hidden) closeResume(); });
 
   // ---------- wire up ----------
   for (let i = 0; i < 24; i++) $('s-hour').append(h('option', { value: String(i) }, fmtHour(i)));
@@ -262,7 +324,7 @@
     const enabled = $('s-enabled').checked && DAYS.some(d => days[d]);
     setState(await api('saveSettings', {
       enabled, days, hour: Number($('s-hour').value), jobsPerDay: Number($('s-jobs').value),
-      emailSummary: $('s-email').checked, makeResumes: $('s-resumes').checked, since: $('s-since').value,
+      emailSummary: $('s-email').checked, since: $('s-since').value,
       locations: $('s-locations').value, prefs: $('s-prefs').value, geminiKey: $('s-key').value, geminiModel: $('s-model').value,
     }), true);
     $('s-status').textContent = enabled ? 'Saved ✓ Daily updates are on.' : 'Saved ✓ Daily updates are off.';

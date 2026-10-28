@@ -22,7 +22,7 @@ function getState() {
   return {
     settings: pub,
     applications: data.applications,
-    jobs: data.jobs,
+    jobs: data.jobs.map(j => { const o = Object.assign({}, j, { has_resume: !!j.resume }); delete o.resume; return o; }),
     log: data.log.slice(0, 15),
     cv: data.cv,
     lastRunAt: last ? new Date(Number(last)).toISOString() : '',
@@ -54,16 +54,19 @@ function runNow() {
   return { text: out.text, state: getState() };
 }
 
-function makeResume(jobId) {
-  const s = readSettings_();
+/** The resume for one job: the saved one, or a fresh one from Gemini when there is none or regenerate is set. */
+function getResume(jobId, regenerate) {
   const data = loadData_();
-  if (!s.geminiKey) throw new Error('Add a free Gemini API key in Settings first.');
-  if (!data.cv) throw new Error('Paste your CV in Settings first.');
   const job = data.jobs.find(j => j.id === jobId);
   if (!job) throw new Error('That job is no longer in your list.');
-  job.resume_url = makeResume_(data, s, job);
+  if (job.resume && !regenerate) return { resume: job.resume, company: job.company, role: job.role };
+  const s = readSettings_();
+  if (!s.geminiKey) throw new Error('Add a free Gemini API key in Settings first.');
+  if (!data.cv) throw new Error('Paste your CV in Settings first.');
+  job.resume = writeResume_(data, s, job);
+  job.resume_at = new Date().toISOString();
   saveData_(data);
-  return getState();
+  return { resume: job.resume, company: job.company, role: job.role };
 }
 
 /** Mark applied also adds it to your applications. */
@@ -146,7 +149,7 @@ function runUpdate_(scheduled) {
   if (!lock.tryLock(5000)) return { text: 'Another update is already running.' };
   const s = readSettings_();
   const data = loadData_();
-  const result = { appsNew: 0, appsChanged: [], jobsNew: [], resumes: 0, due: [], notes: [] };
+  const result = { appsNew: 0, appsChanged: [], jobsNew: [], due: [], notes: [] };
   try {
     const props = PropertiesService.getUserProperties();
     const last = props.getProperty('lastRunAt');

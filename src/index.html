@@ -26,7 +26,7 @@
 
   <section class="card">
     <h2 class="title">Recommended jobs</h2>
-    <p class="note">New matches from your job-alert emails on your update days, scored 1–5 against your CV, each with a resume tailored to it.</p>
+    <p class="note">New matches from your job-alert emails on your update days, scored 1–5 against your CV. Click <b>Make resume</b> for a one-page resume tailored to that job, ready to save as PDF.</p>
     <div class="controls">
       <select id="jobs-status" aria-label="Filter recommended jobs by status">
         <option value="New">New</option><option value="">All</option>
@@ -104,7 +104,6 @@
         <label class="row"><span>New jobs per day</span><select id="s-jobs">
           <option value="0">0 (job matching off)</option><option>3</option><option>5</option><option>10</option><option>15</option></select></label>
         <label class="row"><span>Summary email</span><span class="inline"><input type="checkbox" id="s-email"> Email me after each update</span></label>
-        <label class="row"><span>Tailored resumes</span><span class="inline"><input type="checkbox" id="s-resumes"> One-page PDF per job, in Drive</span></label>
         <label class="row"><span>Search Gmail since</span><input type="date" id="s-since"></label>
         <label class="row"><span>Preferred locations</span><input type="text" id="s-locations"></label>
         <label class="row"><span>Job preferences</span><input type="text" id="s-prefs"></label>
@@ -127,6 +126,19 @@
     </div>
   </section>
 </main>
+
+<div id="resume-view" role="dialog" aria-modal="true" aria-labelledby="rv-title" hidden>
+  <div class="rv-bar">
+    <b id="rv-title">Resume</b>
+    <span class="note" id="rv-note">Click any text to edit it before saving. Edits aren't stored.</span>
+    <span class="rv-acts">
+      <button class="btn" id="rv-print" type="button">Save as PDF / Print</button>
+      <button class="btn ghost" id="rv-again" type="button">Write again</button>
+      <button class="btn ghost" id="rv-close" type="button">Close</button>
+    </span>
+  </div>
+  <div class="rv-scroll"><article class="sheet" id="rv-sheet" contenteditable="true" spellcheck="false"></article></div>
+</div>
 <?!= include('app'); ?>
 </body>
 </html>

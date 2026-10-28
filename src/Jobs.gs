@@ -44,20 +44,15 @@ function findJobs_(data, s, afterStr, seen, result) {
     .slice(0, s.jobsPerDay);
 
   const today = ymd_(new Date());
-  let resumesMade = 0;
   picks.forEach(x => {
     const c = candidates[Number(x.n)];
     const job = {
       id: newId_(), found_on: today, fit: Number(x.fit), company: String(c.company).trim(), role: String(c.role).trim(),
       location: c.location || '', pay: c.pay || '', why: x.why || '', skill_gap: x.skill_gap || 'None',
       apply_by: /^\d{4}-\d{2}-\d{2}$/.test(String(x.apply_by || '')) ? x.apply_by : '',
-      link: isHttpUrl_(c.link) ? c.link : '', details: clip_(c.details, 400), resume_url: '', status: 'New', key: c.key,
+      link: isHttpUrl_(c.link) ? c.link : '', details: clip_(c.details, 400), status: 'New', key: c.key,
     };
     data.jobs.push(job);
-    if (s.makeResumes && resumesMade < MAX_RESUMES_PER_RUN) {
-      try { job.resume_url = makeResume_(data, s, job); resumesMade++; } catch (e) { log_(data, `Resume for ${job.company} failed: ${e.message}`); }
-    }
     result.jobsNew.push(`${job.company} – ${job.role} (fit ${job.fit}/5)`);
   });
-  result.resumes += resumesMade;
 }

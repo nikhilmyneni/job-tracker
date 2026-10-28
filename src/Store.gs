@@ -2,7 +2,7 @@
  * Job Tracker: free web-app edition. Storage and settings.
  * ------------------------------------------------
  * Runs as the person using the web app, inside their own Google account.
- * Applications, jobs, seen email ids, the log and the CV live in one JSON file
+ * Applications, jobs (with any resumes written for them), seen email ids, the log and the CV live in one JSON file
  * in their Drive ("Job Tracker" folder). Settings live in their UserProperties.
  * Nothing goes anywhere else, except Gemini calls when they added a key.
  */
@@ -14,7 +14,6 @@ const JOB_STATUSES = ['New', 'Applied', 'Skipped', 'Expired'];
 const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const JOBS_PER_DAY = [0, 3, 5, 10, 15];
 const MAX_THREADS = 80;          // per Gmail query per run
-const MAX_RESUMES_PER_RUN = 10;  // keeps each run well inside the 6-minute limit
 const GHOST_DAYS = 21;
 const MAX_SEEN = 5000, MAX_LOG = 300, MAX_JOBS = 1000, MAX_CV = 20000;
 const FOLDER_NAME = 'Job Tracker';
@@ -30,7 +29,6 @@ function defaultSettings_() {
     days,
     jobsPerDay: 5,
     emailSummary: true,
-    makeResumes: true,
     since: '', // yyyy-mm-dd; empty means 120 days back
     locations: 'Hyderabad, Remote, anywhere in India',
     prefs: 'Fresher roles (0–1 year). Paid internships only. Skip sales/telecalling.',
@@ -53,7 +51,6 @@ function normalizeSettings_(raw) {
     days,
     jobsPerDay: JOBS_PER_DAY.indexOf(jobs) >= 0 ? jobs : d.jobsPerDay,
     emailSummary: typeof r.emailSummary === 'boolean' ? r.emailSummary : d.emailSummary,
-    makeResumes: typeof r.makeResumes === 'boolean' ? r.makeResumes : d.makeResumes,
     since: /^\d{4}-\d{2}-\d{2}$/.test(String(r.since || '')) ? String(r.since) : '',
     locations: typeof r.locations === 'string' ? r.locations.slice(0, 300) : d.locations,
     prefs: typeof r.prefs === 'string' ? r.prefs.slice(0, 500) : d.prefs,

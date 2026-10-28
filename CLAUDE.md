@@ -5,8 +5,9 @@ A free job-application tracker that runs entirely in the user's own Google accou
 standalone Apps Script **web app** (`src/*.gs` + `src/*.html`), deployed once by the owner
 with *Execute as: user accessing* and *Access: anyone with a Google account*. Each visitor
 authorizes it and the code runs as them. It reads their Gmail (read-only), keeps their
-applications current, picks recommended jobs from job-alert emails, writes tailored one-page
-resume PDFs to their Drive, and emails them a daily summary. Optional AI comes from the free
+applications current, picks recommended jobs from job-alert emails, writes a tailored one-page
+resume on request (shown and printed in the browser, never saved to Drive as a file), and
+emails them a daily summary. Optional AI comes from the free
 Gemini API, using a key the user pastes into Settings on the page.
 
 Target users: Indian freshers (first job / paid internships). Distribution: one shared web-app
@@ -52,13 +53,15 @@ link. Unverified apps with `gmail.readonly` are capped at 100 users.
   data file (`loadData_` / `saveData_`), log, helpers.
 - `src/Sync.gs`: Gmail application sync, `ruleClassify_`, and pure updates on the
   applications list (`upsertApplication_`, `markGhosted_`, `expireJobs_`, `collectDue_`).
-- `src/Jobs.gs`: job matching from alert emails. `src/Resume.gs`: Doc → PDF resume.
+- `src/Jobs.gs`: job matching from alert emails. `src/Resume.gs`: resume JSON on request
+  (`writeResume_`, pure `cleanResume_`).
   `src/Gemini.gs`: Gemini client. `src/Email.gs`: summary text and email.
 - `src/Main.gs`: `doGet`, the functions the page calls (`getState`, `saveSettings`, `saveCv`,
-  `runNow`, `makeResume`, `setJobStatus`, `addApplication`, `setApplicationStatus`,
+  `runNow`, `getResume`, `setJobStatus`, `addApplication`, `setApplicationStatus`,
   `deleteApplication`, `removeAutomation`), the trigger, and `runUpdate_`.
 - `src/index.html` + `styles.html` + `app.html`: the single page (included with
-  `<?!= include('name'); ?>`). Plain JS. Build DOM with `h()` / `textContent`, never `innerHTML`
+  `<?!= include('name'); ?>`). The resume overlay (`#resume-view`) is A4. It shrinks its type
+  to fit one page and prints alone via `@media print`. Plain JS. Build DOM with `h()` / `textContent`, never `innerHTML`
   with data.
 - `src/appsscript.json`: manifest (time zone, V8, `webapp`, scopes).
 - `tests/*.test.js`: Node tests for the pure functions. The `vm` harness loads all `src/*.gs`.
@@ -75,7 +78,8 @@ Settings in UserProperties `settings` (JSON). Add a setting: update `defaultSett
 Application: id, company, role, channel, applied_on, status, furthest, last_update,
 next_step, email_link, key (`company|role` lowercased).
 Job: id, found_on, fit (1-5), company, role, location, pay, why, skill_gap, apply_by, link,
-details, resume_url, status (New/Applied/Skipped/Expired), key.
+details, resume (cleaned JSON, cached; `getState` sends only `has_resume`), resume_at,
+status (New/Applied/Skipped/Expired), key.
 Statuses: Applied, Screening, Interview, Offer, Rejected, Withdrawn, Ghosted. Furthest
 stage never moves backwards.
 

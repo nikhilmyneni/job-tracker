@@ -5,8 +5,9 @@
 On the days and at the time you pick, it:
 - reads your Gmail (read-only) and updates your applications: applied → test → interview → offer / rejected. It marks "Ghosted" after 21 days of silence.
 - picks the best new jobs from your job-alert emails (LinkedIn, Naukri, Internshala, Indeed…) for your CV
-- makes a tailored one-page resume PDF for each one, saved in your Google Drive
 - emails you a short summary
+
+When you ask for one, it writes a tailored one-page resume for any recommended job. The resume opens right in your browser, so you can tweak it and save it as PDF.
 
 The page shows your totals, reply rate, best channel, recommended jobs, where applications stop, applications per week, reply rate per channel, all your applications and your settings.
 
@@ -34,7 +35,7 @@ The person who runs the link **can't see your data**.
 ## Where your data lives
 
 - **Applications, jobs, CV, log:** `Job Tracker/Job Tracker data.json` in your Drive.
-- **Resumes:** PDFs in the same folder.
+- **Resumes:** nothing goes to Drive. A resume you made is kept inside the data file, so it opens again straight away. You save the PDF yourself, wherever you like.
 - **Settings and Gemini key:** your private script settings (Google's UserProperties), which only your account can read.
 - **Turning it off:** **Remove automation** in Settings. To delete everything, also delete the Drive folder and remove the app at myaccount.google.com/permissions.
 
@@ -43,7 +44,11 @@ The person who runs the link **can't see your data**.
 - **Without a Gemini key** it still tracks applications using keyword rules, which are less accurate. Job matching and resumes stay off.
 - **Gemini free tier:** Google may use what you send to improve its products. That includes snippets of job emails and your CV. Don't add the key if you're not OK with that.
 - **More job matches:** turn on job alerts on LinkedIn, Naukri and Internshala for your target roles. Those emails are where it finds jobs.
-- **Resumes** are built only from your CV. It never invents skills or experience. Check each one before sending.
+- **Resumes** are built only from your CV. It never invents skills or experience. Click **Make resume** on a job. It takes about 20 seconds, then opens as an A4 page.
+  - You can click any text to fix it, then **Save as PDF / Print** → choose *Save as PDF*.
+  - Your edits aren't stored, so save the PDF before closing.
+  - **Write again** makes a fresh version.
+  - Check each one before sending.
 - **Missed an application?** Use **Add application** under All applications, or change a status from its drop-down.
 
 ---

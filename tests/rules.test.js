@@ -55,7 +55,7 @@ const fakeProps = (obj) => {
   return { getProperty: (k) => store[k] == null ? null : store[k], setProperty: (k, v) => { store[k] = v; }, store };
 };
 const plain = (x) => JSON.parse(JSON.stringify(x));
-const newResult = () => ({ appsNew: 0, appsChanged: [], jobsNew: [], resumes: 0, due: [], notes: [] });
+const newResult = () => ({ appsNew: 0, appsChanged: [], jobsNew: [], due: [], notes: [] });
 
 test('settings: defaults when nothing is saved', () => {
   ctx.p = fakeProps();
@@ -161,8 +161,38 @@ test('collectDue_ lists next steps for live stages only', () => {
 });
 
 test('summaryText_', () => {
-  ctx.res = Object.assign(newResult(), { appsChanged: ['Acme: Applied'], jobsNew: ['Beta – Intern (fit 4/5)'], resumes: 1 });
+  ctx.res = Object.assign(newResult(), { appsChanged: ['Acme: Applied'], jobsNew: ['Beta – Intern (fit 4/5)'] });
   const t = call('summaryText_(res)');
   assert.match(t, /Application updates:\n- Acme: Applied/);
-  assert.match(t, /New recommended jobs \(1 with a tailored resume\)/);
+  assert.match(t, /New recommended jobs \(open the tracker for a tailored resume\):\n- Beta/);
+});
+
+test('cleanResume_: no name means no resume', () => {
+  assert.equal(call('cleanResume_(null)'), null);
+  assert.equal(call('cleanResume_({ name: "  ", summary: "x" })'), null);
+  assert.equal(call('cleanResume_("text")'), null);
+});
+
+test('cleanResume_: keeps known fields as strings, drops junk, caps lists', () => {
+  ctx.raw = {
+    name: ' Test Person ', headline: 'Security Analyst', contact: ['a@example.com', 123, null, { x: 1 }],
+    summary: 'Short summary.', photo: 'http://x', dob: '2000-01-01',
+    skills: [{ group: 'Tools', items: ['Nmap', 'Wireshark'] }, { group: 'Empty', items: [] }, 'bad', ...Array(6).fill({ group: 'G', items: ['x'] })],
+    experience: [{ title: 'Intern', org: 'Acme', dates: '2025', bullets: ['a', 'b', 'c', 'd', 'e'] }, { bullets: ['no title'] }],
+    projects: Array(5).fill({ name: 'P', tech: 'Python', bullets: ['x'] }),
+    education: [{ school: 'MRU', degree: 'B.Tech', dates: '2022–2026' }, { degree: 'no school' }],
+    certifications: ['CEH', ''], extras: 'not a list',
+  };
+  const r = plain(call('cleanResume_(raw)'));
+  assert.equal(r.name, 'Test Person');
+  assert.deepEqual(r.contact, ['a@example.com', '123']);
+  assert.equal('photo' in r || 'dob' in r, false);
+  assert.equal(r.skills.length, 4);
+  assert.deepEqual(r.skills[0], { group: 'Tools', items: ['Nmap', 'Wireshark'] });
+  assert.equal(r.experience.length, 1);
+  assert.equal(r.experience[0].bullets.length, 4);
+  assert.equal(r.projects.length, 3);
+  assert.equal(r.education.length, 1);
+  assert.deepEqual(r.certifications, ['CEH']);
+  assert.deepEqual(r.extras, []);
 });
