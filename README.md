@@ -1,27 +1,27 @@
-# Job Tracker: free Google Sheets edition
+# Job Tracker: free web app
 
-A free, hassle-free job application tracker for freshers. It lives entirely in your own Google account:
+A free, hassle-free job application tracker for freshers. It's one web page, and it runs entirely in your own Google account:
 
 - **Tracks applications from Gmail** (read-only): applied → test → interview → offer / rejected, plus "Ghosted" after 21 days of silence
 - **Recommends jobs** from your LinkedIn / Naukri / Internshala / Indeed alert emails, scored against your CV *(free Gemini key)*
 - **Tailored one-page resume PDF** for each recommended job, saved to your Google Drive *(free Gemini key)*
 - **Daily summary email** on the days and at the time you choose, with a pause switch
-- **Dashboard tab** with counts, reply rate, best channel, a status chart, a stage funnel, a per-channel reply table and applications per week
+- **One page** with counts, reply rate, best channel, recommended jobs, a stage funnel, applications per week, reply rate per channel, all applications (sortable, editable) and settings
 
-No subscription, no server, no app to install. → **User guide: [docs/SETUP.md](docs/SETUP.md)**
+No subscription, no server, no sheet, no app to install. → **User guide: [docs/SETUP.md](docs/SETUP.md)**
 
 ## Develop
 
 ```bash
 npm install          # installs clasp (Google's Apps Script CLI)
 npm test             # tests for the pure logic
-npm run check        # syntax check of src/Code.gs
+npm run check        # syntax check of src/*.gs and the page script
 npx clasp login      # once
-cp .clasp.json.example .clasp.json   # paste your sheet's script id
-npm run push         # upload src/ to the bound Apps Script project
+cp .clasp.json.example .clasp.json   # paste your standalone script's id
+npm run push         # upload src/ to the Apps Script project
 ```
 
-Then in the sheet: **Job Tracker → 1. Set up**, then **Update now**. Logs are in the **Log** tab (or `npm run logs`).
+Then deploy it as a web app (Execute as: user accessing, access: anyone with a Google account). See the owner steps in [docs/SETUP.md](docs/SETUP.md). Run logs are under **Recent activity** on the page (or `npm run logs`).
 
 See [CLAUDE.md](CLAUDE.md) for architecture and constraints, and [docs/ROADMAP.md](docs/ROADMAP.md) for ideas.
 

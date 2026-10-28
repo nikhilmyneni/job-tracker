@@ -1,11 +1,11 @@
 # Roadmap (ideas, not commitments)
 
 ## Next: make the first version solid
-- [ ] First real run on a test account: verify OAuth scopes (`gmail.readonly` with GmailApp), trigger timing, summary email, resume PDF look
+- [ ] First real run on a test account: verify OAuth scopes (`gmail.readonly` with GmailApp, `drive.file` for the Doc → PDF resume), per-user trigger timing, summary email, resume PDF look
 - [ ] Better rule-based fallback (more Indian ATS senders: HirePro, Mettl, HackerEarth, Naukri RMS, Darwinbox, Workday)
-- [ ] Settings sidebar (HtmlService) instead of editing cells: day chips, time picker, pause toggle
-- [ ] "Mark as applied" checkbox on Recommended jobs, which creates the Applications row by hand
-- [ ] Manual "Add application" for jobs that never emailed (LinkedIn Easy Apply, Naukri)
+- [x] Settings in the web page: day chips, time picker, pause toggle
+- [x] "Mark applied" on Recommended jobs, which adds the application
+- [x] Manual "Add application" for jobs that never emailed (LinkedIn Easy Apply, Naukri)
 
 ## Better job sources (still free)
 - [ ] Greenhouse / Lever public job-board APIs for a list of companies the user follows
@@ -22,5 +22,6 @@
 - [ ] Deadline reminders (apply-by within 2 days, assessment pending for 3+ days)
 
 ## Distribution
-- [ ] Template sheet with a `/copy` link and a short landing page (e.g. under psquad.codes)
+- [x] One shared web-app link (unverified apps: 100-user cap)
+- [ ] Google app verification if it outgrows 100 users (needs a paid Gmail-scope security assessment)
 - [ ] Short video / GIF of setup

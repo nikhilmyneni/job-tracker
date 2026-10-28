@@ -1,47 +1,59 @@
-# Job Tracker — free version (Google Sheets + Gmail)
+# Job Tracker: free web app (Gmail + Drive)
 
-100% free. Runs inside your own Google account. No Claude subscription, no server, no app to install.
+100% free. One link, everything on one page. It runs as **you**, inside your own Google account. No sheet, no server, no app to install.
 
-What it does on the days and time you pick:
-- reads your Gmail (read-only) and updates your applications: applied → test → interview → offer / rejected, and marks "Ghosted" after 21 days of silence
+On the days and at the time you pick, it:
+- reads your Gmail (read-only) and updates your applications: applied → test → interview → offer / rejected. It marks "Ghosted" after 21 days of silence.
 - picks the best new jobs from your job-alert emails (LinkedIn, Naukri, Internshala, Indeed…) for your CV
-- makes a tailored one-page resume PDF for each, saved in your Google Drive
+- makes a tailored one-page resume PDF for each one, saved in your Google Drive
 - emails you a short summary
+
+The page shows your totals, reply rate, best channel, recommended jobs, where applications stop, applications per week, reply rate per channel, all your applications and your settings.
 
 ---
 
-## For the person sharing it (one time, ~3 minutes)
+## For users (about 2 minutes)
 
-1. Go to sheets.new to make a blank Google Sheet. Name it **Job Tracker**.
-2. **Extensions → Apps Script.** Delete what's there, paste all of `Code.gs`, click **Save**.
-3. Back in the sheet, reload the page. A **Job Tracker** menu appears. Click **Job Tracker → 1. Set up**. Allow access when Google asks (see the note below).
-4. **Clear your own data** before sharing: empty the "My CV" box and the Gemini key in Settings, and delete any rows in Applications / Recommended jobs.
-5. **Share → General access → "Anyone with the link" → Viewer.** Copy the link and change the end from `/edit…` to `/copy`.
-   Example: `https://docs.google.com/spreadsheets/d/XXXXX/copy`
-   That link makes everyone their **own private copy**, with the script inside. Nobody can see anyone else's data.
+1. Open the Job Tracker link you were given and sign in with Google.
+2. Allow access. You'll first see Google's "unverified app" screen (see below).
+3. In **Settings**, paste your CV text and click **Save CV**.
+4. Optional but recommended: get a free Gemini key at **aistudio.google.com/apikey** → *Create API key*. Paste it in Settings to turn on job matching and tailored resumes.
+5. Pick your days and time, switch **Daily updates** on, click **Save settings**, then **Update now** once. From then on it runs by itself.
 
-## For friends (about 2 minutes)
-
-1. Open the `/copy` link → **Make a copy**.
-2. In your copy: **Job Tracker → 1. Set up** → allow access.
-3. Paste your CV text into the **My CV** tab.
-4. **Settings** tab: tick your days, pick a time and jobs per day.
-5. Optional but recommended: get a free Gemini key at **aistudio.google.com/apikey** → *Create API key* → paste it in Settings. This turns on job matching and tailored resumes.
-6. **Job Tracker → Update now** once. From then on it runs by itself.
-
-Change anything later in the Settings tab. To pause it, untick "Daily updates on" or use **Job Tracker → Pause / resume**.
-
-The **Dashboard** tab shows your totals, best channel, where applications stop (stage funnel), reply rate per channel and applications per week. Already set up before these were added? Run **Job Tracker → 1. Set up** again. It rebuilds the Dashboard and keeps your data and settings.
+Bookmark the link. It's your dashboard.
 
 ## The "Google hasn't verified this app" screen
 
-You'll see it once during setup, because the script is your own copy and not a published app. Click **Advanced → Go to Job Tracker (unsafe) → Allow**. The script only runs in your account. It reads Gmail and creates files in your own Drive, and the only email it sends is your summary, to you.
+You'll see it once, because Job Tracker isn't a published Google app. Click **Advanced → Go to Job Tracker (unsafe) → Allow**. The code runs only in your account:
+- It reads Gmail (never changes it).
+- It creates files only in a **Job Tracker** folder in your Drive.
+- The only email it sends is your summary, to you.
+
+The person who runs the link **can't see your data**.
+
+## Where your data lives
+
+- **Applications, jobs, CV, log:** `Job Tracker/Job Tracker data.json` in your Drive.
+- **Resumes:** PDFs in the same folder.
+- **Settings and Gemini key:** your private script settings (Google's UserProperties), which only your account can read.
+- **Turning it off:** **Remove automation** in Settings. To delete everything, also delete the Drive folder and remove the app at myaccount.google.com/permissions.
 
 ## Good to know
 
 - **Without a Gemini key** it still tracks applications using keyword rules, which are less accurate. Job matching and resumes stay off.
-- **Gemini free tier:** Google may use what you send to improve its products, which includes snippets of job emails and your CV. Don't add the key if you're not OK with that.
+- **Gemini free tier:** Google may use what you send to improve its products. That includes snippets of job emails and your CV. Don't add the key if you're not OK with that.
 - **More job matches:** turn on job alerts on LinkedIn, Naukri and Internshala for your target roles. Those emails are where it finds jobs.
-- **Resumes** are built only from your CV. It never invents skills or experience. Check each one before sending, and edit the PDF's source if needed (resumes are made as Google Docs, then saved as PDF).
-- **Making one resume:** open Recommended jobs, click a row, then **Job Tracker → Make resume for selected job**.
-- **Turning it off:** **Job Tracker → Remove automation**. Your data stays in the sheet.
+- **Resumes** are built only from your CV. It never invents skills or experience. Check each one before sending.
+- **Missed an application?** Use **Add application** under All applications, or change a status from its drop-down.
+
+---
+
+## For the owner (one time)
+
+1. `npm install`, then `npx clasp login`.
+2. At **script.google.com → New project**, name it *Job Tracker*. Copy its id (Project Settings → Script ID), then copy `.clasp.json.example` to `.clasp.json` and paste the id there.
+3. `npm run push`.
+4. In the Apps Script editor: **Deploy → New deployment → Web app**. Set *Execute as: **User accessing the web app***, *Who has access: **Anyone with a Google account***. Copy the `/exec` URL and share it.
+5. After a code change: `npm run push`, then **Deploy → Manage deployments → Edit → New version**. Everyone gets it on their next visit and their next scheduled run.
+
+**Limit:** Google lets an unverified app that reads Gmail have at most **100 users**. Going beyond that needs Google's app verification plus a paid security assessment for the Gmail scope.

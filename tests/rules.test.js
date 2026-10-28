@@ -1,4 +1,4 @@
-// Tests for the parts of Code.gs that don't need Google services.
+// Tests for the parts of src/*.gs that don't need Google services.
 // Run: npm test   (Node 18+)
 const test = require('node:test');
 const assert = require('node:assert');
@@ -6,7 +6,8 @@ const fs = require('fs');
 const vm = require('vm');
 
 function load() {
-  const src = fs.readFileSync(__dirname + '/../src/Code.gs', 'utf8');
+  const dir = __dirname + '/../src/';
+  const src = fs.readdirSync(dir).filter(f => f.endsWith('.gs')).map(f => fs.readFileSync(dir + f, 'utf8')).join('\n');
   const ctx = { console, Session: { getEffectiveUser: () => ({ getEmail: () => 'me@example.com' }) } };
   vm.createContext(ctx);
   vm.runInContext(src, ctx);
@@ -49,39 +50,119 @@ test('unrelated mail ignored', () => {
   assert.equal(classify('Your weekly newsletter', 'news@site.com', 'hello').is_application_update, false);
 });
 
-test('settings parsing', () => {
-  const rows = [['Setting', 'Your choice'], ['Daily updates on', true], ['Update time', '9 PM'], ['Mon', true], ['Tue', false], ['Wed', true], ['Thu', true], ['Fri', true], ['Sat', false], ['Sun', false], ['New jobs per day', '10'], ['Email me a summary', true], ['Make tailored resumes', true], ['Search Gmail since', ''], ['Preferred locations', 'Hyderabad'], ['Job preferences', 'fresher'], ['Gemini API key', ' abc '], ['Gemini model', 'gemini-2.5-flash'], ['Last update', '']];
-  ctx.fakeSS = { getSheetByName: () => ({ getRange: () => ({ getValues: () => rows }) }) };
-  const s = call('readSettings_(fakeSS)');
+const fakeProps = (obj) => {
+  const store = { settings: obj === undefined ? undefined : JSON.stringify(obj) };
+  return { getProperty: (k) => store[k] == null ? null : store[k], setProperty: (k, v) => { store[k] = v; }, store };
+};
+const plain = (x) => JSON.parse(JSON.stringify(x));
+const newResult = () => ({ appsNew: 0, appsChanged: [], jobsNew: [], resumes: 0, due: [], notes: [] });
+
+test('settings: defaults when nothing is saved', () => {
+  ctx.p = fakeProps();
+  const s = call('readSettings_(p)');
+  assert.equal(s.enabled, false);
+  assert.equal(s.hour, 20);
+  assert.equal(s.jobsPerDay, 5);
+  assert.equal(s.days.Sun, true);
+});
+
+test('settings: saved values are kept, bad ones replaced', () => {
+  ctx.p = fakeProps({ enabled: true, hour: 21, days: { Tue: false, Sat: 'yes' }, jobsPerDay: 10, geminiKey: ' abc ', since: '2026-06-01' });
+  const s = call('readSettings_(p)');
+  assert.equal(s.enabled, true);
   assert.equal(s.hour, 21);
   assert.equal(s.days.Tue, false);
-  assert.equal(s.days.Wed, true);
+  assert.equal(s.days.Sat, true);
   assert.equal(s.jobsPerDay, 10);
   assert.equal(s.geminiKey, 'abc');
+  assert.equal(s.since, '2026-06-01');
+  ctx.p = fakeProps({ hour: 30, jobsPerDay: 7, since: 'soon' });
+  const t = call('readSettings_(p)');
+  assert.equal(t.hour, 20);
+  assert.equal(t.jobsPerDay, 5);
+  assert.equal(t.since, '');
 });
 
-test('12 AM / 12 PM parsing', () => {
-  const mk = (t) => [['Setting', ''], ['Daily updates on', true], ['Update time', t]];
-  ctx.fakeSS = { getSheetByName: () => ({ getRange: () => ({ getValues: () => mk('12 PM') }) }) };
-  assert.equal(call('readSettings_(fakeSS)').hour, 12);
+test('settings: write then read round-trips', () => {
+  ctx.p = fakeProps();
+  call('writeSettings_(Object.assign(defaultSettings_(), { hour: 7, enabled: true }), p)');
+  assert.equal(call('readSettings_(p)').hour, 7);
+  assert.equal(call('readSettings_(p)').enabled, true);
 });
 
-test('expireJobs_ marks Applied only for the same role (or a roleless application)', () => {
-  const jobs = [
-    ['Found on', 'Fit', 'Company', 'Role', 'Location', 'Pay', 'Why', 'Gap', 'Apply by', 'Apply', 'Resume', 'Status', 'key'],
-    ['', 4, 'Acme', 'SOC Analyst', '', '', '', '', '', '', '', 'New', 'acme|soc analyst'],
-    ['', 4, 'Acme', 'Pentester', '', '', '', '', '', '', '', 'New', 'acme|pentester'],
-    ['', 4, 'Beta', 'Intern', '', '', '', '', '', '', '', 'New', 'beta|intern'],
+test('upsertApplication_: new, then advance; furthest never moves back', () => {
+  ctx.apps = []; ctx.res = newResult();
+  call(`upsertApplication_(apps, { company: 'Acme', role: 'SOC Analyst', stage: 'Applied', date: '2026-10-01', channel: 'LinkedIn' }, res)`);
+  call(`upsertApplication_(apps, { company: 'Acme', role: 'SOC Analyst', stage: 'Interview', date: '2026-10-05', next_step: 'Prepare' }, res)`);
+  call(`upsertApplication_(apps, { company: 'acme', role: 'soc analyst', stage: 'Rejected', date: '2026-10-09' }, res)`);
+  const a = plain(ctx.apps);
+  assert.equal(a.length, 1);
+  assert.equal(a[0].status, 'Rejected');
+  assert.equal(a[0].furthest, 'Interview');
+  assert.equal(a[0].applied_on, '2026-10-01');
+  assert.equal(a[0].last_update, '2026-10-09');
+  assert.equal(a[0].next_step, '');
+  assert.equal(a[0].channel, 'LinkedIn');
+  assert.equal(ctx.res.appsNew, 1);
+  assert.equal(ctx.res.appsChanged.length, 3);
+});
+
+test('upsertApplication_: roleless email matches, and a role fills in later', () => {
+  ctx.apps = []; ctx.res = newResult();
+  call(`upsertApplication_(apps, { company: 'Beta', role: '', stage: 'Applied', date: '2026-10-01' }, res)`);
+  call(`upsertApplication_(apps, { company: 'Beta', role: 'Intern', stage: 'Screening', date: '2026-10-03' }, res)`);
+  call(`upsertApplication_(apps, { company: 'Beta', role: '', stage: 'Interview', date: '2026-10-04' }, res)`);
+  const a = plain(ctx.apps);
+  assert.equal(a.length, 1);
+  assert.equal(a[0].role, 'Intern');
+  assert.equal(a[0].key, 'beta|intern');
+  assert.equal(a[0].furthest, 'Interview');
+});
+
+test('upsertApplication_: no company, no row', () => {
+  ctx.apps = []; ctx.res = newResult();
+  call(`upsertApplication_(apps, { company: '  ', stage: 'Applied', date: '2026-10-01' }, res)`);
+  assert.equal(ctx.apps.length, 0);
+});
+
+test('markGhosted_ after 21 quiet days, only from Applied', () => {
+  ctx.apps = [
+    { company: 'Old', status: 'Applied', last_update: '2026-09-01' },
+    { company: 'Recent', status: 'Applied', last_update: '2026-10-20' },
+    { company: 'Busy', status: 'Interview', last_update: '2026-09-01' },
   ];
-  const apps = [
-    ['Company', 'Role', 'Channel', 'Applied on', 'Status', 'Furthest stage', 'Last update', 'Next step', 'Email', 'key'],
-    ['Acme', 'SOC Analyst', '', '', 'Applied', 'Applied', '', '', '', 'acme|soc analyst'],
-    ['Beta', '', '', '', 'Applied', 'Applied', '', '', '', 'beta|'],
+  ctx.res = newResult();
+  call(`markGhosted_(apps, new Date('2026-10-29T12:00:00'), res)`);
+  assert.deepEqual(plain(ctx.apps).map(a => a.status), ['Ghosted', 'Applied', 'Interview']);
+});
+
+test('expireJobs_: same role or roleless application → Applied; past apply-by → Expired', () => {
+  ctx.jobs = [
+    { company: 'Acme', role: 'SOC Analyst', status: 'New', key: 'acme|soc analyst' },
+    { company: 'Acme', role: 'Pentester', status: 'New', key: 'acme|pentester' },
+    { company: 'Beta', role: 'Intern', status: 'New', key: 'beta|intern' },
+    { company: 'Gamma', role: 'Analyst', status: 'New', key: 'gamma|analyst', apply_by: '2026-10-01' },
+    { company: 'Delta', role: 'Analyst', status: 'Skipped', key: 'delta|analyst', apply_by: '2026-10-01' },
   ];
-  const set = {};
-  ctx.fakeSS = { getSheetByName: (n) => n === 'Applications'
-    ? { getDataRange: () => ({ getValues: () => apps }) }
-    : { getDataRange: () => ({ getValues: () => jobs }), getRange: (r, c) => ({ setValue: (v) => { set[r + ':' + c] = v; } }) } };
-  call('expireJobs_(fakeSS)');
-  assert.deepEqual(JSON.parse(JSON.stringify(set)), { '2:12': 'Applied', '4:12': 'Applied' });
+  ctx.apps = [{ key: 'acme|soc analyst' }, { key: 'beta|' }];
+  call(`expireJobs_(jobs, apps, '2026-10-29')`);
+  assert.deepEqual(plain(ctx.jobs).map(j => j.status), ['Applied', 'New', 'Applied', 'Expired', 'Skipped']);
+});
+
+test('collectDue_ lists next steps for live stages only', () => {
+  ctx.apps = [
+    { company: 'A', status: 'Interview', next_step: 'Prepare' },
+    { company: 'B', status: 'Rejected', next_step: 'x' },
+    { company: 'C', status: 'Screening', next_step: '' },
+  ];
+  ctx.res = newResult();
+  call('collectDue_(apps, res)');
+  assert.deepEqual(plain(ctx.res.due), ['A: Prepare']);
+});
+
+test('summaryText_', () => {
+  ctx.res = Object.assign(newResult(), { appsChanged: ['Acme: Applied'], jobsNew: ['Beta – Intern (fit 4/5)'], resumes: 1 });
+  const t = call('summaryText_(res)');
+  assert.match(t, /Application updates:\n- Acme: Applied/);
+  assert.match(t, /New recommended jobs \(1 with a tailored resume\)/);
 });

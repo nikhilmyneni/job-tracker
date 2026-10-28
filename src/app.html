@@ -1,0 +1,296 @@
+<script>
+(() => {
+  const STAGES = ['Applied', 'Screening', 'Interview', 'Offer'];
+  const STATUSES = ['Applied', 'Screening', 'Interview', 'Offer', 'Rejected', 'Withdrawn', 'Ghosted'];
+  const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const $ = (id) => document.getElementById(id);
+  let S = null;
+
+  // ---------- helpers ----------
+  /** Builds an element; strings become text, never HTML. */
+  const h = (tag, props, ...kids) => {
+    const el = document.createElement(tag);
+    Object.entries(props || {}).forEach(([k, v]) => {
+      if (v == null || v === false) return;
+      if (k === 'class') el.className = v;
+      else if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
+      else if (k in el && k !== 'list') el[k] = v;
+      else el.setAttribute(k, v);
+    });
+    kids.flat().forEach(c => { if (c != null && c !== false) el.append(c instanceof Node ? c : String(c)); });
+    return el;
+  };
+  const api = (fn, ...args) => new Promise((resolve, reject) =>
+    google.script.run.withSuccessHandler(resolve).withFailureHandler(reject)[fn](...args));
+  const errText = (e) => String((e && e.message) || e || 'Something went wrong').replace(/^Exception:\s*/, '');
+  const fmtHour = (n) => `${((n + 11) % 12) + 1} ${n >= 12 ? 'PM' : 'AM'}`;
+  const isHttp = (u) => /^https?:\/\//.test(String(u || ''));
+  const isDrive = (u) => /^https:\/\/(drive|docs)\.google\.com\//.test(String(u || ''));
+  const pill = (v, extra) => h('span', { class: 'pill s-' + String(extra || v).replace(/[^A-Za-z-]/g, '') }, v);
+  const emptyRow = (cols, text) => h('tr', {}, h('td', { colSpan: cols, class: 'empty' }, text));
+  /** withSettings: also redraw the settings form (otherwise unsaved edits there are kept). */
+  const setState = (st, withSettings) => { S = st; render(); if (withSettings) renderSettings(); };
+  const busy = async (btn, label, work, statusEl) => {
+    const old = btn.textContent;
+    btn.disabled = true; btn.textContent = label;
+    if (statusEl) { statusEl.className = 'status'; statusEl.textContent = ''; }
+    try { return await work(); } catch (e) {
+      if (statusEl) { statusEl.className = 'status err'; statusEl.textContent = errText(e); } else alert(errText(e));
+    } finally { btn.disabled = false; btn.textContent = old; }
+  };
+
+  // ---------- metrics (same definitions as the Claude dashboard) ----------
+  const summary = (apps) => {
+    const total = apps.length;
+    const responses = apps.filter(a => a.furthest !== 'Applied').length;
+    return {
+      total, responses,
+      active: apps.filter(a => ['Applied', 'Screening', 'Interview'].includes(a.status)).length,
+      rate: total ? Math.round(responses / total * 100) : 0,
+      interviews: apps.filter(a => ['Interview', 'Offer'].includes(a.furthest)).length,
+      offers: apps.filter(a => a.furthest === 'Offer').length,
+    };
+  };
+  const funnel = (apps) => STAGES.map((stage, i) => {
+    const n = apps.filter(a => STAGES.indexOf(a.furthest) >= i).length;
+    return { stage, n, share: apps.length ? Math.round(n / apps.length * 100) : 0 };
+  });
+  const bySource = (apps) => {
+    const m = new Map();
+    apps.forEach(a => {
+      const r = m.get(a.channel) || { channel: a.channel, sent: 0, replies: 0 };
+      r.sent++; if (a.furthest !== 'Applied') r.replies++;
+      m.set(a.channel, r);
+    });
+    return [...m.values()].map(r => ({ ...r, rate: Math.round(r.replies / r.sent * 100) }))
+      .sort((x, y) => y.rate - x.rate || y.sent - x.sent);
+  };
+  const weekly = (apps) => {
+    const monday = (s) => { const d = new Date(String(s).slice(0, 10) + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() - (d.getUTCDay() + 6) % 7); return d; };
+    const counts = new Map();
+    apps.filter(a => /^\d{4}-\d{2}-\d{2}/.test(a.applied_on || '')).forEach(a => {
+      const k = monday(a.applied_on).toISOString().slice(0, 10); counts.set(k, (counts.get(k) || 0) + 1);
+    });
+    const keys = [...counts.keys()].sort();
+    const out = [];
+    if (!keys.length) return out;
+    for (let d = new Date(keys[0] + 'T00:00:00Z'); d <= new Date(keys[keys.length - 1] + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + 7)) {
+      const k = d.toISOString().slice(0, 10); out.push({ week: k, n: counts.get(k) || 0 });
+    }
+    return out;
+  };
+
+  // ---------- render ----------
+  function render() {
+    const apps = S.applications, sum = summary(apps), src = bySource(apps);
+    const best = src.filter(r => r.sent >= 2)[0];
+    $('takeaway').replaceChildren(
+      h('b', {}, sum.responses), ` of ${sum.total} applications got a reply.`,
+      ...(best ? [' ', h('b', {}, best.channel), ` is your best channel, with a ${best.rate}% reply rate.`] : []));
+    const st = S.settings;
+    const on = st.enabled && S.automationOn && DAYS.some(d => st.days[d]);
+    $('meta').textContent = (on ? `Updates ${daysText(st.days)} at ${fmtHour(st.hour)}` : 'Daily updates are off') +
+      (st.jobsPerDay > 0 ? ` · up to ${st.jobsPerDay} new jobs a day` : ' · job matching off') +
+      (S.lastRunAt ? ` · last update ${new Date(S.lastRunAt).toLocaleString()}` : ' · not updated yet') + ` · ${S.email}`;
+    $('welcome').hidden = !!(S.cv && on);
+    $('tiles').replaceChildren(...[
+      ['Applications sent', sum.total, 'All time'], ['Still in play', sum.active, 'Applied, screening or interviewing'],
+      ['Reply rate', sum.rate + '%', 'Got past "applied"'], ['Interviews', sum.interviews, 'Reached an interview round'],
+      ['Offers', sum.offers, 'Received'],
+    ].map(([l, n, s]) => h('div', { class: 'card' }, h('div', { class: 'lbl' }, l), h('div', { class: 'num' }, n), h('div', { class: 'sub' }, s))));
+    renderJobs(); renderFunnel(apps); renderWeekly(apps); renderSources(src); renderApps(); renderLog();
+  }
+
+  const daysText = (days) => {
+    const on = DAYS.filter(d => days[d]);
+    if (on.length === 7) return 'daily';
+    if (on.join() === 'Mon,Tue,Wed,Thu,Fri') return 'on weekdays';
+    if (on.join() === 'Sat,Sun') return 'on weekends';
+    return 'on ' + on.join(', ');
+  };
+
+  function renderJobs() {
+    const body = $('jobs-body'), want = $('jobs-status').value;
+    const canResume = S.settings.hasKey && !!S.cv;
+    const rows = S.jobs.filter(j => !want || j.status === want)
+      .sort((a, b) => b.fit - a.fit || String(b.found_on).localeCompare(String(a.found_on)));
+    if (!rows.length) { body.replaceChildren(emptyRow(10, want === 'New' ? 'No new jobs yet. New matches arrive with your next update.' : 'Nothing here.')); return; }
+    body.replaceChildren(...rows.map(j => {
+      const acts = h('div', { class: 'acts' });
+      if (j.status === 'New' && isHttp(j.link)) acts.append(h('a', { class: 'btn', href: j.link, target: '_blank', rel: 'noopener noreferrer' }, 'Apply now ↗'));
+      if (isDrive(j.resume_url)) acts.append(h('a', { class: 'btn ghost', href: j.resume_url, target: '_blank', rel: 'noopener noreferrer' }, 'Open resume ↗'));
+      else if (canResume) {
+        const b = h('button', { class: 'btn ghost', type: 'button', onclick: () => busy(b, 'Writing…', async () => setState(await api('makeResume', j.id))) }, 'Make resume');
+        acts.append(b);
+      }
+      if (j.status === 'New') {
+        const ap = h('button', { class: 'link', type: 'button', onclick: () => busy(ap, '…', async () => setState(await api('setJobStatus', j.id, 'Applied'))) }, 'Mark applied');
+        const sk = h('button', { class: 'link', type: 'button', onclick: () => busy(sk, '…', async () => setState(await api('setJobStatus', j.id, 'Skipped'))) }, 'Skip');
+        acts.append(h('div', {}, ap, ' · ', sk));
+      }
+      return h('tr', {},
+        h('td', {}, j.fit), h('td', {}, j.company),
+        h('td', {}, isHttp(j.link) ? h('a', { href: j.link, target: '_blank', rel: 'noopener noreferrer' }, j.role) : j.role),
+        h('td', { class: 'hide-sm' }, j.location), h('td', {}, j.pay), h('td', { class: 'hide-sm' }, j.why),
+        h('td', { class: 'hide-sm' }, j.skill_gap), h('td', {}, j.apply_by),
+        h('td', {}, pill(j.status, j.status === 'Applied' ? 'Applied-job' : j.status)), h('td', {}, acts));
+    }));
+  }
+
+  function renderFunnel(apps) {
+    const box = $('funnel');
+    if (!apps.length) { box.replaceChildren(h('div', { class: 'empty' }, 'No applications yet.')); return; }
+    box.replaceChildren(...funnel(apps).map(r => {
+      const bar = h('div', { class: 'bar' + (r.stage === 'Offer' ? ' ok' : '') });
+      bar.style.width = '0';
+      requestAnimationFrame(() => { bar.style.width = r.share + '%'; });
+      return h('div', { class: 'frow' }, h('span', {}, r.stage), h('div', { class: 'track' }, bar),
+        h('span', { class: 'fval' }, r.n, h('span', {}, ` · ${r.share}%`)));
+    }));
+  }
+
+  function renderWeekly(apps) {
+    const box = $('weekly'), rows = weekly(apps);
+    if (!rows.length) { box.replaceChildren(h('div', { class: 'empty' }, 'No applications yet.')); return; }
+    const NS = 'http://www.w3.org/2000/svg';
+    const s = (tag, attrs, text) => { const e = document.createElementNS(NS, tag); Object.entries(attrs).forEach(([k, v]) => e.setAttribute(k, v)); if (text != null) e.textContent = text; return e; };
+    const W = Math.max(280, box.clientWidth || 320), H = 200, left = 30, top = 8, bottom = 24;
+    const max = Math.max(1, ...rows.map(r => r.n));
+    const step = Math.max(1, Math.ceil(max / 4));
+    const yMax = Math.ceil(max / step) * step;
+    const y = (v) => H - bottom - (v / yMax) * (H - bottom - top);
+    const band = (W - left - 4) / rows.length, bw = Math.min(32, band * 0.7);
+    const svg = s('svg', { width: '100%', viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Applications per week' });
+    for (let v = 0; v <= yMax; v += step) {
+      svg.append(s('line', { x1: left, x2: W - 4, y1: y(v), y2: y(v), stroke: 'var(--line)' }));
+      svg.append(s('text', { x: left - 6, y: y(v), dy: '0.32em', 'text-anchor': 'end', 'font-size': 12, fill: 'var(--muted)' }, v));
+    }
+    const fmt = (k) => new Date(k + 'T00:00:00Z').toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' });
+    const every = Math.max(1, Math.ceil(rows.length / Math.max(1, Math.floor((W - left) / 56))));
+    const tip = h('div', { class: 'tip' });
+    rows.forEach((r, i) => {
+      const cx = left + band * i + band / 2;
+      if (i % every === 0) svg.append(s('text', { x: cx, y: H - 6, 'text-anchor': 'middle', 'font-size': 12, fill: 'var(--muted)' }, fmt(r.week)));
+      const rect = s('rect', { x: cx - bw / 2, width: bw, y: y(r.n), height: Math.max(0, y(0) - y(r.n)), rx: 4, fill: 'var(--accent)' });
+      const show = (ev) => {
+        tip.replaceChildren(h('div', { class: 'lbl' }, 'Week of ' + fmt(r.week)), h('div', {}, `${r.n} application${r.n === 1 ? '' : 's'}`));
+        tip.style.opacity = 1;
+        const bb = box.getBoundingClientRect();
+        tip.style.left = Math.max(0, Math.min(ev.clientX - bb.left + 12, bb.width - tip.offsetWidth - 4)) + 'px';
+        tip.style.top = Math.max(0, ev.clientY - bb.top - 44) + 'px';
+      };
+      rect.addEventListener('mousemove', show);
+      rect.addEventListener('mouseleave', () => { tip.style.opacity = 0; });
+      svg.append(rect);
+    });
+    box.replaceChildren(svg, tip);
+  }
+
+  function renderSources(src) {
+    const body = $('sources-body');
+    if (!src.length) { body.replaceChildren(emptyRow(4, 'No applications yet.')); return; }
+    body.replaceChildren(...src.map(r => h('tr', {}, h('td', {}, r.channel), h('td', {}, r.sent), h('td', {}, r.replies), h('td', {}, r.rate + '%'))));
+  }
+
+  let sortCol = 'applied_on', sortDir = -1;
+  function renderApps() {
+    const body = $('apps-body'), q = $('apps-search').value.trim().toLowerCase(), want = $('apps-filter').value;
+    document.querySelectorAll('#apps-head th[data-col]').forEach(th => {
+      if (th.dataset.col === sortCol) th.setAttribute('aria-sort', sortDir > 0 ? 'ascending' : 'descending'); else th.removeAttribute('aria-sort');
+    });
+    const rows = S.applications
+      .filter(a => !want || a.status === want)
+      .filter(a => !q || ['company', 'role', 'channel', 'status', 'next_step'].some(k => String(a[k] || '').toLowerCase().includes(q)))
+      .sort((a, b) => sortDir * String(a[sortCol] || '').localeCompare(String(b[sortCol] || '')));
+    if (!rows.length) { body.replaceChildren(emptyRow(7, S.applications.length ? 'No applications match.' : 'No applications yet. Click Update now, or add one below.')); return; }
+    body.replaceChildren(...rows.map(a => {
+      const sel = h('select', { 'aria-label': 'Status for ' + a.company, onchange: async () => {
+        sel.disabled = true;
+        try { setState(await api('setApplicationStatus', a.id, sel.value)); } catch (e) { alert(errText(e)); sel.disabled = false; }
+      } }, ...STATUSES.map(st => h('option', { value: st, selected: st === a.status }, st)));
+      const del = h('button', { class: 'link', type: 'button', title: 'Remove this application', onclick: async () => {
+        if (!confirm(`Remove ${a.company}${a.role ? ' – ' + a.role : ''}?`)) return;
+        try { setState(await api('deleteApplication', a.id)); } catch (e) { alert(errText(e)); }
+      } }, 'Remove');
+      return h('tr', {},
+        h('td', {}, a.company),
+        h('td', {}, isHttp(a.email_link) ? h('a', { href: a.email_link, target: '_blank', rel: 'noopener noreferrer', title: 'Open the email' }, a.role || '(role not stated)') : a.role),
+        h('td', { class: 'hide-sm' }, a.channel), h('td', {}, a.applied_on), h('td', {}, sel),
+        h('td', { class: 'hide-sm' }, a.next_step), h('td', {}, del));
+    }));
+  }
+
+  // ---------- settings ----------
+  let draftDays = null;
+  function renderSettings() {
+    const st = S.settings;
+    $('s-enabled').checked = st.enabled; $('s-enabled-txt').textContent = st.enabled ? 'On' : 'Off';
+    draftDays = { ...st.days }; drawDays();
+    $('s-hour').value = String(st.hour); $('s-jobs').value = String(st.jobsPerDay);
+    $('s-email').checked = st.emailSummary; $('s-resumes').checked = st.makeResumes;
+    $('s-since').value = st.since; $('s-locations').value = st.locations; $('s-prefs').value = st.prefs;
+    $('s-model').value = st.geminiModel; $('s-key').value = '';
+    $('s-key').placeholder = st.hasKey ? 'Saved ✓ (leave empty to keep it)' : 'Paste your free key';
+    const note = $('s-key-note');
+    note.replaceChildren(st.hasKey ? 'Key saved. ' : 'Free: aistudio.google.com/apikey → Create API key. ',
+      st.hasKey ? h('button', { class: 'link', type: 'button', onclick: async () => setState(await api('saveSettings', { clearKey: true }), true) }, 'Remove key') : '');
+    $('cv').value = S.cv || '';
+  }
+  function renderLog() {
+    $('log').replaceChildren(...(S.log.length ? S.log : [{ at: '', msg: 'Nothing yet.' }])
+      .map(l => h('li', {}, l.at ? new Date(l.at).toLocaleString() + ': ' : '', l.msg)));
+  }
+  function drawDays() {
+    $('s-days').replaceChildren(...DAYS.map(d => h('button', { class: 'day', type: 'button', 'aria-pressed': String(!!draftDays[d]),
+      onclick: () => { draftDays[d] = !draftDays[d]; drawDays(); } }, d)));
+  }
+
+  // ---------- wire up ----------
+  for (let i = 0; i < 24; i++) $('s-hour').append(h('option', { value: String(i) }, fmtHour(i)));
+  STATUSES.forEach(st => $('apps-filter').append(h('option', {}, st)));
+  $('jobs-status').addEventListener('change', renderJobs);
+  $('apps-search').addEventListener('input', renderApps);
+  $('apps-filter').addEventListener('change', renderApps);
+  $('apps-head').addEventListener('click', (e) => {
+    const th = e.target.closest('th[data-col]'); if (!th) return;
+    if (th.dataset.col === sortCol) sortDir = -sortDir; else { sortCol = th.dataset.col; sortDir = sortCol === 'applied_on' ? -1 : 1; }
+    renderApps();
+  });
+  $('s-enabled').addEventListener('change', () => { $('s-enabled-txt').textContent = $('s-enabled').checked ? 'On' : 'Off'; });
+  $('s-save').addEventListener('click', () => busy($('s-save'), 'Saving…', async () => {
+    const days = { ...draftDays };
+    const enabled = $('s-enabled').checked && DAYS.some(d => days[d]);
+    setState(await api('saveSettings', {
+      enabled, days, hour: Number($('s-hour').value), jobsPerDay: Number($('s-jobs').value),
+      emailSummary: $('s-email').checked, makeResumes: $('s-resumes').checked, since: $('s-since').value,
+      locations: $('s-locations').value, prefs: $('s-prefs').value, geminiKey: $('s-key').value, geminiModel: $('s-model').value,
+    }), true);
+    $('s-status').textContent = enabled ? 'Saved ✓ Daily updates are on.' : 'Saved ✓ Daily updates are off.';
+  }, $('s-status')));
+  $('run-now').addEventListener('click', () => busy($('run-now'), 'Updating… (up to a few minutes)', async () => {
+    const out = await api('runNow');
+    setState(out.state);
+    $('s-status').textContent = out.text;
+  }, $('s-status')));
+  $('remove').addEventListener('click', () => {
+    if (!confirm('Stop all automatic updates? Your data stays in your Drive.')) return;
+    busy($('remove'), 'Removing…', async () => { setState(await api('removeAutomation'), true); $('s-status').textContent = 'Automation removed.'; }, $('s-status'));
+  });
+  $('cv-save').addEventListener('click', () => busy($('cv-save'), 'Saving…', async () => {
+    setState(await api('saveCv', $('cv').value));
+    $('cv-status').textContent = 'Saved ✓';
+  }, $('cv-status')));
+  $('add-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const btn = e.target.querySelector('button');
+    busy(btn, 'Adding…', async () => {
+      setState(await api('addApplication', { company: $('add-company').value, role: $('add-role').value, channel: $('add-channel').value, applied_on: $('add-date').value }));
+      e.target.reset();
+    });
+  });
+  let resizeT;
+  window.addEventListener('resize', () => { clearTimeout(resizeT); resizeT = setTimeout(() => S && renderWeekly(S.applications), 150); });
+
+  api('getState').then(st => setState(st, true)).catch(e => { $('meta').textContent = 'Couldn’t load: ' + errText(e); });
+})();
+</script>
