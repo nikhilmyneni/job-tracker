@@ -31,6 +31,8 @@ What it does on the days and time you pick:
 
 Change anything later in the Settings tab. To pause it, untick "Daily updates on" or use **Job Tracker → Pause / resume**.
 
+The **Dashboard** tab shows your totals, best channel, where applications stop (stage funnel), reply rate per channel and applications per week. Already set up before these were added? Run **Job Tracker → 1. Set up** again. It rebuilds the Dashboard and keeps your data and settings.
+
 ## The "Google hasn't verified this app" screen
 
 You'll see it once during setup, because the script is your own copy and not a published app. Click **Advanced → Go to Job Tracker (unsafe) → Allow**. The script only runs in your account. It reads Gmail and creates files in your own Drive, and the only email it sends is your summary, to you.

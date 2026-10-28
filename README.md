@@ -6,7 +6,7 @@ A free, hassle-free job application tracker for freshers. It lives entirely in y
 - **Recommends jobs** from your LinkedIn / Naukri / Internshala / Indeed alert emails, scored against your CV *(free Gemini key)*
 - **Tailored one-page resume PDF** for each recommended job, saved to your Google Drive *(free Gemini key)*
 - **Daily summary email** on the days and at the time you choose, with a pause switch
-- **Dashboard tab** with counts, reply rate and a status chart
+- **Dashboard tab** with counts, reply rate, best channel, a status chart, a stage funnel, a per-channel reply table and applications per week
 
 No subscription, no server, no app to install. → **User guide: [docs/SETUP.md](docs/SETUP.md)**
 

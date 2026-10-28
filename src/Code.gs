@@ -153,22 +153,57 @@ function buildDashboard_(ss) {
     ['Reached interview', `=COUNTIF(${A}!F2:F,"Interview")+COUNTIF(${A}!F2:F,"Offer")`],
     ['Offers', `=COUNTIF(${A}!F2:F,"Offer")`],
     ['New recommended jobs', `=COUNTIF(${J}!L2:L,"New")`],
-    ['', ''],
+    ['Best channel', ''], // filled below, once the channel table rows are known
     ['Status', 'Count'],
   ];
   STATUSES.forEach(s => rows.push([s, `=COUNTIF(${A}!E2:E,"${s}")`]));
   sh.getRange(1, 1, rows.length, 2).setValues(rows);
   sh.getRange('A1').setFontSize(20).setFontWeight('bold');
-  sh.getRange('A3:A9').setFontWeight('bold');
-  sh.getRange('B3:B9').setFontSize(14).setHorizontalAlignment('left');
+  sh.getRange('A3:A10').setFontWeight('bold');
+  sh.getRange('B3:B10').setFontSize(14).setHorizontalAlignment('left');
   sh.getRange('B6').setNumberFormat('0%');
   sh.getRange('A11:B11').setFontWeight('bold').setBackground('#f1f3f4');
-  sh.setColumnWidth(1, 200); sh.setColumnWidth(2, 120);
-  const chart = sh.newChart().setChartType(Charts.ChartType.BAR)
-    .addRange(sh.getRange(11, 1, STATUSES.length + 1, 2))
-    .setOption('title', 'Applications by status').setOption('legend', { position: 'none' })
-    .setPosition(3, 4, 0, 0).setOption('width', 520).setOption('height', 300).build();
-  sh.insertChart(chart);
+  sh.setColumnWidth(1, 200); sh.setColumnWidth(2, 120); sh.setColumnWidth(3, 110); sh.setColumnWidth(4, 110);
+  const header = (r, cells) => sh.getRange(r, 1, 1, cells.length).setValues([cells]).setFontWeight('bold').setBackground('#f1f3f4');
+  const chartAt = (type, range, title, row) => sh.insertChart(sh.newChart().setChartType(type).addRange(range)
+    .setOption('title', title).setOption('legend', { position: 'none' })
+    .setPosition(row, 6, 0, 0).setOption('width', 520).setOption('height', 300).build());
+  chartAt(Charts.ChartType.BAR, sh.getRange(11, 1, STATUSES.length + 1, 2), 'Applications by status', 3);
+
+  // Where applications stop: how many reached each stage or went further
+  const fTop = rows.length + 2;
+  header(fTop, ['Stage reached', 'Applications', 'Share of sent']);
+  sh.getRange(fTop + 1, 1, STAGES.length, 3).setValues(STAGES.map((st, i) => [st,
+    i === 0 ? `=COUNTA(${A}!A2:A)` : '=' + STAGES.slice(i).map(x => `COUNTIF(${A}!F2:F,"${x}")`).join('+'),
+    `=IFERROR(B${fTop + 1 + i}/B${fTop + 1},0)`]));
+  sh.getRange(fTop + 1, 3, STAGES.length, 1).setNumberFormat('0%');
+  chartAt(Charts.ChartType.BAR, sh.getRange(fTop, 1, STAGES.length + 1, 2), 'Where applications stop', fTop);
+
+  // Which channels get replies (room for 15 channels)
+  const cTop = fTop + STAGES.length + 2, c1 = cTop + 1, c2 = cTop + 15;
+  const ch = (col) => `${col}${c1}:${col}${c2}`;
+  header(cTop, ['Channel', 'Sent', 'Replies', 'Reply rate']);
+  sh.getRange(c1, 1, 1, 4).setValues([[
+    `=IFERROR(SORT(UNIQUE(FILTER(${A}!C2:C,${A}!C2:C<>""))),"")`,
+    `=ARRAYFORMULA(IF(${ch('A')}="","",COUNTIF(${A}!C2:C,${ch('A')})))`,
+    `=ARRAYFORMULA(IF(${ch('A')}="","",COUNTIFS(${A}!C2:C,${ch('A')},${A}!F2:F,"<>Applied")))`,
+    `=ARRAYFORMULA(IF(${ch('A')}="","",IFERROR(${ch('C')}/${ch('B')},0)))`,
+  ]]);
+  sh.getRange(c1, 4, 15, 1).setNumberFormat('0%');
+  // Best channel: highest reply rate among channels used at least twice
+  const best = `SORT(FILTER({${ch('A')},${ch('D')},${ch('B')}},ISNUMBER(${ch('B')})*(${ch('B')}>=2)),2,FALSE,3,FALSE)`;
+  sh.getRange('B10').setFormula(`=IFERROR(INDEX(${best},1,1)&" ("&TEXT(INDEX(${best},1,2),"0%")&" reply rate)","Not enough data yet")`);
+
+  // Applications per week (Mon–Sun), empty weeks as zero. Last block, so it can grow downwards.
+  const wTop = c2 + 2, D = `${A}!D2:D`;
+  const monday = (x) => `(INT(${x})-WEEKDAY(${x},3))`;
+  header(wTop, ['Week of (Mon)', 'Applications']);
+  sh.getRange(wTop + 1, 1, 1, 2).setValues([[
+    `=IF(COUNT(${D})=0,"",SEQUENCE((${monday(`MAX(${D})`)}-${monday(`MIN(${D})`)})/7+1,1,${monday(`MIN(${D})`)},7))`,
+    `=ARRAYFORMULA(IF(A${wTop + 1}:A="","",COUNTIFS(${D},">="&A${wTop + 1}:A,${D},"<"&(A${wTop + 1}:A+7))))`,
+  ]]);
+  sh.getRange(`A${wTop + 1}:A`).setNumberFormat('yyyy-mm-dd');
+  chartAt(Charts.ChartType.COLUMN, sh.getRange(`A${wTop}:B`), 'Applications per week', wTop);
   ss.setActiveSheet(sh); ss.moveActiveSheet(1);
   [SH.jobs, SH.apps, SH.settings, SH.profile, SH.log].forEach((n, i) => {
     const s = ss.getSheetByName(n); if (s) { ss.setActiveSheet(s); ss.moveActiveSheet(i + 2); }
@@ -508,11 +543,13 @@ function findJobs_(ss, s, afterStr, seen, result) {
 function expireJobs_(ss) {
   const sh = ss.getSheetByName(SH.jobs);
   const data = sh.getDataRange().getValues();
-  const apps = new Set(ss.getSheetByName(SH.apps).getDataRange().getValues().slice(1).map(r => String(r[0]).toLowerCase()));
+  // application keys are company|role; a roleless one (company|) counts for any role at that company
+  const apps = new Set(ss.getSheetByName(SH.apps).getDataRange().getValues().slice(1).map(r => String(r[9])));
   const today = new Date(); today.setHours(0, 0, 0, 0);
   for (let r = 1; r < data.length; r++) {
     if (data[r][11] !== 'New') continue;
-    if (apps.has(String(data[r][2]).toLowerCase())) { sh.getRange(r + 1, 12).setValue('Applied'); continue; }
+    const company = String(data[r][2]).trim().toLowerCase();
+    if (apps.has(String(data[r][12])) || apps.has(company + '|')) { sh.getRange(r + 1, 12).setValue('Applied'); continue; }
     const by = data[r][8] instanceof Date ? data[r][8] : (/^\d{4}-\d{2}-\d{2}$/.test(String(data[r][8])) ? new Date(String(data[r][8])) : null);
     if (by && by < today) sh.getRange(r + 1, 12).setValue('Expired');
   }

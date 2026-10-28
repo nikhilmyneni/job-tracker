@@ -65,3 +65,23 @@ test('12 AM / 12 PM parsing', () => {
   ctx.fakeSS = { getSheetByName: () => ({ getRange: () => ({ getValues: () => mk('12 PM') }) }) };
   assert.equal(call('readSettings_(fakeSS)').hour, 12);
 });
+
+test('expireJobs_ marks Applied only for the same role (or a roleless application)', () => {
+  const jobs = [
+    ['Found on', 'Fit', 'Company', 'Role', 'Location', 'Pay', 'Why', 'Gap', 'Apply by', 'Apply', 'Resume', 'Status', 'key'],
+    ['', 4, 'Acme', 'SOC Analyst', '', '', '', '', '', '', '', 'New', 'acme|soc analyst'],
+    ['', 4, 'Acme', 'Pentester', '', '', '', '', '', '', '', 'New', 'acme|pentester'],
+    ['', 4, 'Beta', 'Intern', '', '', '', '', '', '', '', 'New', 'beta|intern'],
+  ];
+  const apps = [
+    ['Company', 'Role', 'Channel', 'Applied on', 'Status', 'Furthest stage', 'Last update', 'Next step', 'Email', 'key'],
+    ['Acme', 'SOC Analyst', '', '', 'Applied', 'Applied', '', '', '', 'acme|soc analyst'],
+    ['Beta', '', '', '', 'Applied', 'Applied', '', '', '', 'beta|'],
+  ];
+  const set = {};
+  ctx.fakeSS = { getSheetByName: (n) => n === 'Applications'
+    ? { getDataRange: () => ({ getValues: () => apps }) }
+    : { getDataRange: () => ({ getValues: () => jobs }), getRange: (r, c) => ({ setValue: (v) => { set[r + ':' + c] = v; } }) } };
+  call('expireJobs_(fakeSS)');
+  assert.deepEqual(JSON.parse(JSON.stringify(set)), { '2:12': 'Applied', '4:12': 'Applied' });
+});
