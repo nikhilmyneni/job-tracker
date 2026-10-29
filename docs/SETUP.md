@@ -23,6 +23,8 @@ The page shows your totals, reply rate, best channel, recommended jobs, where ap
 
 Bookmark the link. It's your dashboard.
 
+**"Sorry, unable to open the file at present"?** Your browser is signed in to more than one Google account, and Apps Script web apps don't handle that. Open the link in a private window (Ctrl+Shift+N) and sign in with just one account, or use a browser profile that has only that account.
+
 ## The "Google hasn't verified this app" screen
 
 You'll see it once, because Job Tracker isn't a published Google app. Click **Advanced → Go to Job Tracker (unsafe) → Allow**. The code runs only in your account:
