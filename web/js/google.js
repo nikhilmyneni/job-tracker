@@ -1,32 +1,34 @@
 /**
- * Google sign-in (Identity Services token client), Gmail read-only, and the app's hidden Drive folder.
+ * Google sign-in (Identity Services token client), the app's hidden Drive folder, and Gmail read-only.
+ * Sign-in asks only for name, email and the Drive app folder (no warning screen). Gmail is a separate,
+ * optional step (connectGmail) that adds gmail.readonly on top, so only that step shows Google's
+ * "unverified app" screen.
  * The access token lives in memory, plus this tab's sessionStorage so a reload keeps you signed in.
  * It's gone when the tab closes, after about an hour, or on sign-out. Nothing here talks to anything but Google.
  */
-export const SCOPES = [
-  'https://www.googleapis.com/auth/gmail.readonly',
-  'https://www.googleapis.com/auth/drive.appdata',
-  'openid', 'email', 'profile',
-];
-const NEEDED = SCOPES.slice(0, 2);
+const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.appdata';
+export const GMAIL_SCOPE = 'https://www.googleapis.com/auth/gmail.readonly';
+export const SCOPES = [DRIVE_SCOPE, 'openid', 'email', 'profile'];
 const DATA_NAME = 'job-tracker.json';
 
 export class NeedSignIn extends Error {}
 
-let client = null, token = '', tokenExp = 0, waiting = null;
+export class GmailNotConnected extends Error {}
+
+let client = null, token = '', tokenExp = 0, waiting = null, gmail = false;
 const SESSION_KEY = 'jh-session';
 
 function remember() {
-  try { if (token) sessionStorage.setItem(SESSION_KEY, JSON.stringify({ token, tokenExp })); else sessionStorage.removeItem(SESSION_KEY); } catch (e) { /* storage blocked: memory only */ }
+  try { if (token) sessionStorage.setItem(SESSION_KEY, JSON.stringify({ token, tokenExp, gmail })); else sessionStorage.removeItem(SESSION_KEY); } catch (e) { /* storage blocked: memory only */ }
 }
 
 /** After a reload: picks the token back up from this tab, if it's still valid. No popup. */
 export function resumeSession() {
   try {
     const s = JSON.parse(sessionStorage.getItem(SESSION_KEY) || 'null');
-    if (s && typeof s.token === 'string' && Number(s.tokenExp) > Date.now()) { token = s.token; tokenExp = Number(s.tokenExp); return true; }
+    if (s && typeof s.token === 'string' && Number(s.tokenExp) > Date.now()) { token = s.token; tokenExp = Number(s.tokenExp); gmail = s.gmail === true; return true; }
   } catch (e) { /* ignore */ }
-  token = ''; tokenExp = 0; remember();
+  token = ''; tokenExp = 0; gmail = false; remember();
   return false;
 }
 
@@ -51,29 +53,50 @@ function gis() {
   });
 }
 
-/** Opens Google's sign-in / consent popup. Must run from a click. */
-export async function signIn(clientId, { hint, consent } = {}) {
-  const oauth2 = await gis();
+function tokenClient(oauth2, clientId) {
   if (!client) {
     client = oauth2.initTokenClient({
       client_id: clientId, scope: SCOPES.join(' '), include_granted_scopes: true,
       callback: (r) => waiting && waiting.resolve(r), error_callback: (e) => waiting && waiting.reject(e),
     });
   }
-  const r = await new Promise((resolve, reject) => {
-    waiting = { resolve, reject };
-    client.requestAccessToken({ prompt: consent ? 'consent' : '', login_hint: hint || undefined });
-  });
-  waiting = null;
-  if (r.error) throw new Error(r.error_description || r.error);
-  if (!oauth2.hasGrantedAllScopes(r, ...NEEDED)) {
-    throw new Error('Job Hunter needs both boxes ticked: read Gmail, and its own app data in Drive. Sign in again and allow both.');
-  }
+  return client;
+}
+
+function request(c, opts) {
+  return new Promise((resolve, reject) => { waiting = { resolve, reject }; c.requestAccessToken(opts); }).finally(() => { waiting = null; });
+}
+
+function keep(oauth2, r) {
   token = r.access_token;
   tokenExp = Date.now() + (Number(r.expires_in) || 3600) * 1000 - 60e3;
+  gmail = oauth2.hasGrantedAllScopes(r, GMAIL_SCOPE); // earlier Gmail consent comes back with include_granted_scopes
   remember();
+}
+
+/** Opens Google's sign-in popup: name, email and the Drive app folder only. Must run from a click. */
+export async function signIn(clientId, { hint, consent } = {}) {
+  const oauth2 = await gis();
+  const r = await request(tokenClient(oauth2, clientId), { prompt: consent ? 'consent' : '', login_hint: hint || undefined });
+  if (r.error) throw new Error(r.error_description || r.error);
+  if (!oauth2.hasGrantedAllScopes(r, DRIVE_SCOPE)) {
+    throw new Error('Job Hunter needs the box for its own app data in Drive ticked. That’s where your data is saved. Sign in again and allow it.');
+  }
+  keep(oauth2, r);
   return token;
 }
+
+/** Adds read-only Gmail access (the step that shows Google's unverified-app screen). Must run from a click. */
+export async function connectGmail(clientId, { hint } = {}) {
+  const oauth2 = await gis();
+  const r = await request(tokenClient(oauth2, clientId), { prompt: '', scope: GMAIL_SCOPE, login_hint: hint || undefined });
+  if (r.error) throw new Error(r.error === 'access_denied' ? 'Gmail wasn’t connected. You can try again any time.' : (r.error_description || r.error));
+  if (!oauth2.hasGrantedAllScopes(r, GMAIL_SCOPE)) throw new Error('Tick the box to let Job Hunter read your job emails, then try again.');
+  keep(oauth2, r);
+  return true;
+}
+
+export const gmailConnected = () => gmail;
 
 export function signedIn() { return !!token && Date.now() < tokenExp; }
 /** The current access token (for our own /api/ai check); throws NeedSignIn when it has expired. */
@@ -81,7 +104,7 @@ export function accessToken() { if (!signedIn()) throw new NeedSignIn('Your Goog
 
 export async function signOut() {
   const t = token;
-  token = ''; tokenExp = 0; remember();
+  token = ''; tokenExp = 0; gmail = false; remember();
   if (t) { try { (await gis()).revoke(t, () => {}); } catch (e) {} }
 }
 
@@ -108,6 +131,7 @@ export async function profile() {
 const GMAIL = 'https://gmail.googleapis.com/gmail/v1/users/me';
 
 export async function searchThreads(q, max) {
+  if (!gmail) throw new GmailNotConnected('Connect Gmail to read your job emails.');
   const j = await gjson(`${GMAIL}/threads?maxResults=${max}&q=${encodeURIComponent(q)}`);
   return (j.threads || []).map(t => t.id);
 }

@@ -116,7 +116,7 @@ export function prefsText(s) {
 
 // ---------- Data file ----------
 export function emptyData() {
-  return { version: 2, settings: defaultSettings(), applications: [], jobs: [], seen: [], log: [], cv: '', cvFile: null, cvFold: null, cvFoldHash: '', review: [], reviewDone: [], lastRunAt: '' };
+  return { version: 2, settings: defaultSettings(), applications: [], jobs: [], seen: [], log: [], cv: '', cvFile: null, cvFold: null, cvFoldHash: '', review: [], reviewDone: [], lastRunAt: '', gmailRunAt: '' };
 }
 
 export function normalizeData(raw) {
@@ -137,6 +137,8 @@ export function normalizeData(raw) {
     review: arr(r.review).slice(0, MAX_REVIEW),
     reviewDone: Array.isArray(r.reviewDone) ? r.reviewDone.map(String).slice(-500) : [],
     lastRunAt: typeof r.lastRunAt === 'string' ? r.lastRunAt : '',
+    // When Gmail was last read. Older files read Gmail on every run, so their lastRunAt counts.
+    gmailRunAt: typeof r.gmailRunAt === 'string' ? r.gmailRunAt : (typeof r.lastRunAt === 'string' && !('gmailRunAt' in r) ? r.lastRunAt : ''),
   };
 }
 
@@ -234,7 +236,7 @@ export function companyFromSender(from) {
   const name = (from.match(/^"?([^"<]+?)"?\s*</) || [])[1];
   const domain = (from.match(/@([^>\s]+)/) || [])[1] || '';
   const generic = /^(careers?|jobs?|recruit(ing|ment|ers?)?|talent( team| acquisition)?|hr( team)?|hiring( team)?|campus( hiring| team)?|people( team)?|no-?reply|notifications?|team)$/i;
-  if (name && !generic.test(name.trim()) && !/no-?reply/i.test(name)) return name.replace(/\b(careers?|recruiting|talent acquisition|hiring team|jobs)\b/ig, '').trim();
+  if (name && !generic.test(name.trim()) && !/no-?reply/i.test(name)) return name.replace(/\b(careers?|recruit(ing|ment|ers?)|talent( acquisition| team)?|hiring( team)?|hr( team)?|campus( hiring| team)?|people( team)?|jobs|team)\b/ig, '').replace(/\s{2,}/g, ' ').replace(/[\s,|·-]+$/, '').trim();
   const parts = domain.split('.').filter(p => !/^(mail|careers?|jobs|email|no-?reply|recruiting|myworkday|greenhouse|lever|com|in|co|io|org|net|ai)$/i.test(p));
   return parts.length ? parts[parts.length - 1].replace(/^\w/, c => c.toUpperCase()) : '';
 }
@@ -348,6 +350,21 @@ export function summaryText(r) {
   if (r.due.length) lines.push(`Waiting on you:\n- ${r.due.join('\n- ')}`);
   if (r.notes.length) lines.push(r.notes.join('\n'));
   return lines.join('\n\n');
+}
+
+// ---------- A pasted email (when Gmail isn't connected) ----------
+/**
+ * Text copied from an email → {from, subject, body} for the classifier. Reads "From:" / "Subject:" lines when
+ * they're there; otherwise the first line is the subject and the first line with an address is the sender.
+ */
+export function parsePastedEmail(text) {
+  const t = String(text || '').replace(/\r/g, '').trim();
+  const lines = t.split('\n');
+  const head = (name) => { const l = lines.slice(0, 20).find(x => new RegExp('^\\s*' + name + '\\s*:', 'i').test(x)); return l ? l.replace(/^[^:]*:\s*/, '').trim() : ''; };
+  let subject = head('subject'), from = head('from');
+  if (!subject) subject = (lines.find(l => l.trim()) || '').trim().slice(0, 200);
+  if (!from) from = (lines.slice(0, 8).find(l => /[^\s@<]+@[^\s@>]+\.[a-z]{2,}/i.test(l)) || '').trim().slice(0, 200);
+  return { from, subject, body: clip(t, 4000) };
 }
 
 // ---------- Board, next steps, timeline ----------

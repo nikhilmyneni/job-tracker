@@ -14,16 +14,20 @@ the owner's free Groq + Gemini keys from environment variables) and `workday.js`
 
 Flow: sign in → first-run **setup wizard**, CV first (drop a file or paste; `profileFromCv` then fills in name,
 city, roles, level and locations), then roles, level, job type, pay, locations (city search from the first letter,
-`placeMatches`), skip list, companies to follow, routine → Applications (Board / Table / Timeline). Everything from setup can be changed in
+`placeMatches`), skip list, **Connect Gmail (optional)**, companies to follow, routine → Applications (Board / Table / Timeline). Everything from setup can be changed in
 Profile and CV or Settings.
 
-The Google OAuth app is published but unverified, so users see the unverified screen and there's a 100-user cap.
+The Google OAuth app is published but unverified. **Sign-in asks only for non-sensitive scopes** (openid, email,
+profile, drive.appdata), so it shows no warning once the brand is verified. Gmail is a separate, optional step
+(`G.connectGmail()` adds `gmail.readonly` with incremental auth); only that step shows Google's unverified screen
+and counts toward the 100-user cap. Without Gmail, users add applications by hand or **paste an email**
+(`parsePastedEmail` → rules → AI), and syncs only check company job boards (`runUpdate(..., { gmail: false })`).
 
 ## Hard constraints (don't break these)
 - **Free.** No paid APIs or services. Server code only as free Vercel functions, and only when a
   source can't be called from the browser.
 - **Gmail is read-only** (`gmail.readonly`). Never send, delete, label or modify mail. There's no outgoing mail at all.
-- **Narrow scopes:** `gmail.readonly`, `drive.appdata`, `openid`, `email`, `profile`. No full Drive, no Docs.
+- **Narrow scopes:** sign-in `drive.appdata`, `openid`, `email`, `profile`; plus `gmail.readonly` only when the user connects Gmail. No full Drive, no Docs.
 - **No user data is stored anywhere but the user's browser and Drive.** It goes to Google (Gmail, the
   Drive app folder) and, for AI tasks, through `api/ai.js` to Groq/Gemini. That function passes text straight
   through: no storage, no logs. Job boards and `api/workday.js` only ever get a company's board name and a role. No analytics, no telemetry, no CDNs: fonts and pdf.js are vendored in
@@ -79,7 +83,8 @@ The Google OAuth app is published but unverified, so users see the unverified sc
 - `docs/SETUP.md`: users and owner (Google Cloud + Vercel). Keep it in sync with behaviour changes. `docs/ROADMAP.md`: ideas.
 
 ## Data (one Drive app-data file per user, `job-tracker.json`)
-`{version: 2, settings, applications[], jobs[], seen[] (≤5000), log[] (newest first, ≤300), cv, cvFile, cvFold, cvFoldHash, review[] (≤50), reviewDone[], lastRunAt}`.
+`{version: 2, settings, applications[], jobs[], seen[] (≤5000), log[] (newest first, ≤300), cv, cvFile, cvFold, cvFoldHash, review[] (≤50), reviewDone[], lastRunAt, gmailRunAt}`.
+`gmailRunAt` is when Gmail was last read (so connecting it later still looks back `sinceDays`).
 - `settings`: onboarded, name, city, prefs {roles[], level, jobType, paidOnly, minPay,
   locations[], relocate, avoid[]}, jobsPerUpdate, autoUpdateHours, sinceDays, notify, companies[{ats, slug, name, host?, site?}].
   To add a setting, update `defaultSettings` + `normalizeSettings`

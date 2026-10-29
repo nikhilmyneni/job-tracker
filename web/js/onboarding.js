@@ -164,6 +164,27 @@ export function companiesBlock(list, opts = {}) {
   };
 }
 
+/** Connect Gmail (optional): what it reads, and Google's warning walked through before you see it. */
+export function gmailBlock(ctx) {
+  const status = h('div', { class: 'status', role: 'status' });
+  const done = () => {
+    status.className = 'status ok'; status.textContent = 'Gmail connected (read-only). Your applications will load when you start.'; btn.hidden = true;
+    el.dispatchEvent(new Event('input')); // lets the wizard turn "Skip for now" into "Next"
+  };
+  const btn = h('button', { type: 'button', class: 'btn btn-primary', onclick: () => busy(btn, 'Connecting…', async () => { await ctx.connectGmail(); done(); }, status) }, 'Connect Gmail');
+  const el = h('div', { class: 'stack' },
+    h('ul', { class: 'ticks-list' },
+      h('li', {}, 'It looks for application and job-alert emails and reads only those.'),
+      h('li', {}, 'Read-only: it can’t send, delete, label or change anything.'),
+      h('li', {}, 'Skip it and you can still get job matches, tailor resumes, and add or paste applications yourself.')),
+    h('div', { class: 'heads-up' },
+      h('p', {}, h('b', {}, 'Google will show a warning.'), ' Reading Gmail needs a permission Google only fully verifies after a paid review, which a free tool can’t afford. When you see “Google hasn’t verified this app”:'),
+      h('ol', {}, h('li', {}, 'Choose ', h('b', {}, 'Advanced'), ', then ', h('b', {}, 'Go to Job Hunter'), '.'), h('li', {}, 'Tick the box to let it read your email.'), h('li', {}, 'Choose ', h('b', {}, 'Continue'), '.'))),
+    btn, status);
+  if (ctx.gmailOn && ctx.gmailOn()) done();
+  return { el, collect: () => {} };
+}
+
 // ---------- the wizard ----------
 const FROM_CV = 'Filled in from your CV. Change anything that isn’t right.';
 const STEPS = [
@@ -173,6 +194,7 @@ const STEPS = [
   { id: 'want', title: 'What are you looking for?', intro: (d, w) => (w.fromCv ? (w.profile.roles.length ? 'Roles that match your CV. Add or remove any.' : 'Your CV didn’t point clearly to a role, so pick a few.') : ''), block: (d, ctx, w) => wantBlock(d, w.profile.roles) },
   { id: 'where', title: 'Where would you like to work?', block: (d) => whereBlock(d) },
   { id: 'avoid', title: 'Anything to skip?', intro: 'Openings with these are left out.', block: (d) => avoidBlock(d) },
+  { id: 'gmail', title: 'Connect Gmail (optional)', intro: 'So your applications track themselves: confirmations, tests, interviews, offers and rejections, straight from your inbox.', block: (d, ctx) => gmailBlock(ctx) },
   { id: 'companies', title: 'Companies to follow (optional)', intro: 'Job Hunter already reads your job-alert emails from LinkedIn, Naukri, Indeed, Internshala, Wellfound and foundit. Add company career pages for more.', block: (d, ctx) => companiesBlock(d.companies, { demo: ctx.demo }) },
   { id: 'routine', title: 'Your routine', block: (d) => routineBlock(d) },
 ];
@@ -206,8 +228,11 @@ export function runWizard(root, ctx) {
         }
         if (st.id === 'want' && !d.prefs.roles.length) { status.className = 'status err'; status.textContent = 'Add at least one role you want.'; return; }
         i++; draw();
-      } }, (st.id === 'companies' && !(d.companies || []).length) || (st.id === 'cv' && !d.cv) ? 'Skip for now' : 'Next');
-      if (st.id === 'companies' || st.id === 'cv') ['click', 'input', 'drop'].forEach(ev => cur.el.addEventListener(ev, () => { next.textContent = 'Next'; }));
+      } }, (st.id === 'companies' && !(d.companies || []).length) || (st.id === 'cv' && !d.cv) || (st.id === 'gmail' && !(ctx.gmailOn && ctx.gmailOn())) ? 'Skip for now' : 'Next');
+      if (st.id === 'companies' || st.id === 'cv' || st.id === 'gmail') ['click', 'input', 'drop'].forEach(ev => cur.el.addEventListener(ev, () => {
+        if (st.id !== 'gmail' || (ctx.gmailOn && ctx.gmailOn())) { next.textContent = 'Next'; next.className = 'btn btn-primary'; }
+      }));
+      if (next.textContent === 'Skip for now') next.className = 'btn btn-quiet';
     } else {
       cur = null;
       const p = d.prefs;
@@ -218,9 +243,10 @@ export function runWizard(root, ctx) {
           row('Pay', (p.paidOnly ? 'Paid only' : 'Unpaid OK') + (p.minPay ? `, at least ${p.minPay}` : '')),
           row('Locations', p.locations.join(', ') + (p.relocate ? ' · open to relocating' : '')),
           row('Skip', p.avoid.join(', ')), row('CV', d.cv ? `${d.cv.length.toLocaleString()} characters${d.cvUpload ? ' · ' + d.cvUpload.name : ''}` : 'Not added yet'),
+          row('Gmail', ctx.gmailOn && ctx.gmailOn() ? 'Connected (read-only)' : 'Not connected. You can connect it any time'),
           row('Companies', (d.companies || []).map(c => c.name).join(', ') || 'None yet'),
                     row('Updates', `${autoLabel(d.autoUpdateHours)} · ${d.jobsPerUpdate || 'no'} new jobs each time`)),
-        h('p', { class: 'hint' }, 'Start reads your Gmail (read-only) from the last ' + d.sinceDays + ' days. Applications appear as they’re sorted.')];
+        h('p', { class: 'hint' }, ctx.gmailOn && ctx.gmailOn() ? 'Start reads your Gmail (read-only) from the last ' + d.sinceDays + ' days. Applications appear as they’re sorted.' : 'Start checks the companies you follow for openings.')];
       next = h('button', { type: 'button', class: 'btn btn-primary', onclick: () => busy(next, 'Saving…', () => ctx.finish(d), status) }, 'Start');
     }
     root.replaceChildren(h('div', { class: 'wizard' },

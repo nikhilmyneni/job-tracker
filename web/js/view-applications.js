@@ -1,6 +1,6 @@
 /** Applications: everything you've applied to, kept up to date from Gmail. Board, table or timeline. */
 import { h, busy, icon, pageHead, ago, openDialog, isHttp, toast, errText, copyButton } from './ui.js';
-import { STATUSES, STATUS_LABEL, summary, bySource } from './core.js';
+import { STATUSES, STATUS_LABEL, summary, bySource, ymd } from './core.js';
 import { renderBoard, renderTimeline, editDialog } from './view-board.js';
 import { notifySupported, notifyAllowed } from './notify.js';
 
@@ -13,6 +13,8 @@ export function renderApplications(ctx, root) {
   const apps = data.applications, sum = summary(apps);
   const sync = h('button', { type: 'button', class: 'btn btn-primary', id: 'sync-now', onclick: () => act.updateNow() }, icon('refresh'), h('span', {}, 'Sync now'));
   const add = h('button', { type: 'button', class: 'btn btn-quiet', onclick: () => addDialog(ctx) }, icon('plus'), h('span', {}, 'Add manually'));
+  const paste = h('button', { type: 'button', class: 'btn btn-quiet', onclick: () => pasteDialog(ctx) }, icon('mail'), h('span', {}, 'Paste an email'));
+  const gmail = act.gmailOn();
   const body = h('div', { class: 'apps-body' });
   const search = h('input', { type: 'search', class: 'search', placeholder: 'Search company, role or next step', 'aria-label': 'Search applications', value: query,
     oninput: () => { query = search.value; drawBody(); } });
@@ -24,8 +26,9 @@ export function renderApplications(ctx, root) {
   const drawBody = () => {
     const list = matching();
     if (!apps.length) {
-      body.replaceChildren(h('div', { class: 'empty-block' }, h('h2', {}, data.lastRunAt ? 'No applications found yet' : 'Your applications will appear here'),
-        h('p', {}, data.lastRunAt ? 'Nothing in your Gmail looked like an application. Add one by hand, or sync again after you apply somewhere.' : 'Sync now reads your Gmail (read-only) and sorts every application email it finds.')));
+      body.replaceChildren(h('div', { class: 'empty-block' }, h('h2', {}, gmail && data.gmailRunAt ? 'No applications found yet' : 'Your applications will appear here'),
+        h('p', {}, !gmail ? 'Connect Gmail and they’ll be found for you, or paste an application email, or add one by hand.'
+          : data.gmailRunAt ? 'Nothing in your Gmail looked like an application. Add one by hand, or sync again after you apply somewhere.' : 'Sync now reads your Gmail (read-only) and sorts every application email it finds.')));
       return;
     }
     body.replaceChildren(view === 'Board' ? renderBoard(ctx, list) : view === 'Timeline' ? renderTimeline(list) : table(ctx, list));
@@ -54,10 +57,14 @@ export function renderApplications(ctx, root) {
     h('button', { type: 'button', class: 'btn btn-sm btn-primary', onclick: (e) => busy(e.currentTarget, 'Asking…', () => act.enableNotifications()) }, 'Turn on'),
     h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Not now', onclick: () => { try { localStorage.setItem('jh-notify-later', '1'); } catch (e) { /* fine */ } askNotify.remove(); } }, icon('x'))) : '';
 
+  const connect = !gmail ? h('div', { class: 'notice' }, icon('mail'),
+    h('p', {}, h('b', {}, 'Connect Gmail to track applications by themselves.'), ' Job Hunter reads your application emails (read-only) and moves each one along the board. Google will show an “unverified app” screen: choose Advanced, then Go to Job Hunter.'),
+    h('button', { type: 'button', class: 'btn btn-sm btn-primary', onclick: (e) => busy(e.currentTarget, 'Connecting…', () => act.connectGmail()) }, 'Connect Gmail')) : '';
+
   const src = bySource(apps);
   root.replaceChildren(
-    pageHead('Applications', data.lastRunAt ? `Last synced from Gmail ${ago(data.lastRunAt)}` : 'Not synced yet', search, sync, add),
-    review, askNotify, stats,
+    pageHead('Applications', !gmail ? 'Gmail not connected' : data.gmailRunAt ? `Last synced from Gmail ${ago(data.gmailRunAt)}` : 'Not synced yet', search, sync, paste, add),
+    connect, review, askNotify, stats,
     h('section', { class: 'apps', 'aria-label': 'Your applications' }, tabs, body),
     src.length ? h('section', { class: 'panel panel-narrow', 'aria-labelledby': 'src-title' },
       h('h2', { id: 'src-title', class: 'panel-title' }, 'Which channels get replies'),
@@ -95,7 +102,7 @@ function addDialog(ctx) {
   const company = h('input', { required: true, autocomplete: 'off' });
   const role = h('input', { autocomplete: 'off' });
   const channel = h('input', { placeholder: 'LinkedIn, Naukri, company site…', autocomplete: 'off' });
-  const date = h('input', { type: 'date', value: new Date().toISOString().slice(0, 10) });
+  const date = h('input', { type: 'date', value: ymd(new Date()) });
   const status = h('div', { class: 'status', role: 'status' });
   const save = h('button', { type: 'submit', class: 'btn btn-primary' }, 'Add application');
   const form = h('form', { class: 'stack', onsubmit: (e) => {
@@ -131,4 +138,33 @@ function reviewDialog(ctx) {
   };
   const close = openDialog('Emails that need a look', list);
   draw();
+}
+
+/** No Gmail? Paste an application email: it's read (rules, then the AI), you check the guess, then add it. */
+function pasteDialog(ctx) {
+  const { act } = ctx;
+  const f = (label, input) => h('label', { class: 'field' }, h('span', { class: 'field-lbl' }, label), input);
+  const text = h('textarea', { placeholder: 'Open the email, select all of it (with the subject and sender if you can), copy, and paste it here.', 'aria-label': 'Email text' });
+  const status = h('div', { class: 'status', role: 'status' });
+  const step2 = h('div', { class: 'stack', hidden: true });
+  const read = h('button', { type: 'button', class: 'btn btn-primary', onclick: () => busy(read, 'Reading…', async () => {
+    const g = await act.readPastedEmail(text.value);
+    const company = h('input', { value: g.company, autocomplete: 'off', required: true });
+    const role = h('input', { value: g.role, autocomplete: 'off' });
+    const stage = h('select', {}, ...STATUSES.map(s => h('option', { value: s, selected: s === g.stage }, STATUS_LABEL[s])));
+    const step = h('input', { value: g.next_step, autocomplete: 'off' });
+    const date = h('input', { type: 'date', value: ymd(new Date()) });
+    const msg = h('div', { class: 'status', role: 'status' });
+    const add = h('button', { type: 'button', class: 'btn btn-primary', onclick: () => busy(add, 'Adding…', async () => {
+      await act.addFromEmail(Object.assign({}, g, { company: company.value, role: role.value, stage: stage.value, next_step: step.value, date: date.value }));
+      close(); toast('Application added');
+    }, msg) }, 'Add application');
+    step2.replaceChildren(
+      h('p', { class: g.looksLikeOne ? 'hint' : 'status warn' }, g.looksLikeOne ? 'Here’s what it says. Fix anything that’s wrong.' : 'This doesn’t look like an application email, but you can still add it.'),
+      f('Company', company), f('Role', role), f('Status', stage), f('Next step', step), f('Email date', date), msg, h('div', { class: 'row-end' }, add));
+    step2.hidden = false; read.hidden = true; text.readOnly = true;
+    company.focus();
+  }, status) }, 'Read it');
+  const close = openDialog('Paste an application email', h('div', { class: 'stack' }, text, status, h('div', { class: 'row-end' }, read), step2));
+  text.focus();
 }

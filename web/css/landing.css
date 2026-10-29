@@ -72,7 +72,7 @@
 .how h2, .features > h2 { font-size: clamp(36px, 4.4vw, 60px); max-width: 14em; }
 .steps { list-style: none; counter-reset: step; padding: 0; margin: 56px 0 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
 .steps li { counter-increment: step; background: var(--surface); border-radius: var(--r-panel); padding: 28px; }
-.steps li::before { content: counter(step); display: block; font: 800 64px/1 var(--display); color: var(--blue); letter-spacing: -0.04em; margin-bottom: 24px; }
+.steps li::before { content: counter(step); display: block; font: 800 64px/1 var(--display); color: var(--link); letter-spacing: -0.04em; margin-bottom: 24px; }
 .steps h3 { font-size: 24px; }
 .steps p { margin-top: 10px; }
 @media (max-width: 860px) { .steps { grid-template-columns: 1fr; } }

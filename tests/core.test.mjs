@@ -430,3 +430,17 @@ test('contact details', () => {
   assert.equal(p.email, 'riya.v@mail.in'); assert.equal(p.phone, '+91 90000 11111');
   assert.equal(p.linkedin, 'linkedin.com/in/riya-v'); assert.equal(p.github, 'github.com/riyav');
 });
+
+// ---------- Gmail optional ----------
+test('parsePastedEmail reads From/Subject lines, or guesses them', () => {
+  const a = C.parsePastedEmail('Subject: Interview invitation\nFrom: Kestrel Careers <careers@kestrel.in>\n\nWe would like to invite you');
+  assert.equal(a.subject, 'Interview invitation'); assert.equal(a.from, 'Kestrel Careers <careers@kestrel.in>');
+  const b = C.parsePastedEmail('Your application to Nimbus\r\nNimbus Hiring <jobs@nimbus.in>\r\nThank you for applying');
+  assert.equal(b.subject, 'Your application to Nimbus'); assert.equal(b.from, 'Nimbus Hiring <jobs@nimbus.in>');
+  assert.equal(C.ruleClassify({ subject: b.subject, from: b.from, body: b.body }).company, 'Nimbus');
+});
+test('gmailRunAt: kept separately; older files count their last run', () => {
+  assert.equal(C.normalizeData({ lastRunAt: '2026-10-01T00:00:00Z' }).gmailRunAt, '2026-10-01T00:00:00Z');
+  assert.equal(C.normalizeData({ lastRunAt: '2026-10-01T00:00:00Z', gmailRunAt: '' }).gmailRunAt, '');
+  assert.equal(C.emptyData().gmailRunAt, '');
+});

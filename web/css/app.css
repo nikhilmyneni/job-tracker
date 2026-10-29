@@ -155,7 +155,7 @@ input[type=checkbox], input[type=radio] { width: 18px; height: 18px; accent-colo
 .seg button { min-height: 36px; padding: 0 14px; border: 0; border-radius: 9px; background: none; color: var(--text); font: 500 14px var(--sans); cursor: pointer; }
 .seg button[aria-checked="true"] { background: var(--surface); color: var(--ink); font-weight: 600; box-shadow: var(--seg-shadow); }
 
-.link { background: none; border: 0; padding: 0; color: var(--blue); font: inherit; font-size: 14px; cursor: pointer; text-decoration: underline; min-height: 32px; justify-self: start; }
+.link { background: none; border: 0; padding: 0; color: var(--link); font: inherit; font-size: 14px; cursor: pointer; text-decoration: underline; min-height: 32px; justify-self: start; }
 
 /* the upload button */
 .upload { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
@@ -252,7 +252,7 @@ input[type=checkbox], input[type=radio] { width: 18px; height: 18px; accent-colo
 .app-card-links a:hover { background: var(--blue-soft); }
 .app-card-links .ic { width: 14px; height: 14px; }
 .cell-link { display: inline-flex; vertical-align: middle; margin-left: 6px; padding: 6px; border-radius: 6px; color: var(--muted); }
-.cell-link:hover { color: var(--blue); background: var(--blue-soft); }
+.cell-link:hover { color: var(--link); background: var(--blue-soft); }
 .cell-link .ic { width: 15px; height: 15px; }
 
 .timeline { list-style: none; margin: 0; padding: 0; display: grid; gap: 22px; }
@@ -284,13 +284,13 @@ input[type=time] { min-height: var(--tap); padding: 0 10px; border: 1px solid va
 /* ---------- CV drop zone (kitchen "Magnetic Drop Zone") ---------- */
 .drop { --dx: 0px; --dy: 0px; display: grid; justify-items: center; gap: 8px; text-align: center; padding: 32px 20px; border: 2px dashed var(--line-strong); border-radius: var(--r-panel); background: var(--ground);
   transition: transform 220ms var(--ease), border-color 150ms var(--ease), background-color 150ms var(--ease); }
-.drop > .ic { width: 28px; height: 28px; color: var(--blue); }
+.drop > .ic { width: 28px; height: 28px; color: var(--link); }
 .drop-title { font: 700 20px var(--display); color: var(--ink); }
 .drop-sub { color: var(--muted); font-size: 14px; margin-bottom: 6px; }
 .drop.over { border-color: var(--blue); background: var(--blue-soft); transform: translate(var(--dx), var(--dy)) scale(1.02); }
 .file-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; color: var(--text); }
 .file-line b { color: var(--ink); }
-.paste summary { cursor: pointer; min-height: var(--tap); display: flex; align-items: center; color: var(--blue); font-weight: 500; }
+.paste summary { cursor: pointer; min-height: var(--tap); display: flex; align-items: center; color: var(--link); font-weight: 500; }
 .paste textarea { margin-top: 6px; }
 
 /* ---------- chip field with live suggestions ---------- */
@@ -351,3 +351,11 @@ input[type=time] { min-height: var(--tap); padding: 0 10px; border: 1px solid va
   .table thead th { position: static; }
   a { color: #000; }
 }
+
+/* setup: the Gmail step */
+.ticks-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.ticks-list li { position: relative; padding-left: 26px; color: var(--ink); }
+.ticks-list li::before { content: ""; position: absolute; left: 2px; top: 7px; width: 11px; height: 6px; border-left: 2px solid var(--green); border-bottom: 2px solid var(--green); transform: rotate(-45deg); }
+.heads-up { background: var(--orange-soft); color: var(--orange-text); border-radius: var(--r-card); padding: 14px 16px; display: grid; gap: 8px; }
+.heads-up ol { margin: 0; padding-left: 20px; display: grid; gap: 4px; }
+.heads-up b { font-weight: 600; }

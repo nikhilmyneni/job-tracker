@@ -4,7 +4,7 @@ import * as C from './core.js';
 import * as G from './google.js';
 import { runUpdate, cvForResumeFold } from './update.js';
 import { jobDescription } from './sources.js';
-import { hasAi, useSharedAi, AiError } from './ai.js';
+import { hasAi, useSharedAi, AiError, ask } from './ai.js';
 import { $, h, busy, toast, errText, setLabel } from './ui.js';
 import { runWizard } from './onboarding.js';
 import { renderApplications } from './view-applications.js';
@@ -25,6 +25,7 @@ const ctx = { data: null, me: null, demo: DEMO, act: {} };
 function show(name) {
   ['signin', 'loading', 'wizard', 'app'].forEach(n => { $('screen-' + n).hidden = n !== name; });
   if (ctx.me) $('account-name').textContent = ctx.me.email;
+  drawGmailState();
 }
 
 const ROUTES = [
@@ -40,6 +41,18 @@ function route() {
 }
 
 /** Draws the current screen. keepFocus: a background redraw (sync progress) shouldn't move focus. */
+// In the demo, Gmail starts connected on the sample dashboard and not connected in the setup demo.
+let demoGmail = params.get('demo') !== 'setup';
+const gmailOn = () => (DEMO ? demoGmail : G.gmailConnected());
+
+/** The sidebar card: Gmail connected (read-only), or a Connect button. */
+function drawGmailState() {
+  const on = gmailOn();
+  $('gmail-state').textContent = on ? 'Gmail connected' : 'Gmail not connected';
+  $('gmail-sub').textContent = on ? 'Read-only' : 'Applications only update when you add them';
+  $('connect-gmail').hidden = on;
+}
+
 function render(keepFocus) {
   if (!ctx.data || $('screen-app').hidden) return;
   const [re, name, fn] = route();
@@ -182,6 +195,35 @@ Object.assign(ctx.act, {
     location.href = '/';
   },
   updateNow: () => updateNow(),
+  gmailOn,
+  /** Adds read-only Gmail access (Google shows its unverified-app screen here), then syncs. Must run from a click. */
+  async connectGmail() {
+    if (DEMO) { await sleep(500); demoGmail = true; drawGmailState(); render(true); toast('Demo: Gmail connected.'); return; }
+    await G.connectGmail(GOOGLE_CLIENT_ID, { hint: ctx.me && ctx.me.email });
+    drawGmailState(); render(true);
+    if (ctx.data.settings.onboarded) updateNow();
+  },
+  /** A pasted email → a guess {company, role, stage, …}: rules first, then the AI if it's available. */
+  async readPastedEmail(text) {
+    const p = C.parsePastedEmail(text);
+    if (!p.subject && !p.body) throw new Error('Paste the email’s text first.');
+    const e = { id: 'paste:' + C.textHash(text), from: p.from, subject: p.subject, body: p.body, date: new Date(), link: '' };
+    let guess = C.ruleClassify(e);
+    if (hasAi()) {
+      try {
+        const out = await ask(ctx.data.settings, C.classifyPrompt([e]), true, () => {}, 'classify');
+        const u = (Array.isArray(out) ? out : [])[0];
+        if (u && (u.is_application_update || u.company)) guess = u;
+      } catch (err) { /* keyword rules are fine */ }
+    }
+    return { company: guess.company || C.companyFromSender(p.from || ''), role: guess.role || '', stage: C.STATUSES.includes(guess.stage) ? guess.stage : 'Applied',
+      next_step: guess.next_step || '', next_at: guess.next_at || '', next_kind: guess.next_kind || '', round: guess.round || '', channel: C.channelFromSender(p.from || ''), looksLikeOne: !!(guess.is_application_update || guess.company) };
+  },
+  async addFromEmail(f) {
+    if (!String(f.company || '').trim()) throw new Error('Add the company name.');
+    C.upsertApplication(ctx.data.applications, { company: f.company, role: f.role, stage: f.stage, next_step: f.next_step, next_at: f.next_at, next_kind: f.next_kind, round: f.round, date: C.isYmd(f.date) ? f.date : today(), channel: f.channel || 'Email' }, C.newResult());
+    await persist(); render(true);
+  },
 });
 
 // ---------- syncing ----------
@@ -200,11 +242,11 @@ async function updateNow() {
   const work = async () => {
     if (btn()) { btn().disabled = true; setLabel(btn().lastChild, 'Syncing…'); }
     const first = !ctx.data.lastRunAt;
-    syncBanner(true, first ? 'Loading your applications' : 'Syncing with Gmail', 'Starting…', 0.03);
+    syncBanner(true, !gmailOn() ? 'Checking company job boards' : !ctx.data.gmailRunAt ? 'Loading your applications' : 'Syncing with Gmail', 'Starting…', 0.03);
     try {
       if (DEMO) { for (const [t, f] of [['Reading your application emails…', 0.3], ['Sorting emails 1–20 of 20…', 0.7], ['Checking company job boards…', 0.9]]) { syncBanner(true, null, t, f); await sleep(600); } toast('Demo sync done. Sign in to run it on your own Gmail.'); return; }
       const before = new Set(ctx.data.jobs.map(j => j.id));
-      const out = await guarded(() => runUpdate(ctx.data, ctx.me.email, (t, f) => syncBanner(true, null, t, f), () => render(true)));
+      const out = await guarded(() => runUpdate(ctx.data, ctx.me.email, (t, f) => syncBanner(true, null, t, f), () => render(true), { gmail: G.gmailConnected() }));
       await persist();
       render(true);
       if (!first) notifySync(ctx.data.settings, out.result, ctx.data.jobs.filter(j => !before.has(j.id)));
@@ -233,7 +275,7 @@ setInterval(() => { if (!DEMO && ctx.data && G.signedIn() && C.autoUpdateDue(ctx
 async function enter() {
   if (!ctx.data.settings.onboarded) {
     show('wizard');
-    runWizard($('screen-wizard'), { data: ctx.data, me: ctx.me, demo: DEMO, finish: finishWizard });
+    runWizard($('screen-wizard'), { data: ctx.data, me: ctx.me, demo: DEMO, finish: finishWizard, connectGmail: () => ctx.act.connectGmail(), gmailOn });
     return;
   }
   show('app'); render();
@@ -272,6 +314,7 @@ async function signInFlow(btn) {
 
 async function boot() {
   $('reconnect-btn').addEventListener('click', () => signInFlow($('reconnect-btn')));
+  $('connect-gmail').addEventListener('click', (e) => busy(e.currentTarget, 'Connecting…', () => ctx.act.connectGmail()));
   $('sign-out').addEventListener('click', async () => {
     if (DEMO) { location.href = '/'; return; }
     await G.signOut(); location.href = '/';

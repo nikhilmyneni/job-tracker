@@ -12,30 +12,33 @@ const SORT_BATCH = 20, SORT_PARALLEL = 2;
 /**
  * report(text, fraction) shows progress on the page (fraction 0–1, or undefined when unknown).
  * refresh() redraws the dashboard, so applications appear while the rest is still being sorted.
+ * gmail: false when Gmail isn't connected; then only the company job boards are checked.
  */
-export async function runUpdate(data, me, report, refresh = () => {}) {
+export async function runUpdate(data, me, report, refresh = () => {}, { gmail = true } = {}) {
   const s = data.settings;
   const result = C.newResult();
   const seen = new Set(data.seen);
   const now = new Date();
-  const after = data.lastRunAt ? new Date(new Date(data.lastRunAt).getTime() - 2 * 864e5) : new Date(now.getTime() - s.sinceDays * 864e5);
+  // Gmail is read from where it was last read, so connecting it later still looks back sinceDays.
+  const after = data.gmailRunAt ? new Date(new Date(data.gmailRunAt).getTime() - 2 * 864e5) : new Date(now.getTime() - s.sinceDays * 864e5);
   const afterStr = C.gmailDate(after);
   const note = (t) => { result.notes.push(t); };
 
-  await syncApplications(data, me, afterStr, seen, result, report, note, refresh);
+  if (gmail) await syncApplications(data, me, afterStr, seen, result, report, note, refresh);
   C.markGhosted(data.applications, now, result);
   refresh();
 
   if (s.jobsPerUpdate > 0) {
     if (!hasAi(s)) result.notes.push('Job matching is paused because the AI isn’t available right now.');
     else if (!data.cv) result.notes.push('Add your CV in Settings to get job matches.');
-    else await findJobs(data, me, afterStr, seen, result, report, note);
+    else await findJobs(data, me, afterStr, seen, result, report, note, gmail);
   }
   C.expireJobs(data.jobs, data.applications, C.ymd(now));
   C.collectDue(data.applications, result);
 
   data.seen = [...seen];
   data.lastRunAt = now.toISOString();
+  if (gmail) data.gmailRunAt = data.lastRunAt;
   const text = C.summaryText(result);
   C.addLog(data, 'Update: ' + text.replace(/\n/g, ' | '), now);
   C.trimData(data);
@@ -107,12 +110,12 @@ async function syncApplications(data, me, afterStr, seen, result, report, note, 
   }
 }
 
-async function findJobs(data, me, afterStr, seen, result, report, note) {
+async function findJobs(data, me, afterStr, seen, result, report, note, gmail) {
   const s = data.settings;
   let listings = [];
 
-  report('Reading job-alert emails…', 0.82);
-  const alerts = await newMessages(C.alertSearch(afterStr), C.MAX_ALERT_THREADS, me, seen, 'alert:', 7000, () => {});
+  if (gmail) report('Reading job-alert emails…', 0.82);
+  const alerts = gmail ? await newMessages(C.alertSearch(afterStr), C.MAX_ALERT_THREADS, me, seen, 'alert:', 7000, () => {}) : [];
   for (let i = 0; i < alerts.length; i += 4) {
     const batch = alerts.slice(i, i + 4);
     report(`Finding openings in job alerts ${i + 1}–${i + batch.length} of ${alerts.length}…`, 0.84);
@@ -134,7 +137,8 @@ async function findJobs(data, me, afterStr, seen, result, report, note) {
     listings = listings.concat(fromBoards);
   }
   if (!alerts.length && !s.companies.length) {
-    result.notes.push('No new job-alert emails. Turn on job alerts on LinkedIn, Naukri, Internshala or Indeed, or add companies in Settings → Job sources.');
+    result.notes.push(gmail ? 'No new job-alert emails. Turn on job alerts on LinkedIn, Naukri, Internshala or Indeed, or follow companies in Settings.'
+      : 'Follow some companies in Settings, or connect Gmail to read your job alerts, to get matches.');
   }
 
   const candidates = C.newCandidates(listings, data.jobs, data.applications, 60);

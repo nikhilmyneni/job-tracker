@@ -8,14 +8,15 @@ data stays in a hidden app folder in your own Google Drive.
 
 ## For users (about 3 minutes)
 
-1. Open the site and click **Sign in with Google**.
-2. Google shows a "Google hasn't verified this app" screen. Click **Advanced → Go to Job Hunter**, then tick
-   **both** boxes (read Gmail, and Job Hunter's own app data in Drive) and click **Continue**.
-3. Setup starts with your CV: drop a PDF, Word or text file, or paste the text. Job Hunter fills in the next
-   questions from it (name, city, roles, level, locations). Check them, then add pay, places, things to skip
-   and any companies you want to follow.
-4. Click **Start**. The first sync reads your Gmail from the last 30–120 days, and applications appear as
-   they're sorted.
+1. Open the site and click **Sign in with Google**. This only shares your name and email, and gives Job Hunter
+   a hidden folder in your Drive for your data.
+2. Setup starts with your CV: drop a PDF, Word or text file, or paste the text. Job Hunter fills in the next
+   questions from it (name, city, roles, level, locations). Check them, then add pay, places and things to skip.
+3. **Connect Gmail (optional).** It lets your applications track themselves. Google shows a "Google hasn't
+   verified this app" screen here: click **Advanced → Go to Job Hunter**, tick the box to read your email, and
+   click **Continue**. Skip it and you can connect later, or paste application emails yourself.
+4. Follow any companies you like, then click **Start**. With Gmail connected, the first sync reads the last
+   30–120 days and applications appear as they're sorted.
 
 There's nothing else to set up: the AI is built in and free.
 
@@ -55,9 +56,11 @@ You need a Google account, a free Vercel account and this repo on GitHub.
    - User type **External**. App name *Job Hunter*, your support email, and your developer contact email.
    - **Branding**: home page `https://<your-site>/`, privacy policy `https://<your-site>/privacy.html`, authorized domain `<your-site>`.
    - **Data access / Scopes**: add `.../auth/gmail.readonly`, `.../auth/drive.appdata`, `openid`, `.../auth/userinfo.email` and `.../auth/userinfo.profile`.
-   - **Audience**: click **Publish app** (In production). Don't submit it for verification. Users then see the
-     unverified screen, and the app is limited to **100 users**. Going beyond that needs Google's verification
-     plus a paid security assessment for the Gmail scope.
+   - **Audience**: click **Publish app** (In production).
+   - **Verification Center**: submit **brand verification** (free: name, logo, home page, privacy policy). Once
+     it's approved, sign-in (which only asks for name, email and the Drive app folder) shows no warning.
+   - Don't submit the Gmail scope for verification: it needs a paid security assessment. Users who choose
+     **Connect Gmail** see the unverified screen, and Gmail is limited to **100 users**.
 4. **Credentials → Create credentials → OAuth client ID → Web application**.
    - **Authorized JavaScript origins**: `http://localhost:5173` and your Vercel URL. No redirect URIs.
    - Copy the **Client ID** into `web/config.js` (`GOOGLE_CLIENT_ID`). It's public, not a secret.
