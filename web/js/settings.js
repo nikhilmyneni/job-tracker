@@ -35,7 +35,7 @@ export function renderSettings(ctx) {
     downloadBlob(new Blob([JSON.stringify(copy, null, 2)], { type: 'application/json' }), 'job-tracker-export.json');
   } }, 'Export my data (.json)');
   const delBtn = h('button', { class: 'btn danger', type: 'button', onclick: () => {
-    if (!confirm('Delete everything Job Tracker saved in your Google Drive (applications, jobs, CV, settings, keys)? This can’t be undone.')) return;
+    if (!confirm('Delete everything Job Hunter saved in your Google Drive (applications, jobs, CV, settings, keys)? This can’t be undone.')) return;
     busy(delBtn, 'Deleting…', () => act.deleteAll());
   } }, 'Delete all my data');
 
@@ -48,7 +48,7 @@ export function renderSettings(ctx) {
     section('AI (free keys)', 'Used to sort emails, match jobs and write resumes.', ai.el),
     h('div', { class: 'controls sticky-save' }, savePrefs, prefStatus),
     h('div', { class: 'cols2' },
-      section('Your data', `Stored in a private app folder in ${ctx.me ? ctx.me.email + '’s' : 'your'} Google Drive. Only Job Tracker can see it.`,
+      section('Your data', `Stored in a private app folder in ${ctx.me ? ctx.me.email + '’s' : 'your'} Google Drive. Only Job Hunter can see it.`,
         h('div', { class: 'controls' }, exportBtn, delBtn)),
       section('Recent activity', '', h('ul', { class: 'log' }, ...(data.log.length ? data.log.slice(0, 15) : [{ at: '', msg: 'Nothing yet.' }])
         .map(l => h('li', {}, l.at ? fmtDateTime(l.at) + ': ' : '', l.msg))))));

@@ -51,7 +51,7 @@ export async function signIn(clientId, { hint, consent } = {}) {
   waiting = null;
   if (r.error) throw new Error(r.error_description || r.error);
   if (!oauth2.hasGrantedAllScopes(r, ...NEEDED)) {
-    throw new Error('Job Tracker needs both boxes ticked: read Gmail, and its own app data in Drive. Sign in again and allow both.');
+    throw new Error('Job Hunter needs both boxes ticked: read Gmail, and its own app data in Drive. Sign in again and allow both.');
   }
   token = r.access_token;
   tokenExp = Date.now() + (Number(r.expires_in) || 3600) * 1000 - 60e3;

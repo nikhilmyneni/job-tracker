@@ -1,6 +1,6 @@
 {
-  "name": "Job Tracker",
-  "short_name": "Job Tracker",
+  "name": "Job Hunter",
+  "short_name": "Job Hunter",
   "description": "Free job-application tracker: Gmail read-only, job matches and tailored resumes.",
   "start_url": "./",
   "scope": "./",

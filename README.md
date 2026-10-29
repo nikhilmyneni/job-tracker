@@ -1,4 +1,4 @@
-# Job Tracker
+# Job Hunter
 
 A free job-application tracker for freshers, built as a website that runs entirely in your browser:
 

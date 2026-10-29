@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://jobs4you.vercel.app/sitemap.xml

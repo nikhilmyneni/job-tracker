@@ -61,7 +61,7 @@ export function routineBlock(s) {
   return {
     el: h('div', { class: 'stack' },
       field('New job matches per update', jobs.el),
-      field('Update automatically when I open the app', auto.el, 'Job Tracker has no server, so it updates while it’s open.'),
+      field('Update automatically when I open the app', auto.el, 'Job Hunter has no server, so it updates while it’s open.'),
       field('First time, look back through Gmail for', since.el)),
     collect: (d) => { d.jobsPerUpdate = Number(jobs.get()); d.autoUpdateHours = Number(auto.get()); d.sinceDays = Number(since.get()); },
   };
@@ -154,7 +154,7 @@ const STEPS = [
   { title: 'Where would you like to work?', block: (d) => whereBlock(d) },
   { title: 'Anything to skip?', intro: 'Matching jobs with these are left out.', block: (d) => avoidBlock(d) },
   { title: 'Add your CV', intro: 'Upload your CV or paste its text. It’s used to score jobs and write tailored resumes.', block: (d) => cvBlock(d.cv, d.cvFile) },
-  { title: 'Turn on AI (free, optional)', intro: 'With a free AI key, Job Tracker sorts your emails more accurately, finds job matches and writes tailored resumes. Without one, it still tracks applications using keyword rules.', block: (d, ctx) => aiBlock(d.ai, { demo: ctx.demo, id: 'wiz' }) },
+  { title: 'Turn on AI (free, optional)', intro: 'With a free AI key, Job Hunter sorts your emails more accurately, finds job matches and writes tailored resumes. Without one, it still tracks applications using keyword rules.', block: (d, ctx) => aiBlock(d.ai, { demo: ctx.demo, id: 'wiz' }) },
   { title: 'Your routine', block: (d) => routineBlock(d) },
 ];
 

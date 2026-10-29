@@ -1,5 +1,5 @@
 /**
- * Job Tracker: pure logic shared by the page and the Node tests.
+ * Job Hunter: pure logic shared by the page and the Node tests.
  * No DOM, no network. Everything here works on plain objects.
  */
 

@@ -60,7 +60,7 @@ async function callOnce(p, prompt, json) {
       const url = p.provider === 'groq' ? 'https://api.groq.com/openai/v1/chat/completions' : 'https://openrouter.ai/api/v1/chat/completions';
       const content = json ? prompt + '\n\nReply with JSON only, no prose and no code fences.' : prompt;
       const headers = { 'Content-Type': 'application/json', Authorization: 'Bearer ' + p.key };
-      if (p.provider === 'openrouter') headers['X-Title'] = 'Job Tracker';
+      if (p.provider === 'openrouter') headers['X-Title'] = 'Job Hunter';
       res = await fetch(url, { method: 'POST', headers, body: JSON.stringify({ model: p.model, temperature: 0.2, messages: [{ role: 'user', content }] }) });
     }
   } catch (e) {

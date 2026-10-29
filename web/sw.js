@@ -1,5 +1,5 @@
 // Caches only this site's own files so the app opens fast and offline. Never caches Google or AI responses.
-const CACHE = 'job-tracker-v2';
+const CACHE = 'job-tracker-v3';
 const SHELL = ['./', 'index.html', 'styles.css', 'config.js', 'icon.svg', 'manifest.webmanifest',
   'js/app.js', 'js/core.js', 'js/ui.js', 'js/google.js', 'js/ai.js', 'js/update.js', 'js/files.js', 'js/docx.js',
   'js/dashboard.js', 'js/settings.js', 'js/onboarding.js', 'js/resume-view.js', 'js/demo.js'];

@@ -1,4 +1,4 @@
-# Job Tracker: context for Claude Code
+# Job Hunter: context for Claude Code
 
 ## What this is
 A free job-application tracker that is a **static website running entirely in the browser**

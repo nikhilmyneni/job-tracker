@@ -155,7 +155,7 @@ export async function resumePdfBlob(r, JsPdf) {
   let size = 10.5;
   while (size > 8.5 && layout(probe, blocks, size, false) > PAGE_H - MY) size -= 0.25;
   const doc = new JS({ unit: 'mm', format: 'a4', compress: true });
-  doc.setProperties({ title: `${r.name} – Resume`, creator: 'Job Tracker' });
+  doc.setProperties({ title: `${r.name} – Resume`, creator: 'Job Hunter' });
   doc.setTextColor(17);
   layout(doc, blocks, size, true);
   return doc.output('blob');

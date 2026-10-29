@@ -7,7 +7,16 @@
   <meta name="referrer" content="no-referrer">
   <meta name="description" content="Free job-application tracker for freshers: reads your Gmail (read-only), matches jobs to your CV and writes tailored resumes. Runs in your browser; your data stays in your Google account.">
   <meta name="theme-color" content="#2f5bd3">
-  <title>Job Tracker</title>
+  <title>Job Hunter – free job application tracker and resume builder for freshers</title>
+  <link rel="canonical" href="https://jobs4you.vercel.app/">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Job Hunter">
+  <meta property="og:title" content="Job Hunter – track every job application from Gmail, free">
+  <meta property="og:description" content="Tracks your applications from Gmail (read-only), finds jobs that fit your CV and writes a tailored one-page resume. Free, runs in your browser.">
+  <meta property="og:url" content="https://jobs4you.vercel.app/">
+  <meta name="twitter:card" content="summary">
+  <meta name="application-name" content="Job Hunter">
+  <meta name="apple-mobile-web-app-title" content="Job Hunter">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="stylesheet" href="styles.css">
@@ -17,7 +26,7 @@
 <div id="reconnect" class="banner warn" hidden>Your Google session ended. <button type="button" class="btn small" id="reconnect-btn">Continue</button></div>
 
 <header class="topbar">
-  <a class="brand" href="./" aria-label="Job Tracker home"><img src="icon.svg" alt="" width="26" height="26"> Job Tracker</a>
+  <a class="brand" href="./" aria-label="Job Hunter home"><img src="icon.svg" alt="" width="26" height="26"> Job Hunter</a>
   <nav id="topbar-app" class="tabs" hidden>
     <button type="button" data-tab="dashboard" aria-current="true">Dashboard</button>
     <button type="button" data-tab="settings">Settings</button>
@@ -33,7 +42,7 @@
 <main id="screen-signin" class="signin" hidden>
   <div class="hero">
     <h1 class="h1">Your job search, tracked for you</h1>
-    <p class="lead">Job Tracker reads your Gmail (read-only), keeps every application up to date, finds jobs that fit your CV, and writes a tailored one-page resume for each one. It's free.</p>
+    <p class="lead">Job Hunter reads your Gmail (read-only), keeps every application up to date, finds jobs that fit your CV, and writes a tailored one-page resume for each one. It's free.</p>
     <button type="button" class="btn big" id="signin-btn">Sign in with Google</button>
     <div class="status" id="signin-status" role="status"></div>
     <ul class="points">
@@ -41,7 +50,7 @@
       <li><b>Read-only.</b> It never sends, deletes or changes your email.</li>
       <li><b>Free AI.</b> Optional: add your own free Gemini, Groq or OpenRouter key for job matching and resumes.</li>
     </ul>
-    <p class="hint">Google will say the app isn't verified. That's expected for a small free tool: click <b>Advanced → Go to Job Tracker</b>. <a href="?demo">Try the demo first</a> · <a href="privacy.html">Privacy</a>.</p>
+    <p class="hint">Google will say the app isn't verified. That's expected for a small free tool: click <b>Advanced → Go to Job Hunter</b>. <a href="?demo">Try the demo first</a> · <a href="privacy.html">Privacy</a>.</p>
   </div>
 </main>
 

@@ -1,4 +1,4 @@
-/** Job Tracker: boot, sign-in, and every action that changes your data (then saves it to your Drive). */
+/** Job Hunter: boot, sign-in, and every action that changes your data (then saves it to your Drive). */
 import { GOOGLE_CLIENT_ID } from '../config.js';
 import * as C from './core.js';
 import * as G from './google.js';
@@ -164,7 +164,7 @@ async function finishWizard(d) {
   ctx.data.settings = C.normalizeSettings(Object.assign(d, { onboarded: true }));
   if (cvUpload && !DEMO) ctx.data.cvFile = await guarded(() => G.saveCvFile(cvUpload, ctx.data.cvFile && ctx.data.cvFile.id));
   ctx.data.cv = String(cv || '').slice(0, C.MAX_CV);
-  C.addLog(ctx.data, 'Set up Job Tracker');
+  C.addLog(ctx.data, 'Set up Job Hunter');
   await persist();
   show('app'); showTab('dashboard'); renderAll();
   if (!DEMO) updateNow();
