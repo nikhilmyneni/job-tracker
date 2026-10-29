@@ -5,17 +5,16 @@
 import * as C from './core.js';
 import * as G from './google.js';
 import { ask, hasAi } from './ai.js';
-import { fetchBoards, fetchAdzuna } from './sources.js';
+import { fetchBoards } from './sources.js';
 
 const SORT_BATCH = 20, SORT_PARALLEL = 2;
 
 /**
  * report(text, fraction) shows progress on the page (fraction 0–1, or undefined when unknown).
  * refresh() redraws the dashboard, so applications appear while the rest is still being sorted.
- * gmail: false when Gmail isn't connected; then only job boards and Adzuna are checked.
- * adzuna(what, where): searches Adzuna through /api/adzuna (left out in the demo).
+ * gmail: false when Gmail isn't connected; then only the company job boards are checked.
  */
-export async function runUpdate(data, me, report, refresh = () => {}, { gmail = true, adzuna = null } = {}) {
+export async function runUpdate(data, me, report, refresh = () => {}, { gmail = true } = {}) {
   const s = data.settings;
   const result = C.newResult();
   const seen = new Set(data.seen);
@@ -31,7 +30,7 @@ export async function runUpdate(data, me, report, refresh = () => {}, { gmail = 
 
   if (s.jobsPerUpdate > 0) {
     if (!data.cv) result.notes.push('Add your CV in Profile and CV, so openings can be scored against your skills.');
-    await findJobs(data, me, afterStr, seen, result, report, note, gmail, adzuna);
+    await findJobs(data, me, afterStr, seen, result, report, note, gmail);
   }
   C.expireJobs(data.jobs, data.applications, C.ymd(now));
   C.collectDue(data.applications, result);
@@ -110,11 +109,11 @@ async function syncApplications(data, me, afterStr, seen, result, report, note, 
   }
 }
 
-async function findJobs(data, me, afterStr, seen, result, report, note, gmail, adzuna) {
+async function findJobs(data, me, afterStr, seen, result, report, note, gmail) {
   const s = data.settings;
   let listings = [];
 
-  // Job-alert emails need the AI to pull the openings out of them; boards and Adzuna don't.
+  // Job-alert emails need the AI to pull the openings out of them; company boards don't.
   const readAlerts = gmail && hasAi(s);
   if (readAlerts) report('Reading job-alert emails…', 0.82);
   const alerts = readAlerts ? await newMessages(C.alertSearch(afterStr), C.MAX_ALERT_THREADS, me, seen, 'alert:', 7000, () => {}) : [];
@@ -138,14 +137,7 @@ async function findJobs(data, me, afterStr, seen, result, report, note, gmail, a
     fromBoards.forEach(l => seen.add(l.id)); // scored once; not offered again unless it's picked
     listings = listings.concat(fromBoards);
   }
-  if (adzuna && s.prefs.roles.length) {
-    const az = await fetchAdzuna(adzuna, s.prefs.roles, s.prefs.locations, (t) => report(t, 0.92));
-    az.notes.forEach(note);
-    const fresh = az.listings.filter(l => !seen.has(l.id) && C.matchesPrefs(l, s.prefs));
-    fresh.forEach(l => seen.add(l.id));
-    listings = listings.concat(fresh);
-  }
-  if (!alerts.length && !s.companies.length && !adzuna) {
+  if (!alerts.length && !s.companies.length) {
     result.notes.push(gmail ? 'No new job-alert emails. Turn on job alerts on LinkedIn, Naukri, Internshala or Indeed, or follow companies in Settings.'
       : 'Follow some companies in Settings, or connect Gmail to read your job alerts, to get matches.');
   }

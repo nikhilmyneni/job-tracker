@@ -6,8 +6,8 @@ HTML/CSS/ES modules, no build step), hosted free on Vercel (root directory `web`
 Google. The page talks straight to Gmail (read-only), to a hidden Drive **appDataFolder** file where
 all their data lives, and to public company job boards. The AI is **built in**: users never add keys.
 The only server code is small Vercel functions in `web/api/` (free plan): `ai.js` (the built-in AI, using
-the owner's free Groq + Gemini keys from environment variables), `adzuna.js` (Adzuna India job search, key on
-the server) and `workday.js` (a job source without CORS). `_auth.js` is their shared signed-in check and daily allowance.
+the owner's free Groq + Gemini keys from environment variables) and `workday.js` (a job source without CORS).
+`_auth.js` is the signed-in check and daily allowance (Vercel doesn't serve files starting with `_`).
 
 - `/`: the landing page (`index.html`, readable by search engines).
 - `/app`, `/app/matches`, `/app/tailor[/<jobId>]`, `/app/profile`, `/app/settings`: the app
@@ -66,8 +66,7 @@ and counts toward the 100-user cap. Without Gmail, users add applications by han
 - `config.js` (public OAuth client id), `sw.js` (caches only our own files; `npm run check` fails if
   a `js/` file is missing from `SHELL`), `manifest.webmanifest`, `icon.svg`, `vercel.json` (rewrites, headers),
   `package.json` (`type: module` for the functions), `robots.txt`, `sitemap.xml`.
-- `api/ai.js`: the built-in AI (see the constraints). `api/adzuna.js`: Adzuna search (`what`, `where`), cached 30 min,
-  per-user daily limit; listings must show "Jobs by Adzuna". `api/_auth.js`: shared token check and allowance. `api/workday.js`: reads a company's public Workday board
+- `api/ai.js`: the built-in AI (see the constraints). `api/_auth.js`: shared token check and allowance. `api/workday.js`: reads a company's public Workday board
   (Workday has no CORS). Host, site and path are validated.
 - `js/core.js`: **pure** logic: constants, settings and prefs, the data shape, Gmail body decoding,
   the classifier, applications, job prompts, matching (`termsIn`, `mySkills`, `matchScore`, `pickByScore`,
@@ -82,7 +81,7 @@ and counts toward the 100-user cap. Without Gmail, users add applications by han
 - `js/app.js`: boot, routing, sync, actions. Screens: `view-applications.js` (+ `view-board.js`: board, timeline, edit dialog), `view-matches.js`,
   `view-tailor.js`, `view-settings.js` (Profile and Settings). `onboarding.js`: the wizard plus the shared
   field blocks. `ui.js`: `h()`, `busy`, `holdButton`, `setLabel`, `icon`, `pageHead`, chips, dialogs. `demo.js`.
-- `tests/`: Node tests: `core`, `match`, `files` (PDF lines), `notify`, `api` and `adzuna` (the functions, with fetch faked). `npm test` and `npm run check` must pass before any push.
+- `tests/`: Node tests: `core`, `match`, `files` (PDF lines), `notify`, `api` (the AI function, with fetch faked). `npm test` and `npm run check` must pass before any push.
 - `scripts/serve.js` (local server on :5173, with the /app rewrites and /api functions), `scripts/check.js`.
 - `docs/SETUP.md`: users and owner (Google Cloud + Vercel). Keep it in sync with behaviour changes. `docs/ROADMAP.md`: ideas.
 

@@ -48,8 +48,8 @@ export function demoData(fresh) {
     J('j1', '2026-10-28', 'Kestrel Systems', 'SOC Analyst (Fresher)', 'Hyderabad', '₹4–5 LPA', 'Monitor SIEM alerts in Splunk and Wazuh, triage incidents, incident response, write clear notes. Python and Linux a plus. Knowledge of MITRE ATT&CK.', 'Greenhouse', '', '2026-10-27'),
     J('j2', '2026-10-28', 'Nimbus Cloud', 'Cloud Security Intern', 'Remote', '₹20k/month', 'IAM reviews on AWS, cloud posture checks, Terraform basics, Python scripting.', 'Lever', '', '2026-10-26'),
     J('j3', '2026-10-27', 'Pragati Infotech', 'Network Security Trainee', 'Bengaluru', '', 'Firewall configuration, TCP/IP, VPN, Wireshark captures, CCNA preferred.', 'Job alert email'),
-    J('j4', '2026-10-29', 'Orion Labs', 'Junior Penetration Tester', 'Pune', '₹5–7 LPA', 'Web application security testing with Burp Suite and OWASP Top 10, Nmap, Metasploit, report writing. OSCP is a plus.', 'Adzuna', 'https://www.adzuna.in', '2026-10-28'),
-    J('j5', '2026-10-29', 'Delta Fintech', 'Security Operations Intern', 'Hyderabad', '₹25k/month', 'Assist the SOC with log analysis in Microsoft Sentinel, phishing triage, threat intelligence feeds.', 'Adzuna', 'https://www.adzuna.in', '2026-10-24'),
+    J('j4', '2026-10-29', 'Orion Labs', 'Junior Penetration Tester', 'Pune', '₹5–7 LPA', 'Web application security testing with Burp Suite and OWASP Top 10, Nmap, Metasploit, report writing. OSCP is a plus.', 'Ashby', '', '2026-10-28'),
+    J('j5', '2026-10-29', 'Delta Fintech', 'Security Operations Intern', 'Hyderabad', '₹25k/month', 'Assist the SOC with log analysis in Microsoft Sentinel, phishing triage, threat intelligence feeds.', 'SmartRecruiters', '', '2026-10-24'),
     J('j6', '2026-10-26', 'Brightpath', 'GRC Analyst', 'Chennai', '', 'ISO 27001 audits, risk assessment, policy documentation, Excel.', 'Workday'),
   ];
   d.jobs[0].status = 'Saved';

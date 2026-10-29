@@ -27,7 +27,7 @@ There's nothing else to set up: the AI is built in and free.
   then every 6, 12 or 24 hours (your choice), or when you click **Sync now**.
 - **Applications:** Board, Table or Timeline. Drag a card to another column, or tap it to fix the status,
   role, next step or interview time. "N emails need a look" lists emails it couldn't match.
-- **Job matches:** openings from your job-alert emails, the companies you follow and Adzuna, scored by how much of
+- **Job matches:** openings from your job-alert emails and the companies you follow, scored by how much of
   what they ask for is on your CV. Filter by place, experience, internships and minimum match; add your own keywords;
   open a job to see what matches and what's missing. **Tailor resume** prepares your CV and the job for ResumeFold.
 - **Notifications:** turn them on to hear about status changes and new matches while Job Hunter is open.
@@ -75,20 +75,14 @@ You need a Google account, a free Vercel account and this repo on GitHub.
 
 Only signed-in Job Hunter users can use it: `web/api/ai.js` checks that the Google token was issued to your client id.
 
-### 3. Adzuna job search (free key, kept on the server)
-1. Create a free developer account at developer.adzuna.com and copy the **app_id** and **app_key**.
-2. In Vercel, add `ADZUNA_APP_ID` and `ADZUNA_APP_KEY` (optional `ADZUNA_DAILY_LIMIT`, searches per user per day,
-   default 30). Redeploy. Locally, put them in `.env.local`.
-3. Adzuna's terms ask you to credit them: Job Hunter shows "Jobs by Adzuna" on every Adzuna listing.
-
-### 4. Try it locally
+### 3. Try it locally
 ```bash
 npm run dev            # http://localhost:5173  (app: /app, demo: /app?demo, setup: /app?demo=setup)
 npm test               # logic tests
 npm run check          # syntax check
 ```
 
-### 5. Deploy on Vercel (free)
+### 4. Deploy on Vercel (free)
 1. vercel.com → **Add New → Project** → import the GitHub repo.
 2. Set **Root Directory** to `web`, Framework Preset to **Other**, and leave the build command empty. Then click **Deploy**.
 3. Add the Vercel URL to the OAuth client's **Authorized JavaScript origins** (step 1.4).

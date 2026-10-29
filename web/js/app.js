@@ -105,14 +105,6 @@ async function sharedAi(task, prompt, json) {
   return j.result;
 }
 
-/** Adzuna search through /api/adzuna. Errors that mean "stop for now" (not set up, used up) carry stop: true. */
-async function adzunaSearch(what, where) {
-  const res = await fetch(`/api/adzuna?what=${encodeURIComponent(what)}&where=${encodeURIComponent(where || '')}`, { headers: { Authorization: 'Bearer ' + G.accessToken() } });
-  const j = await res.json().catch(() => ({}));
-  if (!res.ok) { const e = new Error(j.error || `error ${res.status}`); e.stop = res.status === 503 || res.status === 429 || res.status === 401; throw e; }
-  return j.results || [];
-}
-
 // ---------- saving ----------
 function showReconnect(on) { $('reconnect').hidden = !on; }
 
@@ -294,7 +286,7 @@ async function updateNow() {
     try {
       if (DEMO) { for (const [t, f] of [['Reading your application emails…', 0.3], ['Sorting emails 1–20 of 20…', 0.7], ['Checking company job boards…', 0.9]]) { syncBanner(true, null, t, f); await sleep(600); } toast('Demo sync done. Sign in to run it on your own Gmail.'); return; }
       const before = new Set(ctx.data.jobs.map(j => j.id));
-      const out = await guarded(() => runUpdate(ctx.data, ctx.me.email, (t, f) => syncBanner(true, null, t, f), () => render(true), { gmail: G.gmailConnected(), adzuna: adzunaSearch }));
+      const out = await guarded(() => runUpdate(ctx.data, ctx.me.email, (t, f) => syncBanner(true, null, t, f), () => render(true), { gmail: G.gmailConnected() }));
       await persist();
       render(true);
       if (!first) notifySync(ctx.data.settings, out.result, ctx.data.jobs.filter(j => !before.has(j.id)));

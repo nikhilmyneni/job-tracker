@@ -1,5 +1,5 @@
 /**
- * Job matches: openings from job-alert emails, company boards and Adzuna, scored against your CV and keywords
+ * Job matches: openings from job-alert emails and company boards, scored against your CV and keywords
  * (core.matchScore). A filter card on top, the list on the left, the selected job's details on the right
  * (a dialog on phones).
  */
@@ -8,12 +8,11 @@ import { filterJobs, MIN_MATCHES } from './core.js';
 
 let show = 'New', selectedId = null;
 const SHOWS = { New: ['New'], Saved: ['Saved'], Applied: ['Applied'], Hidden: ['Skipped', 'Expired'] };
-const ADZUNA = 'https://www.adzuna.in';
 const isPhone = () => matchMedia('(max-width: 900px)').matches;
 
 const scoreOf = (j) => (j.score ?? Math.round((Number(j.fit) || 0) * 20));
 const posted = (j) => (j.posted ? 'posted ' + ago(j.posted + 'T09:00:00') : j.found_on ? 'found ' + ago(j.found_on + 'T09:00:00') : '');
-const credit = (j) => (j.source === 'Adzuna' ? h('span', { class: 'job-src' }, 'Jobs by ', extLink(ADZUNA, 'Adzuna')) : h('span', { class: 'job-src' }, j.source || 'Job alert email'));
+const credit = (j) => h('span', { class: 'job-src' }, 'From ' + (j.source || 'a job-alert email'));
 
 export function renderMatches(ctx, root) {
   const { data, act } = ctx;
@@ -68,7 +67,7 @@ export function renderMatches(ctx, root) {
     : all.length && show === 'New' ? empty(`No matches at ${s.minMatch}% or more`, 'Lower the minimum match, change the filters, or add keywords you’re strong in.')
       : show !== 'New' ? empty(`Nothing ${show.toLowerCase()} yet`, show === 'Saved' ? 'Save a match to come back to it here.' : 'Jobs you mark show up here.')
         : !data.cv ? empty('Add your CV first', 'Matches are scored against the skills in your CV. Add it in Profile and CV, then sync.')
-          : empty('No matches yet', 'New openings arrive with each sync: from job-alert emails (with Gmail connected), the companies you follow, and Adzuna.');
+          : empty('No matches yet', 'New openings arrive with each sync: from job-alert emails (with Gmail connected) and the companies you follow.');
 
   root.replaceChildren(pageHead('Job matches', `${data.jobs.filter(j => j.status === 'New').length} new · scored against your CV and keywords`, tabs), filters, body);
   if (rows.length && !isPhone()) { drawDetail(); const j = rows.find(x => x.id === selectedId); if (j) act.loadJobDetails(j).then(() => { if (selectedId === j.id) drawDetail(); }).catch(() => {}); }
@@ -83,7 +82,7 @@ function jobCard(j, select, current) {
       h('span', { class: 'job-meta' }, [j.company, j.location, posted(j)].filter(Boolean).join(' · ')),
       h('span', { class: 'chips-row' }, ...(j.matched || []).slice(0, 4).map(m => h('span', { class: 'kw' }, m)),
         ...(j.missing || []).slice(0, 3).map(m => h('span', { class: 'kw kw-miss' }, '+ ' + m))),
-      h('span', { class: 'job-card-src' }, j.source === 'Adzuna' ? 'Jobs by Adzuna' : (j.source || 'Job alert email'))));
+      h('span', { class: 'job-card-src' }, j.source || 'Job alert email')));
 }
 
 function jobDetail(ctx, j, redraw, inDialog) {
