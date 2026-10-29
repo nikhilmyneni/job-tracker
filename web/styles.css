@@ -193,3 +193,9 @@ td { padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top
   .h1 { font-size: 28px; }
   .sum-row { grid-template-columns: 1fr; gap: 0; }
 }
+
+/* privacy page */
+.doc { max-width: 720px; margin: 0 auto; padding: 32px 16px 64px; }
+.doc h2 { font-size: 18px; margin: 28px 0 8px; }
+.doc li { margin: 6px 0; }
+.doc code { font-size: 13px; }
