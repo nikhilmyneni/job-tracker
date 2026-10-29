@@ -6,3 +6,7 @@ node_modules/
 # never commit personal data
 *.pdf
 cv*.txt
+
+# local only
+.vercel/
+Screenshot*.png

@@ -1,96 +1,85 @@
-# Job Tracker (free edition): context for Claude Code
+# Job Tracker: context for Claude Code
 
 ## What this is
-A free job-application tracker that runs entirely in the user's own Google account: a
-standalone Apps Script **web app** (`src/*.gs` + `src/*.html`), deployed once by the owner
-with *Execute as: user accessing* and *Access: anyone with a Google account*. Each visitor
-authorizes it and the code runs as them. It reads their Gmail (read-only), keeps their
-applications current, picks recommended jobs from job-alert emails, writes a tailored one-page
-resume on request (shown and printed in the browser, never saved to Drive as a file), and
-emails them a daily summary. Optional AI comes from the free
-Gemini API, using a key the user pastes into Settings on the page.
+A free job-application tracker that is a **static website running entirely in the browser**
+(`web/`, plain HTML/CSS/ES modules, no build step). Users sign in with Google. The page then
+talks straight to Gmail (read-only), to a hidden Drive **appDataFolder** file where all their data
+lives, and, if they added a key, to a free AI provider (Gemini, Groq or OpenRouter). There's no
+server. It's hosted for free on Vercel (root directory `web`).
 
-Target users: Indian freshers (first job / paid internships). Distribution: one shared web-app
-link. Unverified apps with `gmail.readonly` are capped at 100 users.
+Flow: sign in → first-run **setup wizard** (roles, level, job type, pay, locations, skip list,
+CV upload, AI keys, routine) → dashboard. Everything from setup can be changed in Settings.
+
+Target users: Indian freshers (first job / paid internships). One shared site. The Google OAuth
+app is published but unverified, so users see the unverified screen and there's a 100-user cap.
 
 ## Hard constraints (don't break these)
-- **Free for users.** No servers, no paid APIs, no paid Google Workspace features.
-  Only Apps Script (HtmlService), Gmail, Drive, Docs, MailApp, and the Gemini API free tier
-  (the user's own key).
-- **Gmail is read-only.** Never send, delete, label, archive or modify mail. The only
-  outgoing mail is the summary to the user's own address (`MailApp`).
-- **No data leaves the user's account** except calls to Gemini when they added a key.
-  No analytics, no telemetry, no third-party endpoints. The page loads no CDN scripts or
-  fonts, and charts are hand-drawn SVG. The owner never sees users' data.
-- **Resume honesty.** Resumes use only facts from the user's CV text. Never invent
-  experience, employers, numbers, skills, tools or certifications. Skill gaps go in the
-  "Skill to pick up" column, never on the resume.
-- **Works without a Gemini key.** It falls back to rule-based classification
-  (`ruleClassify_`). Job matching and resumes are skipped, with a note in the summary.
-- **Hassle-free setup.** No setup step: the Drive folder and data file are created on first
-  use, and saving settings installs or removes the trigger. Users only paste their CV, pick
-  settings, and optionally add a key.
-- **Never commit personal data** (CVs, keys, real emails) to the repo or tests.
+- **Free.** No servers, no paid APIs, no paid services. Static hosting only.
+- **Gmail is read-only** (`gmail.readonly`). Never send, delete, label or modify mail. There's no outgoing mail at all.
+- **Narrow scopes:** `gmail.readonly`, `drive.appdata`, `openid`, `email`, `profile`. No full Drive, no Docs.
+- **No data leaves the user's browser** except to Google (Gmail, the Drive app folder) and to the
+  AI provider whose key the user added. No analytics, no telemetry, no CDNs. pdf.js and jsPDF are
+  vendored in `web/vendor/`. The CSP in `index.html` is the allow-list: keep it tight when adding an origin.
+- **Secrets:** the access token lives in memory only. AI keys live only in the user's Drive app
+  data. Nothing personal goes in localStorage.
+- **Resume honesty.** Resumes use only facts from the user's CV text. Never invent experience,
+  employers, numbers, skills, tools or certifications. Skill gaps go in "Skill to pick up",
+  never on the resume. Every AI resume goes through `cleanResume`.
+- **Works without an AI key.** Classification falls back to `ruleClassify`. Job matching and
+  resumes are off, with a note.
+- **Untrusted text** (emails, AI output, CV) goes into the DOM with `h()` / `textContent` only, never `innerHTML`.
+- **Never commit personal data** (CVs, keys, real emails, screenshots) to the repo or tests.
 
-## Apps Script realities
-- V8 runtime. Consumer accounts: 6 min max per execution, 90 min/day total trigger
-  runtime, about 100 MailApp recipients/day, 20k UrlFetch calls/day. Keep per-run work
-  bounded (`MAX_THREADS`, `MAX_RESUMES_PER_RUN`).
-- One installable trigger per user: `hourlyCheck` runs every hour as that user. It does
-  the real work only at their chosen hour, on chosen days, once per day (`lastScheduledDay`).
-- Everything is per user: `PropertiesService.getUserProperties()`, `LockService.getUserLock()`.
-  Never use Script/Document properties for user data.
-- Users see the "Google hasn't verified this app" screen once. That's expected.
-- Web-app returns (`google.script.run`) must be plain JSON: store dates as `yyyy-mm-dd` or
-  ISO strings, never Date objects. The Gemini key never goes back to the browser (`getState`).
-- `appsscript.json` lists OAuth scopes explicitly. If you add a Google service, add its
-  scope there too. Prefer the narrowest scope that works. GmailApp read calls should
-  work with `gmail.readonly`, and Drive with `drive.file` (we only touch files we create);
-  verify in a real run whenever Gmail or Drive code changes.
+## Browser realities
+- Google Identity Services token client: tokens last about 1 hour. When one expires,
+  `NeedSignIn` shows a *Continue* banner; re-auth needs a click, because popups need a user gesture.
+  `G.preload()` loads GIS early for the same reason.
+- Updates only happen while the page is open: **Update now**, or automatically on open when the
+  last run is older than `autoUpdateHours`. `navigator.locks` keeps it to one tab at a time.
+- Gmail API: `threads.list` + `threads.get` (`format=full`), 4 at a time. Keep per-run work bounded
+  (`MAX_THREADS`, `MAX_ALERT_THREADS`, batches of 12 / 4 for AI).
+- AI free tiers change often. Don't hard-code "the best" model: defaults are aliases
+  (`gemini-flash-latest`), and **Test key** lists the models the key can use right now. On a 429
+  or 5xx, `ask()` retries, then falls back to the next provider.
 
-## Layout
-- `src/Store.gs`: constants, settings (UserProperties, `normalizeSettings_`), the Drive JSON
-  data file (`loadData_` / `saveData_`), log, helpers.
-- `src/Sync.gs`: Gmail application sync, `ruleClassify_`, and pure updates on the
-  applications list (`upsertApplication_`, `markGhosted_`, `expireJobs_`, `collectDue_`).
-- `src/Jobs.gs`: job matching from alert emails. `src/Resume.gs`: resume JSON on request
-  (`writeResume_`, pure `cleanResume_`).
-  `src/Gemini.gs`: Gemini client. `src/Email.gs`: summary text and email.
-- `src/Main.gs`: `doGet`, the functions the page calls (`getState`, `saveSettings`, `saveCv`,
-  `runNow`, `getResume`, `setJobStatus`, `addApplication`, `setApplicationStatus`,
-  `deleteApplication`, `removeAutomation`), the trigger, and `runUpdate_`.
-- `src/index.html` + `styles.html` + `app.html`: the single page (included with
-  `<?!= include('name'); ?>`). The resume overlay (`#resume-view`) is A4. It shrinks its type
-  to fit one page and prints alone via `@media print`. Plain JS. Build DOM with `h()` / `textContent`, never `innerHTML`
-  with data.
-- `src/appsscript.json`: manifest (time zone, V8, `webapp`, scopes).
-- `tests/*.test.js`: Node tests for the pure functions. The `vm` harness loads all `src/*.gs`.
-  `npm test` and `npm run check` (`scripts/check.js`) must pass before any push.
-- `docs/SETUP.md`: the guide (users + owner). Keep it in sync with behaviour changes.
-- `docs/ROADMAP.md`: ideas, not commitments.
+## Layout (`web/`)
+- `index.html` (CSP, screens), `styles.css`, `config.js` (public OAuth client id), `sw.js` (caches
+  only our own files), `manifest.webmanifest`, `icon.svg`, `vercel.json` (headers).
+- `js/core.js`: **pure** logic: constants, settings and prefs (`normalizeSettings`, `prefsText`),
+  the data shape, Gmail body decoding, the classifier, applications (`upsertApplication`,
+  `markGhosted`, `expireJobs`, `collectDue`), job prompts and `pickJobs`, the resume prompt,
+  `cleanResume`, `resumeBlocks` / `applyResumeEdits`, and the dashboard numbers.
+- `js/docx.js`: **pure** ZIP read/write, DOCX → text (CV import), resume → DOCX.
+- `js/ai.js`: providers, `ask()` with fallback, `listModels()`, `parseJsonLoose()`.
+- `js/google.js`: sign-in, Gmail, Drive app data (`job-tracker.json`, `cv-original.*`).
+- `js/update.js`: `runUpdate()` and `writeResume()`.
+- `js/files.js`: CV import (pdf.js / DOCX / TXT), resume → PDF (jsPDF, WinAnsi-safe text via `pdfSafe`), downloads.
+- `js/app.js` (boot and actions), `dashboard.js`, `settings.js`, `onboarding.js` (wizard plus the
+  shared field blocks), `resume-view.js` (A4 sheet; edits read back through `data-path`), `ui.js`, `demo.js`.
+- `tests/core.test.mjs`: Node tests for core, docx and ai. `npm test` and `npm run check` must pass before any push.
+- `scripts/serve.js` (local server on :5173), `scripts/check.js`.
+- `docs/SETUP.md`: users and owner (Google Cloud + Vercel). Keep it in sync with behaviour changes.
+  `docs/ROADMAP.md`: ideas.
 
-## Data
-One Drive file per user, `Job Tracker/Job Tracker data.json`:
-`{version, applications[], jobs[], seen[] (≤5000), log[] (newest first, ≤300), cv}`.
-Settings in UserProperties `settings` (JSON). Add a setting: update `defaultSettings_`,
-`normalizeSettings_`, the Settings form in `index.html`/`app.html`, and the docs.
-
-Application: id, company, role, channel, applied_on, status, furthest, last_update,
-next_step, email_link, key (`company|role` lowercased).
-Job: id, found_on, fit (1-5), company, role, location, pay, why, skill_gap, apply_by, link,
-details, resume (cleaned JSON, cached; `getState` sends only `has_resume`), resume_at,
-status (New/Applied/Skipped/Expired), key.
-Statuses: Applied, Screening, Interview, Offer, Rejected, Withdrawn, Ghosted. Furthest
-stage never moves backwards.
+## Data (one Drive app-data file per user, `job-tracker.json`)
+`{version: 2, settings, applications[], jobs[], seen[] (≤5000), log[] (newest first, ≤300), cv, cvFile, lastRunAt}`.
+- `settings`: onboarded, name, city, prefs {roles[], level, jobType, paidOnly, minPay,
+  locations[], relocate, avoid[]}, jobsPerUpdate, autoUpdateHours, sinceDays, ai[{provider, key, model}].
+  To add a setting, update `defaultSettings` + `normalizeSettings` (+ `prefsText` if the scorer
+  should use it), the block in `onboarding.js`, and the docs.
+- **Application:** id, company, role, channel, applied_on, status, furthest, last_update,
+  next_step, email_link, key (`company|role` lowercased).
+- **Job:** id, found_on, fit, company, role, location, pay, why, skill_gap, apply_by, link,
+  details, status (New/Applied/Skipped/Expired), key, resume (cleaned JSON), resume_at.
+- **Statuses:** Applied, Screening, Interview, Offer, Rejected, Withdrawn, Ghosted. Furthest stage never moves backwards.
 
 ## Workflow
-- Edit `src/`, run `npm test` and `npm run check`.
-- Deploy: `npx clasp login` once, then copy `.clasp.json.example` to `.clasp.json` with the
-  standalone script's id and run `npm run push`. Then **Deploy → Manage deployments → Edit →
-  New version** so the shared `/exec` link picks it up (the `/dev` link always runs the latest code).
-- Test with a test Google account: open the link, then **Update now**. Read **Recent
-  activity** on the page, or `npm run logs`.
+- `npm run dev`, then open http://localhost:5173/?demo (sample data) or `/?demo=setup` (the wizard).
+  A real sign-in needs the client id in `web/config.js`, with `http://localhost:5173` as an authorized origin.
+- Edit `web/`, then run `npm test` and `npm run check`. When you add or rename a file in `web/js`,
+  update the `SHELL` list in `sw.js` and bump `CACHE`.
+- Deploy: push to `main`, and Vercel builds `web/`.
 
 ## Style
-Plain ES2019+ JS (Apps Script V8). No build step, no npm packages inside `src/`.
+Plain ES2020+ modules, no frameworks, no npm packages in `web/` (vendored libraries only).
 User-facing text is short, friendly and in plain English.

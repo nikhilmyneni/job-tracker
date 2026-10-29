@@ -1,34 +1,32 @@
-# Job Tracker: free web app
+# Job Tracker
 
-A free, hassle-free job application tracker for freshers. It's one web page, and it runs entirely in your own Google account:
+A free job-application tracker for freshers, built as a website that runs entirely in your browser:
 
-- **Tracks applications from Gmail** (read-only): applied → test → interview → offer / rejected, plus "Ghosted" after 21 days of silence
-- **Recommends jobs** from your LinkedIn / Naukri / Internshala / Indeed alert emails, scored against your CV *(free Gemini key)*
-- **Tailored one-page resume** for any recommended job, on request. It opens in your browser, you can edit it there, and save it as PDF. Nothing is stored in Drive *(free Gemini key)*
-- **Daily summary email** on the days and at the time you choose, with a pause switch
-- **One page** with counts, reply rate, best channel, recommended jobs, a stage funnel, applications per week, reply rate per channel, all applications (sortable, editable) and settings
+- **Tracks applications from Gmail** (read-only): applied → test → interview → offer / rejected. It marks "Ghosted" after 21 days of silence.
+- **Sets up around you:** a short first-run setup collects your roles, level, pay, locations, skip list and CV. You can change any of it later.
+- **Recommends jobs** from your LinkedIn / Naukri / Internshala / Indeed alert emails, scored 1–5 against your CV and preferences.
+- **Tailored one-page resume** for any job, on request. You can edit it in the browser and download it as **PDF** or **Word**.
+- **Upload your CV** as PDF, Word or text, all read in the browser.
+- **Free AI with backups:** your own Gemini, Groq or OpenRouter key. When one runs out of quota, the next one takes over.
+- **Dashboard:** reply rate, best channel, stage funnel, applications per week, and reply rate per channel.
+- **Installable** as an app on desktop and phone.
 
-No subscription, no server, no sheet, no app to install. → **User guide: [docs/SETUP.md](docs/SETUP.md)**
+No server, no subscription. Your data lives in a hidden app folder in your own Google Drive. The guide is in **[docs/SETUP.md](docs/SETUP.md)**.
 
 ## Develop
 
 ```bash
-npm install          # installs clasp (Google's Apps Script CLI)
-npm test             # tests for the pure logic
-npm run check        # syntax check of src/*.gs and the page script
-npx clasp login      # once
-cp .clasp.json.example .clasp.json   # paste your standalone script's id
-npm run push         # upload src/ to the Apps Script project
+npm run dev      # http://localhost:5173  (demo with made-up data: /?demo, setup wizard: /?demo=setup)
+npm test         # Node tests for the pure logic (web/js/core.js, docx.js, ai.js)
+npm run check    # syntax check
 ```
 
-Then deploy it as a web app (Execute as: user accessing, access: anyone with a Google account). See the owner steps in [docs/SETUP.md](docs/SETUP.md). Run logs are under **Recent activity** on the page (or `npm run logs`).
-
-See [CLAUDE.md](CLAUDE.md) for architecture and constraints, and [docs/ROADMAP.md](docs/ROADMAP.md) for ideas.
+Plain HTML, CSS and ES modules in `web/`, with no build step. pdf.js and jsPDF are vendored in `web/vendor/` (see `VERSIONS.txt`). It deploys as a static site, on Vercel with root directory `web`. See [CLAUDE.md](CLAUDE.md) for architecture and constraints, and [docs/ROADMAP.md](docs/ROADMAP.md) for ideas.
 
 ## Privacy
 
-Your data stays in your Google account. Gmail is read-only. If you add a Gemini key, short email snippets and your CV text are sent to Google's Gemini API to sort emails, match jobs and write resumes. On the free tier, Google may use that data to improve its products.
+Gmail is read-only. Data goes only between your browser, Google (Gmail and your Drive's app folder) and, if you add a key, that AI provider. Free AI tiers may use what you send to improve their models.
 
 ## License
 
-MIT
+MIT. Vendored libraries keep their own licenses: pdf.js is Apache-2.0 and jsPDF is MIT.

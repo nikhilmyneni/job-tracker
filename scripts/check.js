@@ -1,16 +1,13 @@
-// Syntax check for everything clasp pushes: all src/*.gs and the page script in src/app.html.
-const fs = require('fs');
-const path = require('path');
-const dir = path.join(__dirname, '..', 'src');
+// Syntax check for every module in web/js and the scripts, without running them.
+import fs from 'node:fs';
+import path from 'node:path';
+import { execFileSync } from 'node:child_process';
+const files = ['web/js', 'scripts'].flatMap(d => fs.readdirSync(d).filter(f => f.endsWith('.js')).map(f => path.join(d, f)))
+  .concat(['web/config.js', 'web/sw.js']);
 let failed = false;
-const check = (name, code) => {
-  try { new Function(code); } catch (e) { failed = true; console.error(`${name}: ${e.message}`); }
-};
-const gs = fs.readdirSync(dir).filter(f => f.endsWith('.gs'));
-check('all .gs together', gs.map(f => fs.readFileSync(path.join(dir, f), 'utf8')).join('\n'));
-gs.forEach(f => check(f, fs.readFileSync(path.join(dir, f), 'utf8')));
-const html = fs.readFileSync(path.join(dir, 'app.html'), 'utf8');
-(html.match(/<script>([\s\S]*?)<\/script>/g) || []).forEach((s, i) => check(`app.html script ${i}`, s.replace(/^<script>|<\/script>$/g, '')));
-JSON.parse(fs.readFileSync(path.join(dir, 'appsscript.json'), 'utf8'));
+for (const f of files) {
+  try { execFileSync(process.execPath, ['--check', f], { stdio: 'pipe' }); } catch (e) { failed = true; console.error(String(e.stderr)); }
+}
+['web/manifest.webmanifest', 'web/vercel.json'].forEach(f => { try { JSON.parse(fs.readFileSync(f, 'utf8')); } catch (e) { failed = true; console.error(f, e.message); } });
 if (failed) process.exit(1);
-console.log('syntax ok');
+console.log(`syntax ok (${files.length} files)`);

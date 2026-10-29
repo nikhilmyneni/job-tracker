@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://accounts.google.com/gsi/client; style-src 'self' https://accounts.google.com/gsi/style; connect-src 'self' https://accounts.google.com https://www.googleapis.com https://gmail.googleapis.com https://generativelanguage.googleapis.com https://api.groq.com https://openrouter.ai; frame-src https://accounts.google.com; img-src 'self' data:; worker-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+  <meta name="referrer" content="no-referrer">
+  <meta name="description" content="Free job-application tracker for freshers: reads your Gmail (read-only), matches jobs to your CV and writes tailored resumes. Runs in your browser; your data stays in your Google account.">
+  <meta name="theme-color" content="#2f5bd3">
+  <title>Job Tracker</title>
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="demo-banner" class="banner" hidden>Demo with made-up data. Nothing here is real, and nothing is saved. <a href="./">Sign in to use your own</a></div>
+<div id="reconnect" class="banner warn" hidden>Your Google session ended. <button type="button" class="btn small" id="reconnect-btn">Continue</button></div>
+
+<header class="topbar">
+  <a class="brand" href="./" aria-label="Job Tracker home"><img src="icon.svg" alt="" width="26" height="26"> Job Tracker</a>
+  <nav id="topbar-app" class="tabs" hidden>
+    <button type="button" data-tab="dashboard" aria-current="true">Dashboard</button>
+    <button type="button" data-tab="settings">Settings</button>
+  </nav>
+  <div id="account" class="account" hidden>
+    <span class="avatar" id="account-initial" aria-hidden="true"></span>
+    <span class="account-name" id="account-name"></span>
+    <button type="button" class="link" id="sign-out">Sign out</button>
+  </div>
+</header>
+
+<!-- Sign in -->
+<main id="screen-signin" class="signin" hidden>
+  <div class="hero">
+    <h1 class="h1">Your job search, tracked for you</h1>
+    <p class="lead">Job Tracker reads your Gmail (read-only), keeps every application up to date, finds jobs that fit your CV, and writes a tailored one-page resume for each one. It's free.</p>
+    <button type="button" class="btn big" id="signin-btn">Sign in with Google</button>
+    <div class="status" id="signin-status" role="status"></div>
+    <ul class="points">
+      <li><b>Private.</b> Runs in your browser. Your data stays in a hidden app folder in your own Google Drive, and nobody else, including whoever runs this site, can see it.</li>
+      <li><b>Read-only.</b> It never sends, deletes or changes your email.</li>
+      <li><b>Free AI.</b> Optional: add your own free Gemini, Groq or OpenRouter key for job matching and resumes.</li>
+    </ul>
+    <p class="hint">Google will say the app isn't verified. That's expected for a small free tool: click <b>Advanced → Go to Job Tracker</b>. <a href="?demo">Try the demo first</a>.</p>
+  </div>
+</main>
+
+<!-- First-run setup -->
+<main id="screen-wizard" class="wizard-wrap" hidden></main>
+
+<!-- App -->
+<main id="screen-app" class="jt" hidden>
+  <div id="view-dashboard">
+    <header class="dash-head">
+      <div>
+        <p class="take" id="takeaway"></p>
+        <div class="meta" id="meta"></div>
+      </div>
+      <div class="dash-actions">
+        <button type="button" class="btn" id="update-now">Update now</button>
+      </div>
+    </header>
+    <div class="status" id="update-status" role="status" hidden></div>
+
+    <section class="tiles" id="tiles"></section>
+
+    <section class="card">
+      <h2 class="title">Recommended jobs</h2>
+      <p class="note">Matches from your job-alert emails, scored 1–5 against your CV and preferences. <b>Make resume</b> writes a one-page resume for that job, which you can download as PDF or Word.</p>
+      <div class="controls">
+        <select id="jobs-status" aria-label="Filter recommended jobs by status">
+          <option value="New">New</option><option value="">All</option>
+          <option>Applied</option><option>Skipped</option><option>Expired</option>
+        </select>
+      </div>
+      <div class="tablebox">
+        <table>
+          <thead><tr>
+            <th>Fit</th><th>Company</th><th>Role</th><th class="hide-sm">Location</th><th>Pay</th>
+            <th class="hide-sm">Why it fits</th><th class="hide-sm">Skill to pick up</th><th>Apply by</th><th>Status</th><th><span class="visually-hidden">Actions</span></th>
+          </tr></thead>
+          <tbody id="jobs-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="grid">
+      <div class="card">
+        <h2 class="title">Where applications stop</h2>
+        <p class="note">How many applications reached each stage, and the share of all sent</p>
+        <div class="funnel" id="funnel"></div>
+      </div>
+      <div class="card">
+        <h2 class="title">Applications per week</h2>
+        <p class="note">By the week (Mon–Sun) you applied</p>
+        <div class="chart" id="weekly"></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2 class="title">Which channels get replies</h2>
+      <p class="note">Reply rate = applications that moved past "applied", per channel</p>
+      <div class="tablebox">
+        <table>
+          <thead><tr><th>Channel</th><th>Sent</th><th>Replies</th><th>Reply rate</th></tr></thead>
+          <tbody id="sources-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2 class="title">All applications</h2>
+      <p class="note">Click a column to sort. Change a status if an email was missed.</p>
+      <div class="controls">
+        <input type="search" id="apps-search" placeholder="Search company, role, next step…" aria-label="Search applications">
+        <select id="apps-filter" aria-label="Filter by status"><option value="">All statuses</option></select>
+      </div>
+      <div class="tablebox">
+        <table>
+          <thead><tr id="apps-head">
+            <th data-col="company">Company</th><th data-col="role">Role</th><th data-col="channel" class="hide-sm">Channel</th>
+            <th data-col="applied_on">Applied</th><th data-col="status">Status</th><th data-col="next_step" class="hide-sm">Next step</th><th><span class="visually-hidden">Remove</span></th>
+          </tr></thead>
+          <tbody id="apps-body"></tbody>
+        </table>
+      </div>
+      <form class="addform" id="add-form">
+        <input id="add-company" placeholder="Company" aria-label="Company" required>
+        <input id="add-role" placeholder="Role" aria-label="Role">
+        <input id="add-channel" placeholder="Channel (e.g. LinkedIn)" aria-label="Channel">
+        <input id="add-date" type="date" aria-label="Applied on">
+        <button class="btn ghost" type="submit">Add application</button>
+      </form>
+    </section>
+  </div>
+
+  <div id="view-settings" hidden>
+    <h1 class="h1 small">Settings</h1>
+    <div id="settings-body"></div>
+  </div>
+</main>
+
+<div id="resume-view" role="dialog" aria-modal="true" aria-labelledby="rv-title" hidden>
+  <div class="rv-bar">
+    <b id="rv-title">Resume</b>
+    <span class="note" id="rv-note"></span>
+    <span class="rv-acts">
+      <button class="btn" id="rv-pdf" type="button">Download PDF</button>
+      <button class="btn ghost" id="rv-docx" type="button">Download Word</button>
+      <button class="btn ghost" id="rv-print" type="button">Print</button>
+      <button class="btn ghost" id="rv-save" type="button">Save edits</button>
+      <button class="btn ghost" id="rv-again" type="button">Write again</button>
+      <button class="btn ghost" id="rv-close" type="button">Close</button>
+    </span>
+  </div>
+  <div class="rv-scroll"><article class="sheet" id="rv-sheet" spellcheck="false"></article></div>
+</div>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

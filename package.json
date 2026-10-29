@@ -1,19 +1,13 @@
 {
-  "name": "job-tracker-sheets",
-  "version": "0.1.0",
+  "name": "job-tracker",
+  "version": "0.2.0",
   "private": true,
-  "description": "Free job application tracker: Apps Script web app + Gmail, with optional Gemini job matching and tailored resumes.",
+  "description": "Free job-application tracker that runs in the browser: Gmail read-only, job matches and tailored resumes with free AI keys.",
   "license": "MIT",
   "scripts": {
-    "test": "node --test tests/*.test.js",
+    "test": "node --test tests/core.test.mjs",
     "check": "node scripts/check.js",
-    "login": "clasp login",
-    "push": "clasp push",
-    "pull": "clasp pull",
-    "open": "clasp open",
-    "logs": "clasp logs"
+    "dev": "node scripts/serve.js"
   },
-  "devDependencies": {
-    "@google/clasp": "^2.4.2"
-  }
+  "type": "module"
 }
