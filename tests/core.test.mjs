@@ -183,20 +183,6 @@ test('newCandidates skips known and duplicate listings', () => {
     [{ key: 'b|x' }], []);
   assert.deepEqual(c.map(x => x.key), ['a|r']);
 });
-test('pickJobs keeps fit 3+, best first, at most n, validates link and date', () => {
-  const cands = [{ company: 'A', role: 'R1', link: 'javascript:alert(1)', key: 'a|r1' }, { company: 'B', role: 'R2', link: 'https://b.io', key: 'b|r2' }, { company: 'C', role: 'R3', key: 'c|r3' }];
-  const picks = C.pickJobs([{ n: 0, fit: 4, keep: true, apply_by: 'soon' }, { n: 1, fit: 5, keep: true, apply_by: '2026-11-01' }, { n: 2, fit: 2, keep: true }, { n: 9, fit: 5, keep: true }], cands, 5, '2026-10-29');
-  assert.deepEqual(picks.map(p => p.company), ['B', 'A']);
-  assert.equal(picks[0].link, 'https://b.io');
-  assert.equal(picks[1].link, '');
-  assert.equal(picks[1].apply_by, '');
-  assert.equal(picks[0].status, 'New');
-});
-test('scorePrompt carries the preferences', () => {
-  const s = C.normalizeSettings({ prefs: { roles: ['Cloud Security'] } });
-  assert.match(C.scorePrompt('cv', s, [{ company: 'A', role: 'R' }]), /Target roles: Cloud Security[\s\S]*0\. A — R/);
-});
-
 // ---------- resume ----------
 test('resumeFileBase', () => {
   assert.equal(C.resumeFileBase('Test Person', 'Acme & Co.', 'SOC Analyst (L1)'), 'Test_Person_Resume_Acme_Co_SOC_Analyst_L1');

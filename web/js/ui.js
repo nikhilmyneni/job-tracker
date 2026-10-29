@@ -169,7 +169,7 @@ export const emptyRow = (cols, text) => h('tr', {}, h('td', { colSpan: cols, cla
  * search(q, current): live matches shown from the first letter typed (a combobox: arrows, Enter, Escape).
  */
 let comboId = 0;
-export function chipInput(values, { placeholder, suggestions = [], label, max = 12, search } = {}) {
+export function chipInput(values, { placeholder, suggestions = [], label, max = 12, search, onChange } = {}) {
   let list = values.slice(), matches = [], active = -1;
   const id = 'combo-' + (++comboId);
   const wrap = h('div', { class: 'chips' });
@@ -180,7 +180,7 @@ export function chipInput(values, { placeholder, suggestions = [], label, max = 
   const add = (v) => {
     v = String(v || '').trim().slice(0, 80);
     if (!v || list.length >= max || list.some(x => x.toLowerCase() === v.toLowerCase())) return;
-    list.push(v); draw();
+    list.push(v); draw(); if (onChange) onChange(list.slice());
   };
   const drawMatches = () => {
     matches = search ? search(input.value, list) : [];
@@ -194,7 +194,7 @@ export function chipInput(values, { placeholder, suggestions = [], label, max = 
   const pick = (v) => { add(v); input.value = ''; active = -1; drawMatches(); input.focus(); };
   const draw = () => {
     wrap.replaceChildren(...list.map((v, i) => h('span', { class: 'chip' }, v,
-      h('button', { type: 'button', 'aria-label': 'Remove ' + v, onclick: () => { list.splice(i, 1); draw(); } }, '×'))), input);
+      h('button', { type: 'button', 'aria-label': 'Remove ' + v, onclick: () => { list.splice(i, 1); draw(); if (onChange) onChange(list.slice()); input.focus(); } }, '×'))), input);
     sugg.replaceChildren(...suggestions.filter(s => !list.some(x => x.toLowerCase() === s.toLowerCase()))
       .map(s => h('button', { type: 'button', class: 'chip-add', onclick: () => add(s) }, '+ ' + s)));
   };
@@ -206,7 +206,7 @@ export function chipInput(values, { placeholder, suggestions = [], label, max = 
     else if ((e.key === 'Enter' || e.key === ',' || e.key === 'Tab') && input.value.trim()) {
       if (e.key === 'Tab' && !(search && active >= 0)) return;
       e.preventDefault(); pick(search && active >= 0 && matches[active] ? matches[active] : input.value);
-    } else if (e.key === 'Backspace' && !input.value && list.length) { list.pop(); draw(); }
+    } else if (e.key === 'Backspace' && !input.value && list.length) { list.pop(); draw(); if (onChange) onChange(list.slice()); }
   });
   input.addEventListener('blur', () => {
     if (!search && input.value.trim()) { add(input.value); input.value = ''; }

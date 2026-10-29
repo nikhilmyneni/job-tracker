@@ -10,6 +10,7 @@ export const JOB_STATUSES = ['New', 'Applied', 'Skipped', 'Expired'];
 export const JOBS_PER_UPDATE = [0, 3, 5, 10, 15];
 export const AUTO_UPDATE_HOURS = [0, 6, 12, 24]; // 0 = only when I click Update now
 export const SINCE_DAYS = [30, 60, 120];
+export const MIN_MATCHES = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90];
 export const LEVELS = { fresher: 'Fresher (0–1 year)', intern: 'Internship', both: 'Fresher jobs or internships' };
 export const JOB_TYPES = { fulltime: 'Full-time', internship: 'Internship', both: 'Full-time or internship' };
 export const GHOST_DAYS = 21;
@@ -61,6 +62,9 @@ export function defaultSettings() {
     autoUpdateHours: 12,
     sinceDays: 120,
     notify: false, // browser notifications after a sync
+    keywords: [], // your own words to look for in job posts (they count as skills you have, and weigh more)
+    minMatch: 40, // new matches below this score are left out
+    matchView: { location: '', experience: 'fresher', internships: true, hideApplied: true }, // the job matches screen's filters
     companies: [], // company job boards to check: [{ats, slug, name, host?, site?}]
   };
 }
@@ -94,6 +98,9 @@ export function normalizeSettings(raw) {
     autoUpdateHours: pick(r.autoUpdateHours, AUTO_UPDATE_HOURS, d.autoUpdateHours),
     sinceDays: pick(r.sinceDays, SINCE_DAYS, d.sinceDays),
     notify: r.notify === true,
+    keywords: Array.isArray(r.keywords) ? strList(r.keywords, 20, 40) : d.keywords,
+    minMatch: MIN_MATCHES.indexOf(Number(r.minMatch)) >= 0 ? Number(r.minMatch) : d.minMatch,
+    matchView: (() => { const v = r.matchView && typeof r.matchView === 'object' ? r.matchView : {}; return { location: str(v.location, 60, ''), experience: v.experience === 'any' ? 'any' : 'fresher', internships: v.internships !== false, hideApplied: v.hideApplied !== false }; })(),
     companies: (Array.isArray(r.companies) ? r.companies : []).map(normalizeCompany).filter(Boolean)
       .filter((c, i, all) => all.findIndex(b => companyKey(b) === companyKey(c)) === i).slice(0, MAX_COMPANIES),
   };
@@ -116,7 +123,7 @@ export function prefsText(s) {
 
 // ---------- Data file ----------
 export function emptyData() {
-  return { version: 2, settings: defaultSettings(), applications: [], jobs: [], seen: [], log: [], cv: '', cvFile: null, cvFold: null, cvFoldHash: '', review: [], reviewDone: [], lastRunAt: '', gmailRunAt: '' };
+  return { version: 2, settings: defaultSettings(), applications: [], jobs: [], seen: [], log: [], cv: '', cvFile: null, cvFold: null, cvFoldHash: '', review: [], reviewDone: [], skillsAdded: [], skillsRemoved: [], lastRunAt: '', gmailRunAt: '' };
 }
 
 export function normalizeData(raw) {
@@ -136,6 +143,8 @@ export function normalizeData(raw) {
     cvFoldHash: typeof r.cvFoldHash === 'string' ? r.cvFoldHash : '',
     review: arr(r.review).slice(0, MAX_REVIEW),
     reviewDone: Array.isArray(r.reviewDone) ? r.reviewDone.map(String).slice(-500) : [],
+    skillsAdded: strList(r.skillsAdded, 40, 40),
+    skillsRemoved: strList(r.skillsRemoved, 80, 40),
     lastRunAt: typeof r.lastRunAt === 'string' ? r.lastRunAt : '',
     // When Gmail was last read. Older files read Gmail on every run, so their lastRunAt counts.
     gmailRunAt: typeof r.gmailRunAt === 'string' ? r.gmailRunAt : (typeof r.lastRunAt === 'string' && !('gmailRunAt' in r) ? r.lastRunAt : ''),
@@ -446,31 +455,6 @@ export function newCandidates(listings, jobs, apps, max = 40) {
   return [...uniq.values()].slice(0, max);
 }
 
-export function scorePrompt(cv, s, candidates) {
-  return 'You match job openings to a candidate. Be strict and honest.\n' +
-    `Candidate CV:\n${clip(cv, 9000)}\n\nCandidate preferences:\n${prefsText(s)}\n\n` +
-    'For each opening return {"n": <number>, "fit": 1-5, "why": "<one sentence tying it to the CV>", "skill_gap": "<one skill to pick up, or None>", "apply_by": "<YYYY-MM-DD if stated, else empty>", "keep": true|false}. ' +
-    'keep=false for roles that clash with the preferences or the avoid list, need far more experience, are unpaid when the candidate wants paid only, or look like training institutes charging fees.\n\n' +
-    candidates.map((c, i) => `${i}. ${c.company} — ${c.role} — ${c.location || ''} — ${c.pay || ''} — ${c.details || ''}`).join('\n');
-}
-
-/** Turns Gemini's scores into new job rows: kept, fit 3+, best first, at most n. */
-export function pickJobs(scored, candidates, n, today) {
-  return (Array.isArray(scored) ? scored : [])
-    .filter(x => x && x.keep && Number(x.fit) >= 3 && candidates[Number(x.n)])
-    .sort((a, b) => Number(b.fit) - Number(a.fit))
-    .slice(0, n)
-    .map(x => {
-      const c = candidates[Number(x.n)];
-      return {
-        id: newId(), found_on: today, fit: Number(x.fit), company: String(c.company).trim(), role: String(c.role).trim(),
-        location: c.location || '', pay: c.pay || '', why: x.why || '', skill_gap: x.skill_gap || 'None',
-        apply_by: isYmd(x.apply_by) ? x.apply_by : '', link: isHttpUrl(c.link) ? c.link : '',
-        details: clip(c.details, 400), status: 'New', key: c.key,
-        source: c.source || 'Job alert email', ref: c.ref || null,
-      };
-    });
-}
 
 // ---------- Dashboard numbers ----------
 export function summary(apps) {
@@ -927,4 +911,155 @@ export function applyCvProfile(d, p) {
   if (p.level && d.prefs.level === def.prefs.level) d.prefs.level = p.level;
   if (p.city && JSON.stringify(d.prefs.locations) === JSON.stringify(def.prefs.locations)) d.prefs.locations = [p.city, 'Remote', 'Anywhere in India'].filter((x, i, a) => a.indexOf(x) === i);
   return d;
+}
+
+// ---------- Matching: weighted keyword overlap (no AI) ----------
+/** Skills and tools job posts ask for. Canonical name first; aliases map other spellings onto it. */
+export const SKILL_VOCAB = [
+  // security
+  'SIEM', 'SOC', 'Splunk', 'QRadar', 'Microsoft Sentinel', 'Wazuh', 'ELK', 'EDR', 'XDR', 'CrowdStrike', 'IDS/IPS', 'Firewall', 'WAF', 'VPN', 'Zero Trust',
+  'Incident Response', 'Threat Hunting', 'Threat Intelligence', 'Malware Analysis', 'Digital Forensics', 'Log Analysis', 'Vulnerability Assessment',
+  'Penetration Testing', 'Burp Suite', 'Metasploit', 'Nmap', 'Wireshark', 'Nessus', 'OpenVAS', 'Kali Linux', 'OWASP', 'Web Application Security',
+  'API Security', 'Network Security', 'Cloud Security', 'Application Security', 'Endpoint Security', 'IAM', 'Active Directory', 'PKI', 'Cryptography',
+  'MITRE ATT&CK', 'ISO 27001', 'NIST', 'SOC 2', 'PCI DSS', 'GDPR', 'Risk Assessment', 'GRC', 'Compliance', 'Security Audit', 'DevSecOps', 'CEH', 'OSCP',
+  'CompTIA Security+', 'CISSP', 'Bug Bounty', 'Phishing', 'DLP',
+  // networking and systems
+  'TCP/IP', 'DNS', 'DHCP', 'Routing', 'Switching', 'VLAN', 'CCNA', 'Linux', 'Windows Server', 'Unix', 'Shell Scripting', 'Virtualization', 'VMware',
+  // cloud and devops
+  'AWS', 'Azure', 'GCP', 'Docker', 'Kubernetes', 'Terraform', 'Ansible', 'Jenkins', 'CI/CD', 'Git', 'GitHub Actions', 'Prometheus', 'Grafana',
+  // languages
+  'Python', 'Java', 'JavaScript', 'TypeScript', 'C', 'C++', 'C#', 'Go', 'Rust', 'Ruby', 'PHP', 'Kotlin', 'Swift', 'Bash', 'PowerShell', 'SQL', 'R', 'Scala',
+  // web and data
+  'HTML', 'CSS', 'React', 'Angular', 'Vue', 'Next.js', 'Node.js', 'Express', 'Django', 'Flask', 'FastAPI', 'Spring Boot', '.NET', 'REST APIs', 'GraphQL',
+  'Microservices', 'MongoDB', 'MySQL', 'PostgreSQL', 'Redis', 'Kafka', 'Spark', 'Hadoop', 'Airflow', 'ETL', 'Data Analysis', 'Data Visualization',
+  'Power BI', 'Tableau', 'Excel', 'Pandas', 'NumPy', 'Statistics', 'Machine Learning', 'Deep Learning', 'NLP', 'Computer Vision', 'TensorFlow',
+  'PyTorch', 'scikit-learn', 'LLMs', 'Android', 'iOS', 'Flutter', 'React Native', 'Selenium', 'Manual Testing', 'Automation Testing', 'JIRA', 'Agile',
+  // ways of working
+  'Communication', 'Teamwork', 'Problem Solving', 'Documentation',
+];
+const SKILL_ALIASES = {
+  'SIEM': ['security information and event management'], 'SOC': ['security operations center', 'security operations centre'],
+  'Microsoft Sentinel': ['azure sentinel', 'sentinel'], 'ELK': ['elastic stack', 'elasticsearch', 'kibana'], 'IDS/IPS': ['intrusion detection', 'intrusion prevention'],
+  'Penetration Testing': ['pentest', 'pentesting', 'pen testing', 'penetration tester', 'vapt'], 'Vulnerability Assessment': ['vulnerability scanning', 'vulnerability management'],
+  'Kali Linux': ['kali'], 'Web Application Security': ['web app security', 'web security'], 'IAM': ['identity and access management'],
+  'Active Directory': [], 'MITRE ATT&CK': ['mitre att&ck', 'mitre attack', 'att&ck'], 'ISO 27001': ['iso/iec 27001', 'iso27001'],
+  'SOC 2': ['soc2'], 'PCI DSS': ['pci-dss'], 'CEH': ['certified ethical hacker'], 'CompTIA Security+': ['security+', 'security plus'],
+  'Digital Forensics': ['forensics', 'dfir'], 'Threat Intelligence': ['cyber threat intelligence'], 'TCP/IP': ['networking fundamentals'],
+  'Windows Server': ['windows server administration'], 'Shell Scripting': ['shell script', 'bash scripting'], 'GCP': ['google cloud'], 'AWS': ['amazon web services'],
+  'Azure': ['microsoft azure'], 'Kubernetes': ['k8s'], 'CI/CD': ['ci cd', 'continuous integration'], 'JavaScript': ['es6'],
+  'TypeScript': [], 'Go': ['golang'], 'Node.js': ['nodejs', 'node js'], 'Next.js': ['nextjs'], 'Spring Boot': ['springboot'], '.NET': ['dotnet', 'asp.net'],
+  'REST APIs': ['rest api', 'restful'], 'PostgreSQL': ['postgres'], 'Machine Learning': [], 'Deep Learning': [],
+  'NLP': ['natural language processing'], 'scikit-learn': ['sklearn'], 'LLMs': ['llm', 'large language models', 'generative ai', 'genai'],
+  'Data Analysis': ['data analytics', 'data analyst'], 'Data Visualization': ['dashboards', 'dashboarding'], 'Excel': ['ms excel', 'advanced excel'],
+  'Automation Testing': ['test automation'], 'Problem Solving': ['problem-solving', 'analytical skills'], 'Communication': ['communication skills'],
+  'Teamwork': ['team player', 'collaboration'],
+};
+const SKILL_KEYS = new Map();
+SKILL_VOCAB.forEach(s => { SKILL_KEYS.set(s.toLowerCase(), s); (SKILL_ALIASES[s] || []).forEach(a => SKILL_KEYS.set(a.toLowerCase(), s)); });
+const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const termRe = (t) => new RegExp('(^|[^a-z0-9+#])' + esc(t.toLowerCase()) + '(?=$|[^a-z0-9+#])');
+// Short or ambiguous names only count written exactly that way ("SOC", "Go", "R", "C"), never as an ordinary word.
+const EXACT = new Set(['C', 'R', 'Go', 'Rust', 'Swift', 'SOC', 'Excel', 'Spark', 'Express', 'Agile', 'Vue', 'Communication', 'Teamwork', 'Documentation']);
+
+/** The canonical skills found in a text, plus any extra phrases (your own keywords) that appear in it. */
+export function termsIn(text, extra = []) {
+  const raw = String(text || '');
+  const t = raw.toLowerCase();
+  const found = new Set();
+  for (const [k, canon] of SKILL_KEYS) {
+    if (EXACT.has(canon) && k === canon.toLowerCase()) {
+      if (new RegExp('(^|[^A-Za-z0-9+#])' + esc(canon) + '(?=$|[^A-Za-z0-9+#])').test(raw)) found.add(canon);
+    } else if (termRe(k).test(t)) found.add(canon);
+  }
+  extra.forEach(x => { const s = String(x || '').trim(); if (s && termRe(s).test(t)) found.add(SKILL_KEYS.get(s.toLowerCase()) || s); });
+  // "Web Application Security" already says "Application Security": keep the longer one.
+  [...found].forEach(f => { if ([...found].some(g => g !== f && g.toLowerCase().includes(f.toLowerCase()) && g.length > f.length + 2)) found.delete(f); });
+  return found;
+}
+
+/** Your skills: the ones found in your CV, plus the ones you added, minus the ones you removed. */
+export function mySkills(data) {
+  const removed = new Set((data.skillsRemoved || []).map(s => s.toLowerCase()));
+  const out = new Map();
+  [...termsIn(data.cv), ...(data.skillsAdded || [])].forEach(s => { const k = String(s).toLowerCase(); if (!removed.has(k) && !out.has(k)) out.set(k, s); });
+  return [...out.values()];
+}
+
+/**
+ * How well a job fits, as a weighted keyword overlap. Skills asked for in the title count double; your own
+ * keywords count 1.5×. Returns {score 0–100, matched[], missing[]}: matched are asked for and on your CV (or in
+ * your keywords), missing are asked for and not. A job that names no skills gets a middling score from its title.
+ */
+export function matchScore(job, skills, keywords = [], roles = []) {
+  const have = new Set([...skills, ...keywords].map(s => String(s).toLowerCase()));
+  const kw = new Set(keywords.map(s => String(s).toLowerCase()));
+  const extra = [...skills, ...keywords];
+  const inTitle = termsIn(job.role, extra), inBody = termsIn([job.details, job.jd].filter(Boolean).join('\n'), extra);
+  const asked = [...new Set([...inTitle, ...inBody])];
+  const w = (t) => (inTitle.has(t) ? 2 : 1) * (kw.has(t.toLowerCase()) ? 1.5 : 1);
+  const titleFit = roles.length ? (roleTerms(roles).some(ts => ts.some(r => new RegExp('\\b' + esc(r)).test(String(job.role || '').toLowerCase()))) ? 1 : 0) : 0.5;
+  if (!asked.length) return { score: Math.round(30 + 25 * titleFit), matched: [], missing: [] };
+  const matched = asked.filter(t => have.has(t.toLowerCase())).sort((a, b) => w(b) - w(a));
+  const missing = asked.filter(t => !have.has(t.toLowerCase())).sort((a, b) => w(b) - w(a));
+  const total = asked.reduce((n, t) => n + w(t), 0), got = matched.reduce((n, t) => n + w(t), 0);
+  // A handful of asks is noisy, so the title's fit with your target roles carries a fifth of the score.
+  const score = Math.round(80 * got / total + 20 * titleFit);
+  return { score: Math.max(0, Math.min(100, score)), matched, missing };
+}
+
+/** The job matches screen's filters. view: {location, experience, internships, hideApplied, minMatch}. */
+export function filterJobs(jobs, view, apps = []) {
+  const applied = new Set(apps.map(a => a.key));
+  const loc = String(view.location || '').toLowerCase();
+  const aliases = loc ? (CITY_ALIASES[loc] || [loc]) : [];
+  return jobs.filter(j => {
+    if ((j.score ?? j.fit * 20) < (view.minMatch || 0)) return false;
+    if (view.hideApplied && (j.status === 'Applied' || applied.has(j.key) || applied.has(String(j.company).trim().toLowerCase() + '|'))) return false;
+    if (!view.internships && /\b(intern|internship|trainee|apprentice)\b/i.test(j.role)) return false;
+    if (view.experience === 'fresher' && SENIOR_RE.test(j.role)) return false;
+    if (loc) {
+      const l = String(j.location || '').toLowerCase();
+      if (loc === 'remote' ? !/remote|work from home|wfh|anywhere/.test(l) : !aliases.some(a => l.includes(a))) return false;
+    }
+    return true;
+  });
+}
+
+/** Best new openings by score: at least minMatch, at most n, as job rows. */
+export function pickByScore(candidates, data, n, today) {
+  const s = data.settings, skills = mySkills(data);
+  return candidates.map(c => Object.assign({ c }, matchScore(c, skills, s.keywords, s.prefs.roles)))
+    .filter(x => x.score >= s.minMatch)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, n)
+    .map(({ c, score, matched, missing }) => ({
+      id: newId(), found_on: today, fit: Math.max(1, Math.round(score / 20)), score, matched: matched.slice(0, 12), missing: missing.slice(0, 8),
+      company: String(c.company).trim(), role: String(c.role).trim(), location: c.location || '', pay: c.pay || '',
+      why: matched.length ? `On your CV: ${matched.slice(0, 4).join(', ')}.` : '', skill_gap: missing[0] || 'None',
+      apply_by: '', posted: isYmd(c.posted) ? c.posted : '', link: isHttpUrl(c.link) ? c.link : '',
+      details: clip(c.details, 600), status: 'New', key: c.key, source: c.source || 'Job alert email', ref: c.ref || null,
+    }));
+}
+
+// ---------- The CV in sections ----------
+const SECTION_OF = [
+  ['summary', /^(career objective|objective|summary|professional summary|profile|about me)$/],
+  ['education', /^(education|academic( details| qualifications| background)?|qualifications)$/],
+  ['experience', /^((work |professional )?experience|employment( history)?|internships?|work history)$/],
+  ['projects', /^((academic |personal |key )?projects?)$/],
+  ['skills', /^((technical |key |core )?skills|technical proficiency|tools( and technologies)?|technologies)$/],
+  ['certifications', /^(certifications?|certificates|courses|trainings?|licenses( and certifications)?)$/],
+  ['leadership', /^(leadership|extra[- ]?curricular( activities)?|positions of responsibility|activities|volunteering|achievements|awards)$/],
+];
+/** The CV split under its headings: {summary, education, experience, projects, skills, certifications, leadership} as lines. */
+export function cvSections(text) {
+  const out = { summary: [], education: [], experience: [], projects: [], skills: [], certifications: [], leadership: [] };
+  let cur = null;
+  tidyCvText(text).split('\n').map(l => l.trim()).filter(Boolean).forEach(l => {
+    const key = l.toLowerCase().replace(/[:•|]+$/, '').replace(/\s+/g, ' ').trim();
+    const hit = l.length <= 45 && SECTION_OF.find(([, re]) => re.test(key) || re.test(key.replace(/[^a-z ]/g, '')));
+    if (hit) { cur = hit[0]; return; }
+    if (cur) out[cur].push(l.replace(/^[•\-–*·▪●]\s*/, ''));
+  });
+  return out;
 }

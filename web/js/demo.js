@@ -1,5 +1,5 @@
 /** Made-up sample data for ?demo. No real people, no real emails. */
-import { emptyData, normalizeSettings } from './core.js';
+import { emptyData, normalizeSettings, matchScore, mySkills } from './core.js';
 
 export const DEMO_ME = { email: 'demo@jobs4you.vercel.app', name: 'Test Person', picture: '' };
 
@@ -21,6 +21,7 @@ export function demoData(fresh) {
     onboarded: true, name: 'Test Person', city: 'Hyderabad',
     prefs: { roles: ['SOC Analyst', 'Security Analyst', 'Cloud Security'], level: 'fresher', jobType: 'both', paidOnly: true, minPay: '3 LPA', locations: ['Hyderabad', 'Remote', 'Bengaluru'], relocate: true, avoid: ['Sales', 'Telecalling'] },
     companies: [{ ats: 'greenhouse', slug: 'zscaler', name: 'Zscaler' }, { ats: 'lever', slug: 'cred', name: 'CRED' }],
+    keywords: ['Threat Hunting'],
   });
   const rows = [
     ['Kavach Security', 'SOC Analyst', 'LinkedIn', '2026-09-01', 'Interview', 'Interview', 'Prepare for the technical round'],
@@ -41,12 +42,20 @@ export function demoData(fresh) {
     { id: 'r1', from: 'Talent Team <no-reply@talentdesk.in>', subject: 'Your application: next steps', date: '2026-10-26', link: '', company: '', stage: 'Screening' },
     { id: 'r2', from: 'Campus Hiring <campus@northwind.in>', subject: 'Re: Application for Security Intern', date: '2026-10-24', link: '', company: 'Northwind', stage: 'Applied' },
   ];
+  const J = (id, found_on, company, role, location, pay, details, source, link = '', posted = '') =>
+    ({ id, found_on, posted, company, role, location, pay, details, source, link, status: 'New', key: (company + '|' + role).toLowerCase(), apply_by: '' });
   d.jobs = [
-    { id: 'j1', found_on: '2026-10-28', fit: 5, company: 'Kestrel Systems', role: 'Security Analyst (Fresher)', location: 'Hyderabad', pay: '₹4–5 LPA', why: 'Your SIEM project and CEH match the SOC duties.', skill_gap: 'Splunk', apply_by: '2026-11-05', link: '', details: 'Monitor alerts, triage incidents.', status: 'New', key: 'kestrel systems|security analyst (fresher)', source: 'Greenhouse' },
-    { id: 'j2', found_on: '2026-10-28', fit: 4, company: 'Nimbus', role: 'Cloud Security Intern', location: 'Remote', pay: '₹20k/month', why: 'AWS coursework and IAM lab fit.', skill_gap: 'Terraform', apply_by: '', link: '', details: 'IAM reviews, cloud posture checks.', status: 'New', key: 'nimbus|cloud security intern', source: 'Lever' },
-    { id: 'j3', found_on: '2026-10-27', fit: 3, company: 'Pragati Infotech', role: 'Network Security Trainee', location: 'Bengaluru', pay: '', why: 'Networking basics from your degree.', skill_gap: 'Firewall config', apply_by: '', link: '', details: '', status: 'New', key: 'pragati infotech|network security trainee', source: 'Job alert email' },
+    J('j1', '2026-10-28', 'Kestrel Systems', 'SOC Analyst (Fresher)', 'Hyderabad', '₹4–5 LPA', 'Monitor SIEM alerts in Splunk and Wazuh, triage incidents, incident response, write clear notes. Python and Linux a plus. Knowledge of MITRE ATT&CK.', 'Greenhouse', '', '2026-10-27'),
+    J('j2', '2026-10-28', 'Nimbus Cloud', 'Cloud Security Intern', 'Remote', '₹20k/month', 'IAM reviews on AWS, cloud posture checks, Terraform basics, Python scripting.', 'Lever', '', '2026-10-26'),
+    J('j3', '2026-10-27', 'Pragati Infotech', 'Network Security Trainee', 'Bengaluru', '', 'Firewall configuration, TCP/IP, VPN, Wireshark captures, CCNA preferred.', 'Job alert email'),
+    J('j4', '2026-10-29', 'Orion Labs', 'Junior Penetration Tester', 'Pune', '₹5–7 LPA', 'Web application security testing with Burp Suite and OWASP Top 10, Nmap, Metasploit, report writing. OSCP is a plus.', 'Adzuna', 'https://www.adzuna.in', '2026-10-28'),
+    J('j5', '2026-10-29', 'Delta Fintech', 'Security Operations Intern', 'Hyderabad', '₹25k/month', 'Assist the SOC with log analysis in Microsoft Sentinel, phishing triage, threat intelligence feeds.', 'Adzuna', 'https://www.adzuna.in', '2026-10-24'),
+    J('j6', '2026-10-26', 'Brightpath', 'GRC Analyst', 'Chennai', '', 'ISO 27001 audits, risk assessment, policy documentation, Excel.', 'Workday'),
   ];
-  d.cv = 'Test Person\ntest.person@jobs4you.vercel.app · +91 90000 00000 · Hyderabad\n\nEDUCATION\nB.Tech CSE (Cyber Security), Deccan Institute of Technology, 2022–2026\n\nPROJECTS\nHome SOC lab, Zero Trust cloud storage, Phishing URL checker\n\nSKILLS\nNmap, Wireshark, Burp Suite, Wazuh, Python, Bash, SQL, Linux\n\nCERTIFICATIONS\nCEH, Google Cybersecurity Certificate';
+  d.jobs[0].status = 'Saved';
+  d.cv = 'Test Person\ntest.person@jobs4you.vercel.app · +91 90000 00000 · Hyderabad\n\nEDUCATION\nB.Tech CSE (Cyber Security), Deccan Institute of Technology, 2022–2026\n\nPROJECTS\nHome SOC lab, Zero Trust cloud storage, Phishing URL checker\n\nSKILLS\nSIEM (Splunk, Wazuh), incident response, log analysis, Nmap, Wireshark, Burp Suite, Metasploit, OWASP Top 10, AWS IAM basics, Python, Bash, SQL, Linux\n\nCERTIFICATIONS\nCEH, Google Cybersecurity Certificate';
+  const skills = mySkills(d);
+  d.jobs.forEach(j => { const m = matchScore(j, skills, d.settings.keywords, d.settings.prefs.roles); Object.assign(j, { score: m.score, fit: Math.max(1, Math.round(m.score / 20)), matched: m.matched, missing: m.missing, skill_gap: m.missing[0] || 'None', why: m.matched.length ? `On your CV: ${m.matched.slice(0, 4).join(', ')}.` : '' }); });
   d.log = [{ at: '2026-10-28T15:00:00Z', msg: 'Update: 2 application updates, 3 new jobs' }];
   d.lastRunAt = '2026-10-28T15:00:00Z';
   return d;

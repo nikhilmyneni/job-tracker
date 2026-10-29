@@ -83,6 +83,14 @@ document.addEventListener('click', (e) => {
 });
 window.addEventListener('popstate', () => render());
 
+// ---------- scores ----------
+const scoreOf = (job) => {
+  const m = C.matchScore(job, C.mySkills(ctx.data), ctx.data.settings.keywords, ctx.data.settings.prefs.roles);
+  return { score: m.score, fit: Math.max(1, Math.round(m.score / 20)), matched: m.matched.slice(0, 12), missing: m.missing.slice(0, 8), skill_gap: m.missing[0] || 'None' };
+};
+/** After your skills or keywords change, every match is scored again. */
+function rescore() { ctx.data.jobs.forEach(j => Object.assign(j, scoreOf(j))); }
+
 // ---------- the built-in AI ----------
 /** Calls /api/ai (the built-in AI) with your Google token, so only signed-in users can use it. */
 async function sharedAi(task, prompt, json) {
@@ -95,6 +103,14 @@ async function sharedAi(task, prompt, json) {
   if (res.status === 401) { showReconnect(true); throw new G.NeedSignIn(j.error || 'Sign in again.'); }
   if (!res.ok) throw new AiError(j.error || `Built-in AI error ${res.status}`, res.status >= 500);
   return j.result;
+}
+
+/** Adzuna search through /api/adzuna. Errors that mean "stop for now" (not set up, used up) carry stop: true. */
+async function adzunaSearch(what, where) {
+  const res = await fetch(`/api/adzuna?what=${encodeURIComponent(what)}&where=${encodeURIComponent(where || '')}`, { headers: { Authorization: 'Bearer ' + G.accessToken() } });
+  const j = await res.json().catch(() => ({}));
+  if (!res.ok) { const e = new Error(j.error || `error ${res.status}`); e.stop = res.status === 503 || res.status === 429 || res.status === 401; throw e; }
+  return j.results || [];
 }
 
 // ---------- saving ----------
@@ -120,9 +136,11 @@ Object.assign(ctx.act, {
     await persist(); render(true);
   },
   async saveCv(text, file) {
+    const changed = String(text || '') !== ctx.data.cv;
     if (file && !DEMO) ctx.data.cvFile = await guarded(() => G.saveCvFile(file, ctx.data.cvFile && ctx.data.cvFile.id));
     else if (file) ctx.data.cvFile = { id: 'demo', name: file.name, mime: file.type, size: file.size, at: new Date().toISOString() };
     ctx.data.cv = String(text || '').slice(0, C.MAX_CV);
+    if (changed) rescore();
     await persist(); render(true);
   },
   async downloadCv() {
@@ -148,6 +166,36 @@ Object.assign(ctx.act, {
     downloadBlob(new Blob([JSON.stringify(file, null, 2)], { type: 'application/json' }), file.meta.exportSettings.filename + '.json');
     job.resumefold_at = new Date().toISOString();
     await persist();
+  },
+  /** The job matches screen: filters and your keywords are saved with your settings. */
+  async saveMatchView(view, keywords, minMatch) {
+    const s = ctx.data.settings;
+    s.matchView = Object.assign({}, s.matchView, view);
+    if (keywords) s.keywords = keywords;
+    if (minMatch != null) s.minMatch = minMatch;
+    ctx.data.settings = C.normalizeSettings(s);
+    rescore();
+    await persist(); render(true);
+  },
+  /** A job's full description (fetched once, kept with the job), and its score again with it. */
+  async loadJobDetails(job) {
+    if (job.jd || DEMO) return job;
+    const text = await jobDescription(job);
+    if (text && text !== job.details) {
+      job.jd = C.clip(text, 8000);
+      Object.assign(job, scoreOf(job));
+      await persist();
+    }
+    return job;
+  },
+  /** Your skills, as matching sees them: the CV's, plus ones you add, minus ones you remove. */
+  async saveSkills(list) {
+    const fromCv = C.termsIn(ctx.data.cv);
+    const want = new Set(list.map(x => x.toLowerCase()));
+    ctx.data.skillsAdded = list.filter(x => ![...fromCv].some(c => c.toLowerCase() === x.toLowerCase()));
+    ctx.data.skillsRemoved = [...fromCv].filter(c => !want.has(c.toLowerCase()));
+    rescore();
+    await persist(); render(true);
   },
   async setJobStatus(job, status) {
     job.status = status;
@@ -246,7 +294,7 @@ async function updateNow() {
     try {
       if (DEMO) { for (const [t, f] of [['Reading your application emails…', 0.3], ['Sorting emails 1–20 of 20…', 0.7], ['Checking company job boards…', 0.9]]) { syncBanner(true, null, t, f); await sleep(600); } toast('Demo sync done. Sign in to run it on your own Gmail.'); return; }
       const before = new Set(ctx.data.jobs.map(j => j.id));
-      const out = await guarded(() => runUpdate(ctx.data, ctx.me.email, (t, f) => syncBanner(true, null, t, f), () => render(true), { gmail: G.gmailConnected() }));
+      const out = await guarded(() => runUpdate(ctx.data, ctx.me.email, (t, f) => syncBanner(true, null, t, f), () => render(true), { gmail: G.gmailConnected(), adzuna: adzunaSearch }));
       await persist();
       render(true);
       if (!first) notifySync(ctx.data.settings, out.result, ctx.data.jobs.filter(j => !before.has(j.id)));

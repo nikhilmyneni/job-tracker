@@ -6,7 +6,8 @@ HTML/CSS/ES modules, no build step), hosted free on Vercel (root directory `web`
 Google. The page talks straight to Gmail (read-only), to a hidden Drive **appDataFolder** file where
 all their data lives, and to public company job boards. The AI is **built in**: users never add keys.
 The only server code is small Vercel functions in `web/api/` (free plan): `ai.js` (the built-in AI, using
-the owner's free Groq + Gemini keys from environment variables) and `workday.js` (a job source without CORS).
+the owner's free Groq + Gemini keys from environment variables), `adzuna.js` (Adzuna India job search, key on
+the server) and `workday.js` (a job source without CORS). `_auth.js` is their shared signed-in check and daily allowance.
 
 - `/`: the landing page (`index.html`, readable by search engines).
 - `/app`, `/app/matches`, `/app/tailor[/<jobId>]`, `/app/profile`, `/app/settings`: the app
@@ -38,10 +39,11 @@ and counts toward the 100-user cap. Without Gmail, users add applications by han
 - **Resume honesty.** Resumes use only facts from the user's CV text. Never invent experience,
   employers, numbers, skills, tools or certifications. The CV → ResumeFold conversion copies facts
   without rewriting, and goes through `cleanResumeFold`.
-- **Rules first, AI second.** If the built-in AI is down, over today's allowance or not set up, sorting falls
-  back to `ruleClassify` and setup still reads the CV with `profileFromCv`; job scoring and the CV conversion
-  pause, with a note. `api/ai.js` only serves signed-in users (token audience = our client id), only the
-  tasks classify/extract/score/cv, prompts ≤ 40k characters, `AI_DAILY_LIMIT` calls per user per day.
+- **Rules first, AI second.** Matching never needs the AI: `matchScore` is a weighted keyword overlap (title ×2,
+  your keywords ×1.5, a fifth from the title's fit with your roles) over `SKILL_VOCAB` + aliases, your skills
+  (`mySkills`: CV skills + added − removed) and your keywords. If the AI is down, over today's allowance or not set
+  up, sorting falls back to `ruleClassify`; only reading job-alert emails and the ResumeFold conversion pause. `api/ai.js` only serves signed-in users (token audience = our client id), only the
+  tasks classify/extract/cv, prompts ≤ 40k characters, `AI_DAILY_LIMIT` calls per user per day.
 - **Untrusted text** (emails, AI output, CV, job boards) goes into the DOM with `h()` / `textContent` only, never `innerHTML`.
 - **Never commit personal data** (CVs, keys, real emails, screenshots) to the repo or tests.
 - **Job sources:** only official public APIs and the user's own alert emails. No scraping of sites whose terms forbid it.
@@ -64,10 +66,12 @@ and counts toward the 100-user cap. Without Gmail, users add applications by han
 - `config.js` (public OAuth client id), `sw.js` (caches only our own files; `npm run check` fails if
   a `js/` file is missing from `SHELL`), `manifest.webmanifest`, `icon.svg`, `vercel.json` (rewrites, headers),
   `package.json` (`type: module` for the functions), `robots.txt`, `sitemap.xml`.
-- `api/ai.js`: the built-in AI (see the constraints). `api/workday.js`: reads a company's public Workday board
+- `api/ai.js`: the built-in AI (see the constraints). `api/adzuna.js`: Adzuna search (`what`, `where`), cached 30 min,
+  per-user daily limit; listings must show "Jobs by Adzuna". `api/_auth.js`: shared token check and allowance. `api/workday.js`: reads a company's public Workday board
   (Workday has no CORS). Host, site and path are validated.
 - `js/core.js`: **pure** logic: constants, settings and prefs, the data shape, Gmail body decoding,
-  the classifier, applications, job prompts and `pickJobs`, job boards (`parseCareerUrl`,
+  the classifier, applications, job prompts, matching (`termsIn`, `mySkills`, `matchScore`, `pickByScore`,
+  `filterJobs`), CV sections (`cvSections`), job boards (`parseCareerUrl`,
   `listingsFromBoard`, `matchesPrefs`, `boardCandidates`), the ResumeFold hand-off
   (`resumeFoldPrompt`, `cleanResumeFold`, `resumeFoldFor`), and the dashboard numbers.
 - `js/sources.js`: fetches job boards and full job descriptions. `js/docx.js`: **pure** ZIP + DOCX → text.
@@ -78,7 +82,7 @@ and counts toward the 100-user cap. Without Gmail, users add applications by han
 - `js/app.js`: boot, routing, sync, actions. Screens: `view-applications.js` (+ `view-board.js`: board, timeline, edit dialog), `view-matches.js`,
   `view-tailor.js`, `view-settings.js` (Profile and Settings). `onboarding.js`: the wizard plus the shared
   field blocks. `ui.js`: `h()`, `busy`, `holdButton`, `setLabel`, `icon`, `pageHead`, chips, dialogs. `demo.js`.
-- `tests/`: Node tests: `core`, `files` (PDF lines), `notify`, `api` (the AI function, with fetch faked). `npm test` and `npm run check` must pass before any push.
+- `tests/`: Node tests: `core`, `match`, `files` (PDF lines), `notify`, `api` and `adzuna` (the functions, with fetch faked). `npm test` and `npm run check` must pass before any push.
 - `scripts/serve.js` (local server on :5173, with the /app rewrites and /api functions), `scripts/check.js`.
 - `docs/SETUP.md`: users and owner (Google Cloud + Vercel). Keep it in sync with behaviour changes. `docs/ROADMAP.md`: ideas.
 
@@ -86,15 +90,18 @@ and counts toward the 100-user cap. Without Gmail, users add applications by han
 `{version: 2, settings, applications[], jobs[], seen[] (≤5000), log[] (newest first, ≤300), cv, cvFile, cvFold, cvFoldHash, review[] (≤50), reviewDone[], lastRunAt, gmailRunAt}`.
 `gmailRunAt` is when Gmail was last read (so connecting it later still looks back `sinceDays`).
 - `settings`: onboarded, name, city, prefs {roles[], level, jobType, paidOnly, minPay,
-  locations[], relocate, avoid[]}, jobsPerUpdate, autoUpdateHours, sinceDays, notify, companies[{ats, slug, name, host?, site?}].
+  locations[], relocate, avoid[]}, jobsPerUpdate, autoUpdateHours, sinceDays, notify, keywords[], minMatch (0–90),
+  matchView {location, experience, internships, hideApplied}, companies[{ats, slug, name, host?, site?}].
   To add a setting, update `defaultSettings` + `normalizeSettings`
   (+ `prefsText` if the scorer should use it), the block in `onboarding.js`, and the docs.
 - **Application:** id, company, role, channel, applied_on, status, furthest, last_update,
   next_step, next_at (`YYYY-MM-DD[THH:MM]`), next_kind (interview/deadline), round, email_link, posting_link,
   history[{on, status, by: email/you/quiet}] (≤30), key (`company|role` lowercased). `nextLabel()` makes the card pill.
 - **review:** emails that look like an application update but couldn't be matched ("N emails need a look"); `addReview()`.
-- **Job:** id, found_on, fit, company, role, location, pay, why, skill_gap, apply_by, link,
-  details, status (New/Saved/Applied/Skipped/Expired), key, source, ref (board + id, for the full description), resumefold_at.
+- **Job:** id, found_on, posted, score (0–100), fit (score/20), matched[], missing[], company, role, location, pay, why,
+  skill_gap, apply_by, link, details, jd (full description, fetched when opened), status (New/Saved/Applied/Skipped/Expired),
+  key, source, ref (board + id, for the full description), resumefold_at.
+- `skillsAdded[]`, `skillsRemoved[]`: your edits to the skills read from the CV (Profile).
 - `cvFold`: the CV as ResumeFold's Resume JSON, made once per CV (`cvFoldHash`).
 - **Statuses:** Applied, Screening, Interview, Offer, Rejected, Withdrawn, Ghosted (shown as `STATUS_LABEL`: Screening = "Assessment",
   Ghosted = "No reply"). Board columns are `BOARD`. Furthest stage never moves backwards.

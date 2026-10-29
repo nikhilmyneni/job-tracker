@@ -79,3 +79,27 @@ export async function jobDescription(job) {
   return fallback;
 }
 
+
+/**
+ * Adzuna's India listings through our /api/adzuna function. search(what, where) does the signed-in call.
+ * One search per target role (up to 3), in your first preferred city. Results are credited to Adzuna on screen.
+ */
+export async function fetchAdzuna(search, roles, places, report) {
+  const where = (places || []).find(p => !/^(remote|anywhere in india)$/i.test(p)) || '';
+  const out = [], notes = [], seen = new Set();
+  for (const what of (roles || []).slice(0, 3)) {
+    report(`Searching Adzuna for ${what}…`);
+    try {
+      (await search(what, where)).forEach(x => {
+        if (seen.has(x.id)) return;
+        seen.add(x.id);
+        out.push({ id: 'adzuna:' + x.id, company: x.company || 'Company not named', role: x.title, location: x.location, details: [x.contract, x.description].filter(Boolean).join(' · '),
+          link: x.link, posted: x.posted, pay: x.salary, source: 'Adzuna', remote: /remote/i.test(x.location + ' ' + x.title) });
+      });
+    } catch (e) {
+      notes.push(`Adzuna: ${e.message}`);
+      if (e.stop) break; // not set up, or today's searches used up
+    }
+  }
+  return { listings: out, notes };
+}

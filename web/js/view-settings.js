@@ -1,5 +1,6 @@
 /** Profile and CV (who you are and what you want) and Settings (routine, job sources, notifications, your data). */
-import { h, busy, pageHead, holdButton, fmtDateTime } from './ui.js';
+import { h, busy, pageHead, holdButton, fmtDateTime, chipInput, toast, errText } from './ui.js';
+import { mySkills, cvSections, SKILL_VOCAB } from './core.js';
 import { youBlock, wantBlock, whereBlock, avoidBlock, routineBlock, cvBlock, companiesBlock } from './onboarding.js';
 import { downloadBlob } from './files.js';
 import { notifySupported, notifyAllowed } from './notify.js';
@@ -32,7 +33,10 @@ export function renderProfile(ctx, root) {
   root.replaceChildren(pageHead('Profile and CV', 'Used to score openings and to tailor resumes'),
     h('div', { class: 'cols' },
       panel('About you and the jobs you want', '', ...blocks.map(b => b.el), saveBar('Save preferences', (d) => blocks.forEach(b => b.collect(d)), ctx)),
-      panel('Your CV', 'Your default CV. Resumes are only ever built from this text.', cv.el, h('div', { class: 'save-bar' }, saveCv, cvStatus))));
+      h('div', { class: 'stack-lg' },
+        skillsPanel(ctx),
+        panel('Your CV', 'Your default CV. Resumes are only ever built from this text.', cv.el, h('div', { class: 'save-bar' }, saveCv, cvStatus)),
+        sectionsPanel(data.cv))));
 }
 
 export function renderSettings(ctx, root) {
@@ -67,4 +71,24 @@ function notifyPanel(ctx) {
   return panel('Notifications', notifySupported()
     ? (on ? 'On. You’ll get one when an application changes status or new matches arrive, while Job Hunter is open.' : 'Get one when an application changes status or new matches arrive, while Job Hunter is open (a tab, or the installed app).')
     : 'This browser can’t show notifications.', notifySupported() ? h('div', { class: 'save-bar' }, btn, status) : '');
+}
+
+/** The skills matching uses: read from your CV; add ones it missed, remove ones that aren't really yours. */
+function skillsPanel(ctx) {
+  let t;
+  const chips = chipInput(mySkills(ctx.data), { placeholder: '+ add a skill', label: 'Your skills', max: 60,
+    search: (q, have) => { const x = q.trim().toLowerCase(); return x ? SKILL_VOCAB.filter(v => v.toLowerCase().includes(x) && !have.some(hv => hv.toLowerCase() === v.toLowerCase())).slice(0, 8) : []; },
+    onChange: (list) => { clearTimeout(t); t = setTimeout(() => ctx.act.saveSkills(list).catch(e => toast(errText(e), true)), 600); } });
+  return panel('Your skills', 'Read from your CV and used to score every opening. Add any it missed; remove any that aren’t really yours.', chips.el);
+}
+
+/** What was read under each heading of the CV, so you can see it was understood. */
+function sectionsPanel(cv) {
+  const sec = cvSections(cv);
+  const names = { summary: 'Summary', education: 'Education', experience: 'Experience', projects: 'Projects', skills: 'Skills', certifications: 'Certifications', leadership: 'Leadership and activities' };
+  const found = Object.keys(names).filter(k => sec[k].length);
+  if (!cv) return '';
+  return panel('What we read from your CV', found.length ? 'Each heading we found, with what’s under it.' : 'No headings found. Headings like Education, Projects and Skills help.',
+    ...found.map(k => h('details', { class: 'cv-sec' }, h('summary', {}, names[k], h('span', { class: 'col-count' }, sec[k].length)),
+      h('ul', {}, ...sec[k].slice(0, 30).map(l => h('li', {}, l))))));
 }
