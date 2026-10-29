@@ -48,7 +48,8 @@ export async function runUpdate(data, me, report, refresh = () => {}, { gmail = 
 async function newMessages(q, max, me, seen, idPrefix, bodyLen, onThread) {
   const ids = await G.searchThreads(q, max);
   let got = 0;
-  const threads = await G.pool(ids, 8, async (id) => { const t = await G.getThread(id); onThread(++got, ids.length); return t; });
+  // 4 at a time: Gmail limits reads per user per minute, and google.js slows down further when it says so.
+  const threads = await G.pool(ids, 4, async (id) => { const t = await G.getThread(id); onThread(++got, ids.length); return t; });
   const out = [];
   const mine = String(me || '').toLowerCase();
   threads.forEach(t => (t.messages || []).forEach(m => {

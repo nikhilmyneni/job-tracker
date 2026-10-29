@@ -54,7 +54,8 @@ and counts toward the 100-user cap. Without Gmail, users add applications by han
   needs a click, because popups need a user gesture. `G.preload()` loads GIS early for the same reason.
 - Syncs only happen while the page is open: on sign-in (unless the last one was under 10 minutes
   ago), every `autoUpdateHours` while open, or **Sync now**. `navigator.locks` keeps it to one tab.
-- Gmail API: `threads.list` + `threads.get` (`format=full`), 8 at a time. Keep per-run work bounded
+- Gmail API: `threads.list` + `threads.get` (`format=full`), 4 at a time. Gmail limits reads per user per minute:
+  on a 429 or a 403 rate/quota error, `gfetch` waits (Retry-After, else 8/15/30/60 s) and retries, and the sync bar says so. Keep per-run work bounded
   (`MAX_THREADS`, `MAX_ALERT_THREADS`, `MAX_BOARD_CANDIDATES`; AI batches of 20, two at a time,
   applied oldest first so the dashboard fills in as it goes).
 - AI free tiers change often. Don't hard-code "the best" model: defaults are in `PROVIDERS` and can be
@@ -81,7 +82,7 @@ and counts toward the 100-user cap. Without Gmail, users add applications by han
 - `js/app.js`: boot, routing, sync, actions. Screens: `view-applications.js` (+ `view-board.js`: board, timeline, edit dialog), `view-matches.js`,
   `view-tailor.js`, `view-settings.js` (Profile and Settings). `onboarding.js`: the wizard plus the shared
   field blocks. `ui.js`: `h()`, `busy`, `holdButton`, `setLabel`, `icon`, `pageHead`, chips, dialogs. `demo.js`.
-- `tests/`: Node tests: `core`, `match`, `files` (PDF lines), `notify`, `api` (the AI function, with fetch faked). `npm test` and `npm run check` must pass before any push.
+- `tests/`: Node tests: `core`, `match`, `files` (PDF lines), `notify`, `api` (the AI function) and `google` (rate-limit retries), with fetch faked. `npm test` and `npm run check` must pass before any push.
 - `scripts/serve.js` (local server on :5173, with the /app rewrites and /api functions), `scripts/check.js`.
 - `docs/SETUP.md`: users and owner (Google Cloud + Vercel). Keep it in sync with behaviour changes. `docs/ROADMAP.md`: ideas.
 

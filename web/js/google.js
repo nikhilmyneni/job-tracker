@@ -108,17 +108,32 @@ export async function signOut() {
   if (t) { try { (await gis()).revoke(t, () => {}); } catch (e) {} }
 }
 
+// When Google says "too many requests" (Gmail allows only so much per user per minute), wait and try again.
+const BACKOFF_S = [8, 15, 30, 60];
+let onSlowDown = null;
+/** fn(seconds) is told when a request waits because Google asked us to slow down (for the sync bar). */
+export function whenSlowedDown(fn) { onSlowDown = fn; }
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
 /** fetch with the token. A 401 or an expired token means the user has to click Continue again. */
 async function gfetch(url, opts = {}) {
-  if (!signedIn()) throw new NeedSignIn('Your Google session ended. Click Continue to sign in again.');
-  const res = await fetch(url, Object.assign({}, opts, { headers: Object.assign({ Authorization: 'Bearer ' + token }, opts.headers || {}) }));
-  if (res.status === 401) { token = ''; remember(); throw new NeedSignIn('Your Google session ended. Click Continue to sign in again.'); }
-  if (!res.ok) {
-    let msg = '';
-    try { const j = await res.json(); msg = (j.error && j.error.message) || ''; } catch (e) {}
+  for (let attempt = 0; ; attempt++) {
+    if (!signedIn()) throw new NeedSignIn('Your Google session ended. Click Continue to sign in again.');
+    const res = await fetch(url, Object.assign({}, opts, { headers: Object.assign({ Authorization: 'Bearer ' + token }, opts.headers || {}) }));
+    if (res.status === 401) { token = ''; remember(); throw new NeedSignIn('Your Google session ended. Click Continue to sign in again.'); }
+    if (res.ok) return res;
+    let msg = '', reason = '';
+    try { const j = await res.json(); msg = (j.error && j.error.message) || ''; reason = ((j.error && j.error.errors) || []).map(e => e.reason).join(' '); } catch (e) {}
+    const limited = res.status === 429 || (res.status === 403 && /rate ?limit|quota/i.test(msg + ' ' + reason));
+    if (limited && attempt < BACKOFF_S.length) {
+      const wait = Math.min(90, Number(res.headers.get('Retry-After')) || BACKOFF_S[attempt]);
+      if (onSlowDown) onSlowDown(wait);
+      await sleep(wait * 1000);
+      continue;
+    }
+    if (limited) throw new Error('Gmail is limiting how fast emails can be read right now. Wait a few minutes, then click Sync now.');
     throw new Error(`Google error ${res.status}${msg ? ': ' + msg : ''}`);
   }
-  return res;
 }
 const gjson = async (url, opts) => (await gfetch(url, opts)).json();
 

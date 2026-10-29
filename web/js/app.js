@@ -273,7 +273,7 @@ function syncBanner(on, title, detail, frac) {
   if (!on) return;
   if (title) $('sync-title').textContent = title;
   $('sync-detail').textContent = detail || '';
-  $('sync-fill').style.transform = `scaleX(${frac == null ? 0.08 : Math.max(0.04, Math.min(1, frac))})`;
+  if (frac != null) $('sync-fill').style.transform = `scaleX(${Math.max(0.04, Math.min(1, frac))})`;
 }
 
 /** Sync now (also used for the automatic sync). One tab at a time. */
@@ -371,6 +371,7 @@ async function boot() {
   }
   G.preload();
   useSharedAi(sharedAi);
+  G.whenSlowedDown((secs) => { if (!$('sync').hidden) syncBanner(true, null, `Gmail asked us to slow down. Carrying on in ${secs}s…`); });
   const btn = $('signin-btn');
   btn.addEventListener('click', () => signInFlow(btn));
   if (!GOOGLE_CLIENT_ID) {
