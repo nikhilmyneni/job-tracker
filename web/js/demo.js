@@ -1,27 +1,17 @@
 /** Made-up sample data for ?demo. No real people, no real emails. */
 import { emptyData, normalizeSettings } from './core.js';
 
-export const DEMO_ME = { email: 'demo@example.com', name: 'Test Person', picture: '' };
+export const DEMO_ME = { email: 'demo@jobs4you.vercel.app', name: 'Test Person', picture: '' };
 
-const RESUME = {
-  name: 'Test Person', headline: 'Security Analyst · SIEM, network security, incident triage',
-  contact: ['test.person@example.com', '+91 90000 00000', 'Hyderabad', 'linkedin.com/in/example'],
-  summary: 'Cyber security graduate with hands-on SIEM and network-monitoring projects. Comfortable with log analysis, Nmap and Wireshark, and writing clear incident notes. Looking for a fresher SOC analyst role.',
-  skills: [
-    { group: 'Security', items: ['SIEM basics', 'Log analysis', 'Vulnerability scanning', 'Incident triage'] },
-    { group: 'Tools', items: ['Nmap', 'Wireshark', 'Burp Suite', 'Wazuh'] },
-    { group: 'Languages', items: ['Python', 'Bash', 'SQL'] },
-    { group: 'Platforms', items: ['Linux', 'Windows Server', 'AWS (basics)'] },
-  ],
-  experience: [{ title: 'Security Intern', org: 'Example Labs', dates: 'May–Jul 2025', bullets: ['Reviewed firewall and VPN logs daily and flagged unusual logins to the team lead.', 'Ran weekly Nmap scans on the lab network and tracked open ports in a shared sheet.'] }],
-  projects: [
-    { name: 'Home SOC lab', tech: 'Wazuh, Sysmon, Kali', dates: '2025', bullets: ['Built a small SIEM lab with three endpoints and wrote detection rules for brute-force logins.', 'Documented each alert with steps to reproduce and respond.'] },
-    { name: 'Zero Trust cloud storage', tech: 'Node.js, FastAPI, MongoDB', dates: '2026', bullets: ['Risk-scored each login from IP, device and time; risky logins needed OTP.', 'Added per-device sessions so blocking one device did not log out others.'] },
-    { name: 'Phishing URL checker', tech: 'Python, scikit-learn', dates: '2024', bullets: ['Trained a classifier on public URL datasets and wrapped it in a small CLI.'] },
-  ],
-  education: [{ school: 'Example University', degree: 'B.Tech, Computer Science (Cyber Security)', dates: '2022–2026', details: 'CGPA 8.1/10' }],
-  certifications: ['Certified Ethical Hacker (CEH)', 'Google Cybersecurity Certificate'],
-  extras: ['Runs the college security club CTF practice sessions'],
+/** The sample CV in ResumeFold's format (what the AI would produce from d.cv). */
+export const DEMO_FOLD = {
+  contact: { fullName: 'Test Person', headline: 'Cyber security graduate', email: 'test.person@jobs4you.vercel.app', phone: '+91 90000 00000', location: 'Hyderabad', website: '', linkedin: '', github: '' },
+  summary: 'Cyber security graduate with hands-on SIEM and network-monitoring projects.',
+  experience: [{ id: 'exp1', title: 'Security Intern', company: 'Lumen Labs', location: 'Hyderabad', start: '2025-05', end: '2025-07', current: false, bullets: ['Reviewed firewall and VPN logs daily and flagged unusual logins to the team lead.'] }],
+  education: [{ id: 'edu1', school: 'Deccan Institute of Technology', degree: 'B.Tech', field: 'Computer Science (Cyber Security)', location: '', start: '2022-08', end: '2026-05', gpa: '8.1/10', details: [] }],
+  skills: [{ id: 'skill1', category: 'Tools', items: ['Nmap', 'Wireshark', 'Burp Suite', 'Wazuh'] }, { id: 'skill2', category: 'Languages', items: ['Python', 'Bash', 'SQL'] }],
+  projects: [{ id: 'proj1', name: 'Home SOC lab', link: '', tech: 'Wazuh, Sysmon, Kali', start: '2025-01', end: '', bullets: ['Built a small SIEM lab with three endpoints and wrote detection rules for brute-force logins.'] }],
+  certifications: [{ id: 'cert1', name: 'Certified Ethical Hacker (CEH)', issuer: 'EC-Council', date: '', link: '' }],
 };
 
 export function demoData(fresh) {
@@ -31,9 +21,10 @@ export function demoData(fresh) {
     onboarded: true, name: 'Test Person', city: 'Hyderabad',
     prefs: { roles: ['SOC Analyst', 'Security Analyst', 'Cloud Security'], level: 'fresher', jobType: 'both', paidOnly: true, minPay: '3 LPA', locations: ['Hyderabad', 'Remote', 'Bengaluru'], relocate: true, avoid: ['Sales', 'Telecalling'] },
     ai: [{ provider: 'gemini', key: 'demo-key-1234', model: 'gemini-flash-latest' }],
+    companies: [{ ats: 'greenhouse', slug: 'zscaler', name: 'Zscaler' }, { ats: 'lever', slug: 'cred', name: 'CRED' }],
   });
   const rows = [
-    ['Acme Security', 'SOC Analyst', 'LinkedIn', '2026-09-01', 'Interview', 'Interview', 'Prepare for the technical round'],
+    ['Kavach Security', 'SOC Analyst', 'LinkedIn', '2026-09-01', 'Interview', 'Interview', 'Prepare for the technical round'],
     ['Beta Labs', 'Security Intern', 'Naukri', '2026-09-03', 'Rejected', 'Screening', ''],
     ['Gamma Tech', '', 'Company site', '2026-09-20', 'Applied', 'Applied', ''],
     ['Delta Bank', 'Cyber Analyst', 'LinkedIn', '2026-10-10', 'Offer', 'Offer', ''],
@@ -45,14 +36,13 @@ export function demoData(fresh) {
     id: 'a' + i, company, role, channel, applied_on, status, furthest, last_update: applied_on, next_step, email_link: '', key: (company + '|' + role).toLowerCase(),
   }));
   d.jobs = [
-    { id: 'j1', found_on: '2026-10-28', fit: 5, company: 'Kestrel Systems', role: 'Security Analyst (Fresher)', location: 'Hyderabad', pay: '₹4–5 LPA', why: 'Your SIEM project and CEH match the SOC duties.', skill_gap: 'Splunk', apply_by: '2026-11-05', link: 'https://example.com/job', details: 'Monitor alerts, triage incidents.', status: 'New', key: 'kestrel systems|security analyst (fresher)', resume: RESUME, resume_at: '2026-10-28T15:00:00Z' },
-    { id: 'j2', found_on: '2026-10-28', fit: 4, company: 'Nimbus', role: 'Cloud Security Intern', location: 'Remote', pay: '₹20k/month', why: 'AWS coursework and IAM lab fit.', skill_gap: 'Terraform', apply_by: '', link: 'https://example.com/job2', details: 'IAM reviews, cloud posture checks.', status: 'New', key: 'nimbus|cloud security intern' },
-    { id: 'j3', found_on: '2026-10-27', fit: 3, company: 'Pragati Infotech', role: 'Network Security Trainee', location: 'Bengaluru', pay: '', why: 'Networking basics from your degree.', skill_gap: 'Firewall config', apply_by: '', link: '', details: '', status: 'New', key: 'pragati infotech|network security trainee' },
+    { id: 'j1', found_on: '2026-10-28', fit: 5, company: 'Kestrel Systems', role: 'Security Analyst (Fresher)', location: 'Hyderabad', pay: '₹4–5 LPA', why: 'Your SIEM project and CEH match the SOC duties.', skill_gap: 'Splunk', apply_by: '2026-11-05', link: '', details: 'Monitor alerts, triage incidents.', status: 'New', key: 'kestrel systems|security analyst (fresher)', source: 'Greenhouse' },
+    { id: 'j2', found_on: '2026-10-28', fit: 4, company: 'Nimbus', role: 'Cloud Security Intern', location: 'Remote', pay: '₹20k/month', why: 'AWS coursework and IAM lab fit.', skill_gap: 'Terraform', apply_by: '', link: '', details: 'IAM reviews, cloud posture checks.', status: 'New', key: 'nimbus|cloud security intern', source: 'Lever' },
+    { id: 'j3', found_on: '2026-10-27', fit: 3, company: 'Pragati Infotech', role: 'Network Security Trainee', location: 'Bengaluru', pay: '', why: 'Networking basics from your degree.', skill_gap: 'Firewall config', apply_by: '', link: '', details: '', status: 'New', key: 'pragati infotech|network security trainee', source: 'Job alert email' },
   ];
-  d.cv = 'Test Person\ntest.person@example.com · +91 90000 00000 · Hyderabad\n\nEDUCATION\nB.Tech CSE (Cyber Security), Example University, 2022–2026\n\nPROJECTS\nHome SOC lab, Zero Trust cloud storage, Phishing URL checker\n\nSKILLS\nNmap, Wireshark, Burp Suite, Wazuh, Python, Bash, SQL, Linux\n\nCERTIFICATIONS\nCEH, Google Cybersecurity Certificate';
+  d.cv = 'Test Person\ntest.person@jobs4you.vercel.app · +91 90000 00000 · Hyderabad\n\nEDUCATION\nB.Tech CSE (Cyber Security), Deccan Institute of Technology, 2022–2026\n\nPROJECTS\nHome SOC lab, Zero Trust cloud storage, Phishing URL checker\n\nSKILLS\nNmap, Wireshark, Burp Suite, Wazuh, Python, Bash, SQL, Linux\n\nCERTIFICATIONS\nCEH, Google Cybersecurity Certificate';
   d.log = [{ at: '2026-10-28T15:00:00Z', msg: 'Update: 2 application updates, 3 new jobs' }];
   d.lastRunAt = '2026-10-28T15:00:00Z';
   return d;
 }
 
-export const DEMO_RESUME = RESUME;

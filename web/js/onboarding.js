@@ -1,15 +1,16 @@
 /**
  * First-run setup: one question per step. The same field blocks make up the Preferences part of Settings.
  */
-import { h, chipInput, segmented, busy, errText, extLink } from './ui.js';
-import { LEVELS, JOB_TYPES, JOBS_PER_UPDATE, AUTO_UPDATE_HOURS, SINCE_DAYS } from './core.js';
+import { h, chipInput, segmented, busy, errText, extLink, icon } from './ui.js';
+import { LEVELS, JOB_TYPES, JOBS_PER_UPDATE, AUTO_UPDATE_HOURS, SINCE_DAYS, ATS, COMPANY_SUGGESTIONS, companyKey, normalizeCompany, parseCareerUrl } from './core.js';
+import { fetchBoard } from './sources.js';
 import { PROVIDERS, listModels } from './ai.js';
 import { readCvFile, CV_ACCEPT } from './files.js';
 
 const ROLE_SUGGESTIONS = ['SOC Analyst', 'Security Analyst', 'Penetration Tester', 'Cloud Security', 'Security Engineer', 'GRC Analyst', 'Network Engineer', 'Software Developer'];
 const PLACE_SUGGESTIONS = ['Hyderabad', 'Bengaluru', 'Pune', 'Chennai', 'Mumbai', 'Delhi NCR', 'Remote', 'Anywhere in India'];
 const AVOID_SUGGESTIONS = ['Sales', 'Telecalling', 'Unpaid internships', 'Training institutes that charge fees', 'Night shifts', 'Bond / service agreement'];
-const autoLabel = (n) => (n ? `Every ${n} hours` : 'Only when I click');
+const autoLabel = (n) => (n ? `On sign-in, then every ${n}h` : 'Only when I click');
 
 const field = (label, control, hint) => h('label', { class: 'field' }, h('span', { class: 'field-lbl' }, label), control, hint ? h('span', { class: 'hint' }, hint) : '');
 const check = (checked, text) => { const i = h('input', { type: 'checkbox', checked }); return { el: h('label', { class: 'inline' }, i, ' ', text), get: () => i.checked }; };
@@ -61,7 +62,7 @@ export function routineBlock(s) {
   return {
     el: h('div', { class: 'stack' },
       field('New job matches per update', jobs.el),
-      field('Update automatically when I open the app', auto.el, 'Job Hunter has no server, so it updates while it’s open.'),
+      field('Sync with Gmail', auto.el, 'Syncs as soon as you sign in, then again while the page stays open.'),
       field('First time, look back through Gmail for', since.el)),
     collect: (d) => { d.jobsPerUpdate = Number(jobs.get()); d.autoUpdateHours = Number(auto.get()); d.sinceDays = Number(since.get()); },
   };
@@ -89,7 +90,7 @@ export function cvBlock(cvText, cvFile, opts = {}) {
   const existing = cvFile ? h('span', { class: 'hint' }, `Saved file: ${cvFile.name}`, opts.onDownload ? [' · ', h('button', { type: 'button', class: 'link', onclick: opts.onDownload }, 'Download')] : '') : '';
   return {
     el: h('div', { class: 'stack' },
-      h('div', { class: 'upload' }, h('label', { class: 'btn ghost', for: input.id }, 'Upload CV (PDF, Word or .txt)'), input, existing),
+      h('div', { class: 'upload' }, h('label', { class: 'btn btn-quiet', for: input.id }, 'Upload CV (PDF, Word or .txt)'), input, existing),
       status, ta,
       h('p', { class: 'hint' }, 'Resumes are written only from this text. Nothing is made up.')),
     collect: (d) => { d.cv = ta.value.trim(); d.cvUpload = picked || d.cvUpload || null; },
@@ -113,7 +114,7 @@ export function aiBlock(aiList, opts = {}) {
     };
     setModels([]);
     const status = h('span', { class: 'status' });
-    const test = h('button', { type: 'button', class: 'btn ghost small', onclick: () => busy(test, 'Testing…', async () => {
+    const test = h('button', { type: 'button', class: 'btn btn-quiet btn-sm', onclick: () => busy(test, 'Testing…', async () => {
       const k = key.value.trim() || (saved && saved.key);
       if (!k) throw new Error('Paste a key first.');
       const models = opts.demo ? [info.defaultModel || 'demo-model:free', 'demo-model-2'] : await listModels(p, k);
@@ -126,7 +127,7 @@ export function aiBlock(aiList, opts = {}) {
     return {
       p, first,
       el: h('div', { class: 'ai-row' + (p === 'gemini' ? ' recommended' : '') },
-        h('div', { class: 'ai-head' }, h('b', {}, info.label), p === 'gemini' ? h('span', { class: 'pill s-New' }, 'Recommended') : '',
+        h('div', { class: 'ai-head' }, h('b', {}, info.label), p === 'gemini' ? h('span', { class: 'pill pill-blue' }, 'Recommended') : '',
           h('label', { class: 'inline small' }, first, ' Try first')),
         h('p', { class: 'hint' }, info.note, ' Get a key: ', extLink(info.keyUrl, info.keyHint)),
         h('div', { class: 'ai-ctl' }, key, model, test), status, remove),
@@ -147,15 +148,52 @@ export function aiBlock(aiList, opts = {}) {
   };
 }
 
+/**
+ * Companies to follow: paste a careers-page link (Greenhouse, Lever, Ashby, SmartRecruiters, Workable, Recruitee
+ * or Workday), or pick a suggestion. Each one is checked before it's added. The list fades at its edge when it scrolls.
+ */
+export function companiesBlock(list, opts = {}) {
+  let cur = (list || []).slice();
+  const box = h('ul', { class: 'fade-list', 'aria-label': 'Companies you follow' });
+  const sugg = h('div', { class: 'chip-sugg' });
+  const input = h('input', { type: 'url', placeholder: 'Paste a careers page link, e.g. jobs.lever.co/cred', 'aria-label': 'Careers page link', 'aria-describedby': 'co-hint' });
+  const status = h('div', { class: 'status', role: 'status' });
+  const draw = () => {
+    box.replaceChildren(...(cur.length ? cur.map((c, i) => h('li', {},
+      h('span', { class: 'ini' }, c.name.charAt(0).toUpperCase()), h('span', { class: 'co-name' }, h('b', {}, c.name), h('small', {}, ATS[c.ats])),
+      h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Stop following ' + c.name, onclick: () => { cur.splice(i, 1); draw(); } }, icon('x')))) :
+      [h('li', { class: 'muted' }, 'None yet. Job-alert emails still bring in matches.')]));
+    const have = new Set(cur.map(companyKey));
+    sugg.replaceChildren(...COMPANY_SUGGESTIONS.filter(c => !have.has(companyKey(c))).map(c =>
+      h('button', { type: 'button', class: 'chip-add', onclick: () => { cur.push(normalizeCompany(c)); draw(); } }, '+ ' + c.name)));
+  };
+  const add = h('button', { type: 'button', class: 'btn btn-quiet', onclick: () => busy(add, 'Checking…', async () => {
+    const c = parseCareerUrl(input.value);
+    if (!c) throw new Error('That doesn’t look like a link.');
+    if (c.unsupported) throw new Error(`${c.host} can’t be read from here. Use the company’s Greenhouse, Lever, Ashby, SmartRecruiters, Workable, Recruitee or Workday page, or turn on job alerts for it.`);
+    if (cur.some(x => companyKey(x) === companyKey(c))) throw new Error(`${c.name} is already on your list.`);
+    const n = opts.demo ? 12 : (await fetchBoard(c, [])).length;
+    cur.push(c); input.value = ''; draw();
+    status.className = 'status ok'; status.textContent = `Added ${c.name}: ${n} open job${n === 1 ? '' : 's'} right now.`;
+  }, status) }, 'Add');
+  draw();
+  return {
+    el: h('div', { class: 'stack' }, box, h('div', { class: 'inline-form' }, input, add),
+      h('p', { class: 'hint', id: 'co-hint' }, 'Works with Greenhouse, Lever, Ashby, SmartRecruiters, Workable, Recruitee and Workday career pages.'), status, sugg),
+    collect: (d) => { d.companies = cur.slice(); },
+  };
+}
+
 // ---------- the wizard ----------
 const STEPS = [
-  { title: 'Hi! Let’s set up your job search', intro: 'Seven quick questions. You can change any answer later in Settings.', block: (d) => youBlock(d) },
-  { title: 'What are you looking for?', block: (d) => wantBlock(d) },
-  { title: 'Where would you like to work?', block: (d) => whereBlock(d) },
-  { title: 'Anything to skip?', intro: 'Matching jobs with these are left out.', block: (d) => avoidBlock(d) },
-  { title: 'Add your CV', intro: 'Upload your CV or paste its text. It’s used to score jobs and write tailored resumes.', block: (d) => cvBlock(d.cv, d.cvFile) },
-  { title: 'Turn on AI (free, optional)', intro: 'With a free AI key, Job Hunter sorts your emails more accurately, finds job matches and writes tailored resumes. Without one, it still tracks applications using keyword rules.', block: (d, ctx) => aiBlock(d.ai, { demo: ctx.demo, id: 'wiz' }) },
-  { title: 'Your routine', block: (d) => routineBlock(d) },
+  { id: 'you', title: 'Hi! Let’s set up your job hunt', intro: 'A few quick questions. You can change any answer later.', block: (d) => youBlock(d) },
+  { id: 'want', title: 'What are you looking for?', block: (d) => wantBlock(d) },
+  { id: 'where', title: 'Where would you like to work?', block: (d) => whereBlock(d) },
+  { id: 'avoid', title: 'Anything to skip?', intro: 'Openings with these are left out.', block: (d) => avoidBlock(d) },
+  { id: 'cv', title: 'Add your CV', intro: 'Upload your CV or paste its text. It’s used to score openings and tailor resumes.', block: (d) => cvBlock(d.cv, d.cvFile) },
+  { id: 'companies', title: 'Companies to follow (optional)', intro: 'Job Hunter already reads your job-alert emails from LinkedIn, Naukri, Indeed, Internshala, Wellfound and foundit. Add company career pages for more.', block: (d, ctx) => companiesBlock(d.companies, { demo: ctx.demo }) },
+  { id: 'ai', title: 'Turn on AI (free, optional)', intro: 'With a free AI key, Job Hunter sorts your emails more accurately, scores openings and reads your CV. Without one, it still tracks applications using keyword rules.', block: (d, ctx) => aiBlock(d.ai, { demo: ctx.demo, id: 'wiz' }) },
+  { id: 'routine', title: 'Your routine', block: (d) => routineBlock(d) },
 ];
 
 /** Renders the wizard into root. ctx.finish(draft) saves and starts the app. */
@@ -167,19 +205,19 @@ export function runWizard(root, ctx) {
   const total = STEPS.length + 1;
   const draw = () => {
     const done = i === STEPS.length;
-    const back = h('button', { type: 'button', class: 'btn ghost', disabled: i === 0, onclick: () => { if (cur) cur.collect(d); i--; draw(); } }, 'Back');
+    const back = h('button', { type: 'button', class: 'btn btn-quiet', disabled: i === 0, onclick: () => { if (cur) cur.collect(d); i--; draw(); } }, 'Back');
     const status = h('div', { class: 'status', role: 'status' });
     let body, next;
     if (!done) {
       const st = STEPS[i];
       cur = st.block(d, ctx);
       body = [h('h1', { class: 'wiz-title', tabIndex: -1 }, st.title), st.intro ? h('p', { class: 'wiz-intro' }, st.intro) : '', cur.el];
-      next = h('button', { type: 'button', class: 'btn', onclick: () => {
+      next = h('button', { type: 'button', class: 'btn btn-primary', onclick: () => {
         cur.collect(d);
-        if (i === 1 && !d.prefs.roles.length) { status.className = 'status err'; status.textContent = 'Add at least one role you want.'; return; }
+        if (st.id === 'want' && !d.prefs.roles.length) { status.className = 'status err'; status.textContent = 'Add at least one role you want.'; return; }
         i++; draw();
-      } }, i === 5 && !(d.ai || []).length ? 'Skip for now' : 'Next');
-      if (i === 5) cur.el.addEventListener('input', () => { next.textContent = 'Next'; });
+      } }, (st.id === 'ai' && !(d.ai || []).length) || (st.id === 'companies' && !(d.companies || []).length) ? 'Skip for now' : 'Next');
+      if (st.id === 'ai' || st.id === 'companies') cur.el.addEventListener('click', () => { next.textContent = 'Next'; });
     } else {
       cur = null;
       const p = d.prefs;
@@ -190,10 +228,11 @@ export function runWizard(root, ctx) {
           row('Pay', (p.paidOnly ? 'Paid only' : 'Unpaid OK') + (p.minPay ? `, at least ${p.minPay}` : '')),
           row('Locations', p.locations.join(', ') + (p.relocate ? ' · open to relocating' : '')),
           row('Skip', p.avoid.join(', ')), row('CV', d.cv ? `${d.cv.length.toLocaleString()} characters${d.cvUpload ? ' · ' + d.cvUpload.name : ''}` : 'Not added yet'),
+          row('Companies', (d.companies || []).map(c => c.name).join(', ') || 'None yet'),
           row('AI', (d.ai || []).length ? d.ai.map(a => PROVIDERS[a.provider].label).join(' → ') : 'Off (keyword rules only)'),
           row('Updates', `${autoLabel(d.autoUpdateHours)} · ${d.jobsPerUpdate || 'no'} new jobs each time`)),
-        h('p', { class: 'hint' }, 'Start reads your Gmail (read-only) from the last ' + d.sinceDays + ' days. That can take a minute.')];
-      next = h('button', { type: 'button', class: 'btn', onclick: () => busy(next, 'Saving…', () => ctx.finish(d), status) }, 'Start');
+        h('p', { class: 'hint' }, 'Start reads your Gmail (read-only) from the last ' + d.sinceDays + ' days. Applications appear as they’re sorted.')];
+      next = h('button', { type: 'button', class: 'btn btn-primary', onclick: () => busy(next, 'Saving…', () => ctx.finish(d), status) }, 'Start');
     }
     root.replaceChildren(h('div', { class: 'wizard' },
       h('div', { class: 'progress', role: 'progressbar', 'aria-valuemin': 1, 'aria-valuemax': total, 'aria-valuenow': i + 1 },

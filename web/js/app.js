@@ -1,57 +1,73 @@
-/** Job Hunter: boot, sign-in, and every action that changes your data (then saves it to your Drive). */
+/** Job Hunter app: sign-in, routing between screens, syncing, and every action that changes your data (then saves it to your Drive). */
 import { GOOGLE_CLIENT_ID } from '../config.js';
 import * as C from './core.js';
 import * as G from './google.js';
-import { runUpdate, writeResume } from './update.js';
-import { hasAi, PROVIDERS } from './ai.js';
-import { $, h, busy, toast, errText, fmtDateTime } from './ui.js';
-import { renderDashboard, wireDashboard } from './dashboard.js';
+import { runUpdate, cvForResumeFold } from './update.js';
+import { jobDescription } from './sources.js';
+import { hasAi } from './ai.js';
+import { $, h, busy, toast, errText, setLabel } from './ui.js';
 import { runWizard } from './onboarding.js';
-import { renderSettings } from './settings.js';
-import { openResume, wireResumeView } from './resume-view.js';
-import { demoData, DEMO_ME, DEMO_RESUME } from './demo.js';
+import { renderApplications } from './view-applications.js';
+import { renderMatches } from './view-matches.js';
+import { renderTailor } from './view-tailor.js';
+import { renderProfile, renderSettings } from './view-settings.js';
+import { demoData, DEMO_ME, DEMO_FOLD } from './demo.js';
 import { downloadBlob } from './files.js';
 
 const params = new URLSearchParams(location.search);
 const DEMO = params.has('demo');
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
-const ctx = {
-  data: null, me: null, demo: DEMO, act: {},
-  canWrite: () => hasAi(ctx.data.settings) && !!ctx.data.cv,
-};
+const ctx = { data: null, me: null, demo: DEMO, act: {} };
 
-// ---------- screens ----------
+// ---------- screens and routes ----------
 function show(name) {
-  ['signin', 'wizard', 'app'].forEach(n => { $('screen-' + n).hidden = n !== name; });
-  $('topbar-app').hidden = name !== 'app';
-  $('account').hidden = !ctx.me;
-  if (ctx.me) { $('account-name').textContent = ctx.me.email; $('account-initial').textContent = (ctx.me.name || ctx.me.email || '?').trim().charAt(0).toUpperCase(); }
+  ['signin', 'loading', 'wizard', 'app'].forEach(n => { $('screen-' + n).hidden = n !== name; });
+  if (ctx.me) $('account-name').textContent = ctx.me.email;
 }
 
-function showTab(tab) {
-  $('view-dashboard').hidden = tab !== 'dashboard';
-  $('view-settings').hidden = tab !== 'settings';
-  document.querySelectorAll('[data-tab]').forEach(b => b.setAttribute('aria-current', String(b.dataset.tab === tab)));
-  if (tab === 'settings') renderSettings(ctx);
-  window.scrollTo(0, 0);
+const ROUTES = [
+  [/^\/app\/?$/, 'applications', renderApplications],
+  [/^\/app\/matches\/?$/, 'matches', renderMatches],
+  [/^\/app\/tailor(?:\/([^/]+))?\/?$/, 'tailor', renderTailor],
+  [/^\/app\/profile\/?$/, 'profile', renderProfile],
+  [/^\/app\/settings\/?$/, 'settings', renderSettings],
+];
+function route() {
+  const path = location.pathname;
+  return ROUTES.find(([re]) => re.test(path)) || ROUTES[0];
 }
 
-function renderMeta() {
-  const s = ctx.data.settings, d = ctx.data;
-  const ai = C.normalizeSettings(s).ai.map(a => PROVIDERS[a.provider].label);
-  $('meta').textContent = [
-    d.lastRunAt ? `Last update ${fmtDateTime(d.lastRunAt)}` : 'Not updated yet',
-    s.autoUpdateHours ? `updates by itself every ${s.autoUpdateHours}h while open` : 'updates when you click',
-    ai.length ? `AI: ${ai.join(' → ')}` : 'AI off (keyword rules)',
-  ].join(' · ');
+/** Draws the current screen. keepFocus: a background redraw (sync progress) shouldn't move focus. */
+function render(keepFocus) {
+  if (!ctx.data || $('screen-app').hidden) return;
+  const [re, name, fn] = route();
+  const m = location.pathname.match(re);
+  document.querySelectorAll('[data-route]').forEach(a => { if (a.dataset.route === name) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
+  const n = ctx.data.jobs.filter(j => j.status === 'New').length;
+  $('nav-matches').hidden = !n; $('nav-matches').textContent = n;
+  $('nav-matches').setAttribute('aria-label', `${n} new`);
+  const root = $('content');
+  const scroll = window.scrollY;
+  fn(ctx, root, m && m[1] ? decodeURIComponent(m[1]) : undefined);
+  document.title = (root.querySelector('h1') ? root.querySelector('h1').textContent + ' – ' : '') + 'Job Hunter';
+  if (keepFocus) window.scrollTo(0, scroll);
+  else { const t = root.querySelector('h1'); if (t) t.focus({ preventScroll: true }); window.scrollTo(0, 0); }
 }
 
-function renderAll() {
-  renderMeta();
-  renderDashboard(ctx);
-  if (!$('view-settings').hidden) renderSettings(ctx);
+function go(href) {
+  const u = new URL(href, location.href);
+  if (DEMO) u.searchParams.set('demo', params.get('demo') || '');
+  history.pushState(null, '', u.pathname + u.search);
+  render();
 }
+document.addEventListener('click', (e) => {
+  const a = e.target.closest('a[href^="/app"]');
+  if (!a || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || a.target === '_blank') return;
+  if (!ctx.data || $('screen-app').hidden) return;
+  e.preventDefault(); go(a.getAttribute('href'));
+});
+window.addEventListener('popstate', () => render());
 
 // ---------- saving ----------
 function showReconnect(on) { $('reconnect').hidden = !on; }
@@ -73,13 +89,13 @@ const today = () => C.ymd(new Date());
 Object.assign(ctx.act, {
   async saveSettings(d) {
     ctx.data.settings = C.normalizeSettings(Object.assign({}, d, { onboarded: true }));
-    await persist(); renderAll();
+    await persist(); render(true);
   },
   async saveCv(text, file) {
     if (file && !DEMO) ctx.data.cvFile = await guarded(() => G.saveCvFile(file, ctx.data.cvFile && ctx.data.cvFile.id));
     else if (file) ctx.data.cvFile = { id: 'demo', name: file.name, mime: file.type, size: file.size, at: new Date().toISOString() };
     ctx.data.cv = String(text || '').slice(0, C.MAX_CV);
-    await persist(); renderAll();
+    await persist(); render(true);
   },
   async downloadCv() {
     const f = ctx.data.cvFile;
@@ -87,65 +103,87 @@ Object.assign(ctx.act, {
     if (DEMO) { toast('Demo: no real file to download.'); return; }
     try { downloadBlob(await guarded(() => G.downloadFile(f.id)), f.name); } catch (e) { toast(errText(e), true); }
   },
-  async getResume(job, regenerate, report) {
-    if (job.resume && !regenerate) return job.resume;
-    let r;
-    if (DEMO) { await sleep(900); r = DEMO_RESUME; } else {
-      if (!hasAi(ctx.data.settings)) throw new Error('Add a free AI key in Settings first.');
-      if (!ctx.data.cv) throw new Error('Add your CV in Settings first.');
-      r = await writeResume(ctx.data, job, report);
+  /** Your CV as ResumeFold's JSON with this job filled in, downloaded so you can import it there. */
+  async exportResumeFold(job) {
+    const d = ctx.data, hash = C.textHash(d.cv);
+    if (!d.cv) throw new Error('Add your CV in Profile and CV first.');
+    let base = d.cvFold && d.cvFoldHash === hash ? d.cvFold : null;
+    if (!base) {
+      if (DEMO) { await sleep(700); base = DEMO_FOLD; } else {
+        if (!hasAi(d.settings)) throw new Error('Reading your CV into ResumeFold’s format needs a free AI key (Settings). Or upload your CV straight into ResumeFold.');
+        base = await cvForResumeFold(d);
+      }
+      d.cvFold = base; d.cvFoldHash = hash;
     }
-    job.resume = r; job.resume_at = new Date().toISOString();
-    await persist(); renderDashboard(ctx);
-    return r;
+    const desc = DEMO ? job.details : await jobDescription(job);
+    const file = C.resumeFoldFor(base, job, desc);
+    downloadBlob(new Blob([JSON.stringify(file, null, 2)], { type: 'application/json' }), file.meta.exportSettings.filename + '.json');
+    job.resumefold_at = new Date().toISOString();
+    await persist();
   },
-  openResume(job) { return openResume(job, ctx); },
-  async saveResumeEdits(job, r) { job.resume = r; job.resume_at = new Date().toISOString(); await persist(); },
   async setJobStatus(job, status) {
     job.status = status;
-    if (status === 'Applied') C.upsertApplication(ctx.data.applications, { company: job.company, role: job.role, stage: 'Applied', date: today(), channel: 'Recommended job', link: job.link }, C.newResult());
-    await persist(); renderAll();
+    if (status === 'Applied') C.upsertApplication(ctx.data.applications, { company: job.company, role: job.role, stage: 'Applied', date: today(), channel: job.source || 'Recommended job', link: job.link }, C.newResult());
+    await persist(); render(true);
   },
   async addApplication(a) {
-    if (!String(a.company || '').trim()) throw new Error('Company is needed.');
+    if (!String(a.company || '').trim()) throw new Error('Add the company name.');
     C.upsertApplication(ctx.data.applications, { company: a.company, role: a.role, stage: 'Applied', date: C.isYmd(a.applied_on) ? a.applied_on : today(), channel: String(a.channel || '').trim().slice(0, 40) || 'Company site' }, C.newResult());
-    await persist(); renderAll();
+    await persist(); render(true);
   },
-  async setApplicationStatus(app, status) { C.setApplicationStatus(app, status, today()); await persist(); renderAll(); },
-  async deleteApplication(app) { ctx.data.applications = ctx.data.applications.filter(a => a !== app); await persist(); renderAll(); },
+  async setApplicationStatus(app, status) { C.setApplicationStatus(app, status, today()); await persist(); render(true); },
+  async deleteApplication(app) { ctx.data.applications = ctx.data.applications.filter(a => a !== app); await persist(); render(true); },
   async deleteAll() {
     if (DEMO) { toast('Demo: nothing to delete.'); return; }
     await guarded(() => G.deleteAllData());
     await G.signOut();
-    location.reload();
+    location.href = '/';
   },
+  updateNow: () => updateNow(),
 });
 
-/** Update now (also used for the automatic update). One tab at a time. */
+// ---------- syncing ----------
+function syncBanner(on, title, detail, frac) {
+  const el = $('sync');
+  el.hidden = !on;
+  if (!on) return;
+  if (title) $('sync-title').textContent = title;
+  $('sync-detail').textContent = detail || '';
+  $('sync-fill').style.transform = `scaleX(${frac == null ? 0.08 : Math.max(0.04, Math.min(1, frac))})`;
+}
+
+/** Sync now (also used for the automatic sync). One tab at a time. */
 async function updateNow() {
-  const btn = $('update-now'), status = $('update-status');
+  const btn = () => $('sync-now');
   const work = async () => {
-    btn.disabled = true; status.className = 'status'; status.hidden = false;
+    if (btn()) { btn().disabled = true; setLabel(btn().lastChild, 'Syncing…'); }
+    const first = !ctx.data.lastRunAt;
+    syncBanner(true, first ? 'Loading your applications' : 'Syncing with Gmail', 'Starting…', 0.03);
     try {
-      if (DEMO) { status.textContent = 'Demo: reading Gmail…'; await sleep(900); status.textContent = 'Demo update done. Sign in to run it on your own Gmail.'; return; }
-      const out = await guarded(() => runUpdate(ctx.data, ctx.me.email, (t) => { status.textContent = t; }));
+      if (DEMO) { for (const [t, f] of [['Reading your application emails…', 0.3], ['Sorting emails 1–20 of 20…', 0.7], ['Checking company job boards…', 0.9]]) { syncBanner(true, null, t, f); await sleep(600); } toast('Demo sync done. Sign in to run it on your own Gmail.'); return; }
+      const out = await guarded(() => runUpdate(ctx.data, ctx.me.email, (t, f) => syncBanner(true, null, t, f), () => render(true)));
       await persist();
-      renderAll();
-      status.className = 'status ok';
-      status.textContent = `Done. ${out.result.appsChanged.length} application update${out.result.appsChanged.length === 1 ? '' : 's'}, ${out.result.jobsNew.length} new job${out.result.jobsNew.length === 1 ? '' : 's'}.` +
-        (out.result.notes.length ? ' ' + out.result.notes[out.result.notes.length - 1] : '');
+      render(true);
+      const n = out.result.appsChanged.length, j = out.result.jobsNew.length;
+      toast(`Synced. ${n} application update${n === 1 ? '' : 's'}, ${j} new match${j === 1 ? '' : 'es'}.` + (out.result.notes.length ? ' ' + out.result.notes[out.result.notes.length - 1] : ''));
     } catch (e) {
-      status.className = 'status err'; status.textContent = 'Update stopped: ' + errText(e);
+      toast('Sync stopped: ' + errText(e), true);
       C.addLog(ctx.data, 'Error: ' + errText(e));
-    } finally { btn.disabled = false; }
+    } finally {
+      syncBanner(false);
+      if (btn()) { btn().disabled = false; setLabel(btn().lastChild, 'Sync now'); }
+    }
   };
   if (navigator.locks) {
-    await navigator.locks.request('job-tracker-update', { ifAvailable: true }, async (lock) => {
-      if (!lock) { status.hidden = false; status.textContent = 'An update is already running in another tab.'; return; }
+    await navigator.locks.request('job-hunter-sync', { ifAvailable: true }, async (lock) => {
+      if (!lock) { toast('A sync is already running in another tab.'); return; }
       await work();
     });
   } else await work();
 }
+
+// While the page stays open, sync again every autoUpdateHours.
+setInterval(() => { if (!DEMO && ctx.data && G.signedIn() && C.autoUpdateDue(ctx.data, new Date(), false)) updateNow(); }, 5 * 60e3);
 
 // ---------- start ----------
 async function enter() {
@@ -154,8 +192,8 @@ async function enter() {
     runWizard($('screen-wizard'), { data: ctx.data, me: ctx.me, demo: DEMO, finish: finishWizard });
     return;
   }
-  show('app'); showTab('dashboard'); renderAll();
-  if (!DEMO && C.autoUpdateDue(ctx.data, new Date())) updateNow();
+  show('app'); render();
+  if (!DEMO && C.autoUpdateDue(ctx.data, new Date(), true)) updateNow();
 }
 
 async function finishWizard(d) {
@@ -166,34 +204,35 @@ async function finishWizard(d) {
   ctx.data.cv = String(cv || '').slice(0, C.MAX_CV);
   C.addLog(ctx.data, 'Set up Job Hunter');
   await persist();
-  show('app'); showTab('dashboard'); renderAll();
+  show('app'); render();
   if (!DEMO) updateNow();
+}
+
+async function loadAccount() {
+  const me = await G.profile();
+  if (ctx.me && ctx.data && me.email !== ctx.me.email) { location.reload(); return false; } // switched account: start clean
+  ctx.me = me;
+  if (!ctx.data) ctx.data = C.normalizeData(await G.loadData());
+  return true;
 }
 
 async function signInFlow(btn) {
   const status = $('signin-status');
   await busy(btn, 'Signing in…', async () => {
     await G.signIn(GOOGLE_CLIENT_ID, { hint: ctx.me && ctx.me.email });
-    const me = await G.profile();
-    if (ctx.me && ctx.data && me.email !== ctx.me.email) { location.reload(); return; } // switched account: start clean
-    ctx.me = me;
-    if (!ctx.data) ctx.data = C.normalizeData(await G.loadData());
+    if (!await loadAccount()) return;
     showReconnect(false);
-    await enter();
+    if ($('screen-app').hidden) await enter();
   }, status);
 }
 
-function boot() {
-  wireDashboard(ctx);
-  wireResumeView();
-  document.querySelectorAll('[data-tab]').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
-  $('update-now').addEventListener('click', updateNow);
+async function boot() {
   $('reconnect-btn').addEventListener('click', () => signInFlow($('reconnect-btn')));
   $('sign-out').addEventListener('click', async () => {
-    if (DEMO) { location.href = location.pathname; return; }
-    await G.signOut(); location.reload();
+    if (DEMO) { location.href = '/'; return; }
+    await G.signOut(); location.href = '/';
   });
-  if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('./sw.js').catch(() => {});
+  if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('/sw.js').catch(() => {});
 
   if (DEMO) {
     $('demo-banner').hidden = false;
@@ -202,15 +241,20 @@ function boot() {
     enter();
     return;
   }
-  show('signin');
   G.preload();
   const btn = $('signin-btn');
+  btn.addEventListener('click', () => signInFlow(btn));
   if (!GOOGLE_CLIENT_ID) {
-    btn.disabled = true;
+    show('signin'); btn.disabled = true;
     $('signin-status').textContent = 'Not set up yet: the site owner needs to add a Google OAuth client ID in config.js (see docs/SETUP.md).';
     return;
   }
-  btn.addEventListener('click', () => signInFlow(btn));
+  // Reloaded within the hour: pick the session back up without a popup.
+  if (G.resumeSession()) {
+    show('loading');
+    try { if (await loadAccount()) { await enter(); return; } } catch (e) { /* fall through to the sign-in screen */ }
+  }
+  show('signin');
 }
 
 boot();

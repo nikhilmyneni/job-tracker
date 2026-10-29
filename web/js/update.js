@@ -1,23 +1,30 @@
 /**
- * One update: read new application emails and job alerts from Gmail, classify, match jobs.
+ * One update: read new application emails and job alerts from Gmail, check company job boards, classify, match jobs.
  * Changes `data` in place; the caller saves it.
  */
 import * as C from './core.js';
 import * as G from './google.js';
 import { ask, hasAi } from './ai.js';
+import { fetchBoards } from './sources.js';
 
-/** report(text) shows progress on the page. */
-export async function runUpdate(data, me, report) {
+const SORT_BATCH = 20, SORT_PARALLEL = 2;
+
+/**
+ * report(text, fraction) shows progress on the page (fraction 0–1, or undefined when unknown).
+ * refresh() redraws the dashboard, so applications appear while the rest is still being sorted.
+ */
+export async function runUpdate(data, me, report, refresh = () => {}) {
   const s = data.settings;
   const result = C.newResult();
   const seen = new Set(data.seen);
   const now = new Date();
   const after = data.lastRunAt ? new Date(new Date(data.lastRunAt).getTime() - 2 * 864e5) : new Date(now.getTime() - s.sinceDays * 864e5);
   const afterStr = C.gmailDate(after);
-  const note = (t) => { result.notes.push(t); report(t); };
+  const note = (t) => { result.notes.push(t); };
 
-  await syncApplications(data, me, afterStr, seen, result, report, note);
+  await syncApplications(data, me, afterStr, seen, result, report, note, refresh);
   C.markGhosted(data.applications, now, result);
+  refresh();
 
   if (s.jobsPerUpdate > 0) {
     if (!hasAi(s)) result.notes.push('Job matching is off. Add a free AI key in Settings to turn it on.');
@@ -35,10 +42,11 @@ export async function runUpdate(data, me, report) {
   return { result, text };
 }
 
-/** New messages from the threads matching q, skipping ones already seen and ones the user sent. */
-async function newMessages(q, max, me, seen, idPrefix, bodyLen) {
+/** New messages from the threads matching q, oldest first, skipping ones already seen and ones the user sent. */
+async function newMessages(q, max, me, seen, idPrefix, bodyLen, onThread) {
   const ids = await G.searchThreads(q, max);
-  const threads = await G.pool(ids, 4, G.getThread);
+  let got = 0;
+  const threads = await G.pool(ids, 8, async (id) => { const t = await G.getThread(id); onThread(++got, ids.length); return t; });
   const out = [];
   const mine = String(me || '').toLowerCase();
   threads.forEach(t => (t.messages || []).forEach(m => {
@@ -51,62 +59,81 @@ async function newMessages(q, max, me, seen, idPrefix, bodyLen) {
       body: C.clip(C.bodyFromPayload(m.payload) || m.snippet || '', bodyLen), link: G.threadLink(t.id, me),
     });
   }));
-  return out;
+  return out.sort((a, b) => a.date - b.date);
 }
 
-async function syncApplications(data, me, afterStr, seen, result, report, note) {
-  report('Reading application emails…');
-  const emails = await newMessages(C.appSearch(afterStr), C.MAX_THREADS, me, seen, '', 1500);
+/** One batch → application updates, by AI or (if that fails or there's no key) by keyword rules. */
+async function classifyBatch(s, batch, note, report) {
+  if (hasAi(s)) {
+    try {
+      const out = await ask(s, C.classifyPrompt(batch), true, () => {});
+      return (Array.isArray(out) ? out : []).map(u => Object.assign({ email: batch[Number(u.n)] }, u))
+        .filter(u => u.email && u.is_application_update && u.company);
+    } catch (e) {
+      note(`AI couldn't sort some emails (${e.message}). Used keyword rules for those.`);
+    }
+  }
+  return batch.map(e => Object.assign({ email: e }, C.ruleClassify(e))).filter(u => u.is_application_update);
+}
+
+async function syncApplications(data, me, afterStr, seen, result, report, note, refresh) {
+  report('Reading your application emails…', 0.02);
+  const emails = await newMessages(C.appSearch(afterStr), C.MAX_THREADS, me, seen, '', 1000,
+    (n, total) => report(`Reading your application emails… ${n} of ${total}`, 0.02 + 0.28 * n / total));
   if (!emails.length) return;
   const s = data.settings;
-  const updates = [];
-  for (let i = 0; i < emails.length; i += 12) {
-    const batch = emails.slice(i, i + 12);
-    report(`Sorting emails ${i + 1}–${i + batch.length} of ${emails.length}…`);
-    let done = false;
-    if (hasAi(s)) {
-      try {
-        const out = await ask(s, C.classifyPrompt(batch), true, report);
-        (Array.isArray(out) ? out : []).forEach(u => {
-          const e = batch[Number(u.n)];
-          if (e && u.is_application_update && u.company) updates.push(Object.assign({ email: e }, u));
-        });
-        done = true;
-      } catch (e) {
-        note(`AI couldn't sort some emails (${e.message}). Used keyword rules for those.`);
-      }
-    }
-    if (!done) batch.forEach(e => { const u = C.ruleClassify(e); if (u.is_application_update) updates.push(Object.assign({ email: e }, u)); });
+  const batches = [];
+  for (let i = 0; i < emails.length; i += SORT_BATCH) batches.push(emails.slice(i, i + SORT_BATCH));
+  // Batches run a few at a time, but are applied oldest first so a later email always wins.
+  for (let i = 0; i < batches.length; i += SORT_PARALLEL) {
+    const group = batches.slice(i, i + SORT_PARALLEL);
+    const from = i * SORT_BATCH + 1, to = Math.min(emails.length, (i + group.length) * SORT_BATCH);
+    report(`Sorting emails ${from}–${to} of ${emails.length}…`, 0.3 + 0.5 * (from - 1) / emails.length);
+    const outs = await Promise.all(group.map(b => classifyBatch(s, b, note, report)));
+    outs.flat().sort((a, b) => a.email.date - b.email.date).forEach(u => C.upsertApplication(data.applications, {
+      company: u.company, role: u.role, stage: u.stage, next_step: u.next_step,
+      date: C.ymd(u.email.date), channel: C.channelFromSender(u.email.from), link: u.email.link,
+    }, result));
+    group.flat().forEach(e => seen.add(e.id));
+    refresh();
   }
-  emails.forEach(e => seen.add(e.id));
-  updates.sort((a, b) => a.email.date - b.email.date).forEach(u => C.upsertApplication(data.applications, {
-    company: u.company, role: u.role, stage: u.stage, next_step: u.next_step,
-    date: C.ymd(u.email.date), channel: C.channelFromSender(u.email.from), link: u.email.link,
-  }, result));
 }
 
 async function findJobs(data, me, afterStr, seen, result, report, note) {
-  report('Reading job-alert emails…');
-  const alerts = await newMessages(C.alertSearch(afterStr), C.MAX_ALERT_THREADS, me, seen, 'alert:', 7000);
-  if (!alerts.length) { result.notes.push('No new job-alert emails. Turn on job alerts on LinkedIn, Naukri and Internshala for more matches.'); return; }
   const s = data.settings;
   let listings = [];
+
+  report('Reading job-alert emails…', 0.82);
+  const alerts = await newMessages(C.alertSearch(afterStr), C.MAX_ALERT_THREADS, me, seen, 'alert:', 7000, () => {});
   for (let i = 0; i < alerts.length; i += 4) {
     const batch = alerts.slice(i, i + 4);
-    report(`Finding openings in alerts ${i + 1}–${i + batch.length} of ${alerts.length}…`);
+    report(`Finding openings in job alerts ${i + 1}–${i + batch.length} of ${alerts.length}…`, 0.84);
     try {
-      const out = await ask(s, C.extractPrompt(batch), true, report);
-      if (Array.isArray(out)) listings = listings.concat(out);
+      const out = await ask(s, C.extractPrompt(batch), true, () => {});
+      if (Array.isArray(out)) listings = listings.concat(out.map(l => Object.assign({}, l, { source: 'Job alert email' })));
       batch.forEach(a => seen.add(a.id));
     } catch (e) {
       note(`AI couldn't read some job alerts (${e.message}). They'll be tried again next time.`);
     }
   }
-  const candidates = C.newCandidates(listings, data.jobs, data.applications);
+
+  if (s.companies.length) {
+    report('Checking company job boards…', 0.88);
+    const boards = await fetchBoards(s.companies, s.prefs.roles, (t) => report(t, 0.9));
+    boards.notes.forEach(note);
+    const fromBoards = C.boardCandidates(boards.listings, s.prefs, seen);
+    fromBoards.forEach(l => seen.add(l.id)); // scored once; not offered again unless it's picked
+    listings = listings.concat(fromBoards);
+  }
+  if (!alerts.length && !s.companies.length) {
+    result.notes.push('No new job-alert emails. Turn on job alerts on LinkedIn, Naukri, Internshala or Indeed, or add companies in Settings → Job sources.');
+  }
+
+  const candidates = C.newCandidates(listings, data.jobs, data.applications, 60);
   if (!candidates.length) return;
-  report(`Scoring ${candidates.length} openings against your CV…`);
+  report(`Scoring ${candidates.length} openings against your CV…`, 0.94);
   let scored;
-  try { scored = await ask(s, C.scorePrompt(data.cv, s, candidates), true, report); } catch (e) {
+  try { scored = await ask(s, C.scorePrompt(data.cv, s, candidates), true, () => {}); } catch (e) {
     note(`AI couldn't score the openings (${e.message}).`);
     return;
   }
@@ -116,9 +143,9 @@ async function findJobs(data, me, afterStr, seen, result, report, note) {
   });
 }
 
-/** A resume for one job, from the AI, built only from the CV. */
-export async function writeResume(data, job, report) {
-  const r = C.cleanResume(await ask(data.settings, C.resumePrompt(data.cv, job), true, report));
-  if (!r) throw new Error('The AI did not return a resume. Try again.');
+/** The CV as ResumeFold's Resume JSON (not tailored: ResumeFold does that). Made once per CV and kept. */
+export async function cvForResumeFold(data) {
+  const r = C.cleanResumeFold(await ask(data.settings, C.resumeFoldPrompt(data.cv), true, () => {}));
+  if (!r) throw new Error('The AI could not read your CV into ResumeFold’s format. Try again.');
   return r;
 }

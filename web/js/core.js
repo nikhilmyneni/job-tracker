@@ -18,7 +18,7 @@ export const MAX_THREADS = 80, MAX_ALERT_THREADS = 25;
 export const MAX_SEEN = 5000, MAX_LOG = 300, MAX_JOBS = 1000, MAX_CV = 20000;
 
 export const APP_QUERY = '("thank you for applying" OR "thanks for applying" OR "application received" OR "received your application" OR "your application" OR "application status" OR interview OR shortlisted OR assessment OR "online test" OR "coding test" OR unfortunately OR "not moving forward" OR "regret to inform" OR "not been selected" OR "offer letter" OR "pleased to offer" OR withdrawn) -category:promotions -category:social';
-export const ALERT_SENDERS = 'from:linkedin.com OR from:naukri.com OR from:naukri.in OR from:internshala.com OR from:indeed.com OR from:foundit.in OR from:instahyre.com OR from:wellfound.com OR from:glassdoor.com OR from:apna.co OR from:unstop.com OR from:cutshort.io OR from:hirist.tech';
+export const ALERT_SENDERS = 'from:linkedin.com OR from:naukri.com OR from:naukri.in OR from:internshala.com OR from:indeed.com OR from:foundit.in OR from:instahyre.com OR from:wellfound.com OR from:glassdoor.com OR from:apna.co OR from:unstop.com OR from:cutshort.io OR from:hirist.tech OR from:shine.com OR from:timesjobs.com OR from:monsterindia.com';
 
 export const appSearch = (afterStr) => `after:${afterStr} ${APP_QUERY} -{${ALERT_SENDERS.replace(/ OR /g, ' ')}}`;
 export const alertSearch = (afterStr) => `after:${afterStr} (${ALERT_SENDERS}) (job OR jobs OR hiring OR internship OR opening OR recommended OR matches)`;
@@ -30,6 +30,12 @@ export const pad2 = (n) => String(n).padStart(2, '0');
 export const ymd = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 /** yyyy/mm/dd for Gmail's after: search. */
 export const gmailDate = (d) => `${d.getUTCFullYear()}/${pad2(d.getUTCMonth() + 1)}/${pad2(d.getUTCDate())}`;
+/** A short, stable fingerprint of a text (to know when the CV changed). Not for security. */
+export function textHash(t) {
+  let x = 5381;
+  for (const ch of String(t || '')) x = ((x * 33) ^ ch.codePointAt(0)) >>> 0;
+  return x.toString(36) + ':' + String(t || '').length;
+}
 export const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 export const isHttpUrl = (u) => /^https?:\/\//.test(String(u || ''));
 export const isYmd = (s) => /^\d{4}-\d{2}-\d{2}$/.test(String(s || ''));
@@ -55,6 +61,7 @@ export function defaultSettings() {
     jobsPerUpdate: 5,
     autoUpdateHours: 12,
     sinceDays: 120,
+    companies: [], // company job boards to check: [{ats, slug, name, host?, site?}]
     ai: [], // [{provider: 'gemini'|'groq'|'openrouter', key, model}], tried in this order
   };
 }
@@ -87,6 +94,8 @@ export function normalizeSettings(raw) {
     jobsPerUpdate: pick(r.jobsPerUpdate, JOBS_PER_UPDATE, d.jobsPerUpdate),
     autoUpdateHours: pick(r.autoUpdateHours, AUTO_UPDATE_HOURS, d.autoUpdateHours),
     sinceDays: pick(r.sinceDays, SINCE_DAYS, d.sinceDays),
+    companies: (Array.isArray(r.companies) ? r.companies : []).map(normalizeCompany).filter(Boolean)
+      .filter((c, i, all) => all.findIndex(b => companyKey(b) === companyKey(c)) === i).slice(0, MAX_COMPANIES),
     ai: (Array.isArray(r.ai) ? r.ai : [])
       .filter(a => a && AI_PROVIDERS.indexOf(a.provider) >= 0 && typeof a.key === 'string' && a.key.trim())
       .map(a => ({ provider: a.provider, key: a.key.trim().slice(0, 300), model: str(a.model, 100, '') }))
@@ -111,7 +120,7 @@ export function prefsText(s) {
 
 // ---------- Data file ----------
 export function emptyData() {
-  return { version: 2, settings: defaultSettings(), applications: [], jobs: [], seen: [], log: [], cv: '', cvFile: null, lastRunAt: '' };
+  return { version: 2, settings: defaultSettings(), applications: [], jobs: [], seen: [], log: [], cv: '', cvFile: null, cvFold: null, cvFoldHash: '', lastRunAt: '' };
 }
 
 export function normalizeData(raw) {
@@ -127,6 +136,8 @@ export function normalizeData(raw) {
     log: arr(r.log),
     cv: typeof r.cv === 'string' ? r.cv.slice(0, MAX_CV) : d.cv,
     cvFile: r.cvFile && typeof r.cvFile === 'object' && r.cvFile.id ? r.cvFile : null,
+    cvFold: r.cvFold && typeof r.cvFold === 'object' ? r.cvFold : null,
+    cvFoldHash: typeof r.cvFoldHash === 'string' ? r.cvFoldHash : '',
     lastRunAt: typeof r.lastRunAt === 'string' ? r.lastRunAt : '',
   };
 }
@@ -143,12 +154,17 @@ export function addLog(data, msg, now) {
   data.log.unshift({ at: (now || new Date()).toISOString(), msg: String(msg) });
 }
 
-/** Whether opening the app should start an update by itself. */
-export function autoUpdateDue(data, now) {
+export const MIN_UPDATE_GAP_MIN = 10;
+/**
+ * Whether to start an update by itself. On sign-in (onOpen) it runs unless the last one was minutes ago;
+ * while the page stays open it runs again every autoUpdateHours. 0 = only when you click.
+ */
+export function autoUpdateDue(data, now, onOpen) {
   const h = data.settings.autoUpdateHours;
   if (!h || !data.settings.onboarded) return false;
   if (!data.lastRunAt) return true;
-  return now.getTime() - new Date(data.lastRunAt).getTime() >= h * 3600e3;
+  const age = now.getTime() - new Date(data.lastRunAt).getTime();
+  return age >= (onOpen ? MIN_UPDATE_GAP_MIN * 60e3 : h * 3600e3);
 }
 
 // ---------- Gmail message bodies ----------
@@ -312,8 +328,8 @@ export function extractPrompt(batch) {
     batch.map((a, j) => `### Alert ${j}\nFrom: ${a.from}\nSubject: ${a.subject}\n${a.body}`).join('\n\n');
 }
 
-/** Listings not already in jobs or applications, one per company|role, at most 40. */
-export function newCandidates(listings, jobs, apps) {
+/** Listings not already in jobs or applications, one per company|role, at most max. */
+export function newCandidates(listings, jobs, apps, max = 40) {
   const existing = new Set(jobs.map(j => j.key).concat(apps.map(a => a.key)));
   const uniq = new Map();
   (Array.isArray(listings) ? listings : []).forEach(l => {
@@ -321,7 +337,7 @@ export function newCandidates(listings, jobs, apps) {
     const key = (String(l.company).trim() + '|' + String(l.role).trim()).toLowerCase();
     if (!existing.has(key) && !uniq.has(key)) uniq.set(key, Object.assign({}, l, { key }));
   });
-  return [...uniq.values()].slice(0, 40);
+  return [...uniq.values()].slice(0, max);
 }
 
 export function scorePrompt(cv, s, candidates) {
@@ -345,106 +361,9 @@ export function pickJobs(scored, candidates, n, today) {
         location: c.location || '', pay: c.pay || '', why: x.why || '', skill_gap: x.skill_gap || 'None',
         apply_by: isYmd(x.apply_by) ? x.apply_by : '', link: isHttpUrl(c.link) ? c.link : '',
         details: clip(c.details, 400), status: 'New', key: c.key,
+        source: c.source || 'Job alert email', ref: c.ref || null,
       };
     });
-}
-
-// ---------- Resume ----------
-export function resumePrompt(cv, job) {
-  return 'Write a one-page, ATS-friendly resume for this candidate, tailored to the job below.\n' +
-    'STRICT HONESTY: use ONLY facts from the CV. Never invent experience, employers, dates, numbers, skills, tools or certifications. ' +
-    'Tailor by choosing, ordering and wording true facts toward the job, using the job\'s wording only for things the candidate really has. Leave out date of birth, nationality and photos.\n' +
-    'Return JSON: {"name":"","headline":"<target role + 2-3 true focus areas>","contact":["email","phone","city","links"...],' +
-    '"summary":"<3-4 lines>","skills":[{"group":"","items":[""]}],' +
-    '"experience":[{"title":"","org":"","dates":"","bullets":[""]}],' +
-    '"projects":[{"name":"","tech":"","dates":"","bullets":[""]}],' +
-    '"education":[{"school":"","degree":"","dates":"","details":""}],' +
-    '"certifications":[""],"extras":[""]}. Keep it to one page: at most 4 skill groups, 3 projects with up to 4 bullets each, short bullets. Empty arrays for sections the CV does not support.\n\n' +
-    `JOB: ${job.company} — ${job.role} — ${job.location || ''}\n${job.details || ''}\n\nCV:\n${clip(cv, 12000)}`;
-}
-
-/** Keeps only the fields the page draws, as plain strings and short arrays. Null when there is no name. */
-export function cleanResume(r) {
-  if (!r || typeof r !== 'object') return null;
-  const str = (v, n) => (v == null || typeof v === 'object' ? '' : String(v).trim()).slice(0, n || 300);
-  const list = (v, max, fn) => (Array.isArray(v) ? v : []).map(fn).filter(Boolean).slice(0, max);
-  const strs = (v, max, n) => list(v, max, x => str(x, n));
-  const name = str(r.name, 80);
-  if (!name) return null;
-  return {
-    name,
-    headline: str(r.headline, 160),
-    contact: strs(r.contact, 6, 120),
-    summary: str(r.summary, 700),
-    skills: list(r.skills, 4, g => {
-      const items = strs(g && g.items, 14, 40);
-      return items.length ? { group: str(g.group, 40), items } : null;
-    }),
-    experience: list(r.experience, 4, x => x && (x.title || x.org) ? { title: str(x.title, 100), org: str(x.org, 100), dates: str(x.dates, 40), bullets: strs(x.bullets, 4, 260) } : null),
-    projects: list(r.projects, 3, x => x && x.name ? { name: str(x.name, 100), tech: str(x.tech, 120), dates: str(x.dates, 40), bullets: strs(x.bullets, 4, 260) } : null),
-    education: list(r.education, 3, x => x && x.school ? { school: str(x.school, 120), degree: str(x.degree, 120), dates: str(x.dates, 40), details: str(x.details, 200) } : null),
-    certifications: strs(r.certifications, 6, 140),
-    extras: strs(r.extras, 4, 200),
-  };
-}
-
-/**
- * The resume as an ordered list of blocks, used by the on-screen sheet, the PDF and the Word file,
- * so all three show the same thing. path says where an edited block's text goes back to.
- */
-export function resumeBlocks(r) {
-  const b = [{ t: 'name', text: r.name, path: ['name'] }];
-  if (r.headline) b.push({ t: 'headline', text: r.headline, path: ['headline'] });
-  if (r.contact.length) b.push({ t: 'contact', text: r.contact.join('  •  '), path: ['contact'] });
-  const sec = (title) => b.push({ t: 'section', text: title });
-  if (r.summary) { sec('Summary'); b.push({ t: 'para', text: r.summary, path: ['summary'] }); }
-  if (r.skills.length) {
-    sec('Skills');
-    r.skills.forEach((g, i) => b.push({ t: 'skill', label: g.group, text: g.items.join(', '), path: ['skills', i] }));
-  }
-  const entries = (title, key, left, right, rest) => {
-    if (!r[key].length) return;
-    sec(title);
-    r[key].forEach((x, i) => {
-      b.push({ t: 'line', text: left(x), right: right(x), path: [key, i, 'line'] });
-      rest(x, i);
-    });
-  };
-  const bullets = (key) => (x, i) => x.bullets.forEach((t, j) => b.push({ t: 'bullet', text: t, path: [key, i, 'bullets', j] }));
-  entries('Experience', 'experience', x => x.title + (x.org ? ', ' + x.org : ''), x => x.dates, bullets('experience'));
-  entries('Projects', 'projects', x => x.name + (x.tech ? ' — ' + x.tech : ''), x => x.dates, bullets('projects'));
-  entries('Education', 'education', x => x.school, x => x.dates, (x, i) => {
-    if (x.degree) b.push({ t: 'italic', text: x.degree, path: ['education', i, 'degree'] });
-    if (x.details) b.push({ t: 'para', text: x.details, path: ['education', i, 'details'] });
-  });
-  if (r.certifications.length) { sec('Certifications'); r.certifications.forEach((t, i) => b.push({ t: 'bullet', text: t, path: ['certifications', i] })); }
-  if (r.extras.length) { sec('Activities'); r.extras.forEach((t, i) => b.push({ t: 'bullet', text: t, path: ['extras', i] })); }
-  return b;
-}
-
-/** Puts edited block text back into a copy of the resume. edits: [{path, text}] in block order. */
-export function applyResumeEdits(r, edits) {
-  const out = JSON.parse(JSON.stringify(r));
-  edits.forEach(({ path, text }) => {
-    if (!path) return;
-    const t = String(text || '').replace(/\s+/g, ' ').trim();
-    const [k, i, f, j] = path;
-    if (k === 'name' || k === 'headline' || k === 'summary') out[k] = t;
-    else if (k === 'contact') out.contact = t.split(/\s*•\s*/).filter(Boolean);
-    else if (k === 'skills') out.skills[i].items = t.split(/\s*,\s*/).filter(Boolean);
-    else if (k === 'certifications' || k === 'extras') out[k][i] = t;
-    else if (f === 'bullets') out[k][i].bullets[j] = t;
-    else if (k === 'education' && (f === 'degree' || f === 'details')) out.education[i][f] = t;
-    else if (f === 'line') {
-      const x = out[k][i];
-      if (k === 'experience') { const m = t.split(/,\s*/); x.title = m.shift() || ''; x.org = m.join(', '); }
-      else if (k === 'projects') { const m = t.split(/\s+—\s+/); x.name = m.shift() || ''; x.tech = m.join(' — '); }
-      else x.school = t;
-    }
-  });
-  ['certifications', 'extras'].forEach(k => { out[k] = out[k].filter(Boolean); });
-  ['experience', 'projects'].forEach(k => out[k].forEach(x => { x.bullets = x.bullets.filter(Boolean); }));
-  return cleanResume(out) || r;
 }
 
 // ---------- Dashboard numbers ----------
@@ -490,4 +409,262 @@ export function weekly(apps) {
     const k = d.toISOString().slice(0, 10); out.push({ week: k, n: counts.get(k) || 0 });
   }
   return out;
+}
+
+// ---------- Job boards (company career pages) ----------
+// Boards that let a browser read their public listings directly. Workday goes through our /api/workday function.
+export const ATS = {
+  greenhouse: 'Greenhouse', lever: 'Lever', ashby: 'Ashby', smartrecruiters: 'SmartRecruiters',
+  workable: 'Workable', recruitee: 'Recruitee', workday: 'Workday',
+};
+/** Ready-made companies that hire in India (boards checked Oct 2026). */
+export const COMPANY_SUGGESTIONS = [
+  { ats: 'greenhouse', slug: 'zscaler', name: 'Zscaler' },
+  { ats: 'greenhouse', slug: 'razorpaysoftwareprivatelimited', name: 'Razorpay' },
+  { ats: 'greenhouse', slug: 'groww', name: 'Groww' },
+  { ats: 'greenhouse', slug: 'druva', name: 'Druva' },
+  { ats: 'lever', slug: 'cred', name: 'CRED' },
+  { ats: 'lever', slug: 'meesho', name: 'Meesho' },
+  { ats: 'lever', slug: 'zeta', name: 'Zeta' },
+  { ats: 'ashby', slug: 'sarvam', name: 'Sarvam AI' },
+  { ats: 'workday', slug: 'nvidia', host: 'nvidia.wd5.myworkdayjobs.com', site: 'NVIDIAExternalCareerSite', name: 'NVIDIA' },
+];
+export const MAX_COMPANIES = 40, MAX_BOARD_CANDIDATES = 40;
+
+const SLUG_RE = /^[A-Za-z0-9._-]{1,80}$/;
+export const WD_HOST_RE = /^([a-z0-9-]+)\.wd\d+\.myworkdayjobs\.com$/;
+const titleCase = (s) => String(s).replace(/[-_.]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+
+export function normalizeCompany(c) {
+  if (!c || !(c.ats in ATS) || !SLUG_RE.test(String(c.slug || ''))) return null;
+  const out = { ats: c.ats, slug: String(c.slug), name: (typeof c.name === 'string' && c.name.trim().slice(0, 60)) || titleCase(c.slug) };
+  if (c.ats === 'workday') {
+    const m = WD_HOST_RE.exec(String(c.host || ''));
+    if (!m || !SLUG_RE.test(String(c.site || ''))) return null;
+    Object.assign(out, { slug: m[1], host: String(c.host), site: String(c.site) });
+  }
+  return out;
+}
+export const companyKey = (c) => `${c.ats}:${c.slug}${c.site ? ':' + c.site : ''}`.toLowerCase();
+
+/**
+ * A careers-page link → {ats, slug, name} (plus host and site for Workday).
+ * Returns {unsupported: true, host} for sites we can't read, or null when it isn't a link at all.
+ */
+export function parseCareerUrl(input) {
+  const raw = String(input || '').trim();
+  let u;
+  try { u = new URL(/^https?:\/\//i.test(raw) ? raw : 'https://' + raw); } catch (e) { return null; }
+  const host = u.hostname.toLowerCase().replace(/^www\./, '');
+  if (!host.includes('.')) return null;
+  const parts = u.pathname.split('/').filter(Boolean);
+  const first = parts[0] || '';
+  const pick = (ats, slug) => normalizeCompany({ ats, slug }) || { unsupported: true, host };
+  if (/^(job-)?boards(\.eu)?\.greenhouse\.io$/.test(host)) return pick('greenhouse', first === 'embed' ? u.searchParams.get('for') : first);
+  if (host === 'jobs.lever.co') return pick('lever', first);
+  if (host === 'jobs.ashbyhq.com') return pick('ashby', first);
+  if (host === 'careers.smartrecruiters.com' || host === 'jobs.smartrecruiters.com') return pick('smartrecruiters', first);
+  if (host === 'apply.workable.com') return pick('workable', first);
+  const rec = /^([a-z0-9-]+)\.recruitee\.com$/.exec(host);
+  if (rec) return pick('recruitee', rec[1]);
+  const wd = WD_HOST_RE.exec(host);
+  if (wd) {
+    let p = parts;
+    if (p[0] === 'wday' && p[1] === 'cxs') p = p.slice(3);
+    if (/^[a-z]{2}-[A-Z]{2}$/.test(p[0] || '')) p = p.slice(1);
+    return normalizeCompany({ ats: 'workday', slug: wd[1], host, site: p[0] }) || { unsupported: true, host };
+  }
+  return { unsupported: true, host };
+}
+
+/** The URL that lists a board's open jobs. q is only used by Workday, which searches on its side. */
+export function boardRequest(c, q) {
+  const s = encodeURIComponent(c.slug);
+  switch (c.ats) {
+    case 'greenhouse': return `https://boards-api.greenhouse.io/v1/boards/${s}/jobs`;
+    case 'lever': return `https://api.lever.co/v0/postings/${s}?mode=json`;
+    case 'ashby': return `https://api.ashbyhq.com/posting-api/job-board/${s}?includeCompensation=true`;
+    case 'smartrecruiters': return `https://api.smartrecruiters.com/v1/companies/${s}/postings?limit=100`;
+    case 'workable': return `https://apply.workable.com/api/v1/widget/accounts/${s}`;
+    case 'recruitee': return `https://${s}.recruitee.com/api/offers/`;
+    case 'workday': return `/api/workday?host=${encodeURIComponent(c.host)}&site=${encodeURIComponent(c.site)}&q=${encodeURIComponent(String(q || '').slice(0, 80))}`;
+  }
+  return '';
+}
+
+const plain = (t, n) => clip(String(t || '').replace(/\s+/g, ' ').trim(), n);
+const joinBits = (...xs) => xs.flat().filter(x => x && typeof x === 'string').join(' · ');
+
+/** A board's JSON → listings {id, company, role, location, remote, pay, link, details, source, ref}. */
+export function listingsFromBoard(c, json) {
+  const j = json || {};
+  const L = (id, role, location, link, extra = {}) => ({
+    id: `ats:${companyKey(c)}:${id}`, company: c.name, role: String(role || '').trim(), location: String(location || '').trim(),
+    remote: !!extra.remote, pay: extra.pay || '', link: isHttpUrl(link) ? link : '', details: plain(extra.details, 300),
+    source: ATS[c.ats], ref: Object.assign({ id: String(id) }, c),
+  });
+  const arr = (v) => (Array.isArray(v) ? v : []);
+  switch (c.ats) {
+    case 'greenhouse': return arr(j.jobs).map(x => L(x.id, x.title, x.location && x.location.name, x.absolute_url));
+    case 'lever': return arr(json).map(x => {
+      const cat = x.categories || {};
+      return L(x.id, x.text, joinBits(arr(cat.allLocations).length ? cat.allLocations.join(', ') : cat.location, x.country === 'IN' ? 'India' : ''), x.hostedUrl,
+        { remote: x.workplaceType === 'remote', details: joinBits(cat.commitment, cat.team, x.descriptionPlain) });
+    });
+    case 'ashby': return arr(j.jobs).filter(x => x.isListed !== false).map(x => {
+      const country = x.address && x.address.postalAddress && x.address.postalAddress.addressCountry;
+      const comp = x.compensation && x.compensation.compensationTierSummary;
+      return L(x.id, x.title, joinBits([x.location, ...arr(x.secondaryLocations).map(s => s.location)].filter(Boolean).join(', '), country), x.jobUrl,
+        { remote: !!x.isRemote || x.workplaceType === 'Remote', pay: comp || '', details: joinBits(x.employmentType, x.department, x.descriptionPlain) });
+    });
+    case 'smartrecruiters': return arr(j.content).map(x => {
+      const loc = x.location || {};
+      return L(x.id, x.name, loc.fullLocation || joinBits(loc.city, loc.country === 'in' ? 'India' : loc.country), `https://jobs.smartrecruiters.com/${encodeURIComponent(c.slug)}/${encodeURIComponent(x.id)}`,
+        { remote: !!loc.remote, details: joinBits(x.typeOfEmployment && x.typeOfEmployment.label, x.experienceLevel && x.experienceLevel.label) });
+    });
+    case 'workable': return arr(j.jobs).map(x => L(x.shortcode, x.title, joinBits(x.city, x.country), x.url || x.shortlink,
+      { remote: !!x.telecommuting, details: joinBits(x.employment_type, x.department, x.experience) }));
+    case 'recruitee': return arr(j.offers).map(x => L(x.id, x.title, x.location || joinBits(x.city, x.country), x.careers_url,
+      { remote: !!x.remote, details: joinBits(x.employment_type_code, x.department) }));
+    case 'workday': return arr(j.jobPostings).map(x => L(x.externalPath, x.title,
+      /^\d+ locations?$/i.test(x.locationsText || '') ? (String(x.externalPath || '').split('/')[2] || '').replace(/-/g, ' ') + ` (+${parseInt(x.locationsText, 10) - 1} more)` : x.locationsText,
+      x.externalPath ? `https://${c.host}/${c.site}${x.externalPath}` : '', { details: x.postedOn }));
+  }
+  return [];
+}
+
+// Pre-filter before the AI scores anything, so big boards (hundreds of jobs) stay cheap.
+const GENERIC_WORDS = new Set(['analyst', 'engineer', 'developer', 'intern', 'internship', 'associate', 'specialist', 'trainee', 'executive',
+  'junior', 'graduate', 'fresher', 'entry', 'level', 'and', 'of', 'the', 'for', 'in', 'a', 'an', 'role', 'jobs', 'job']);
+const ROLE_SYNONYMS = {
+  penetration: ['penetration', 'pentest', 'vapt', 'offensive', 'red team', 'ethical hack'],
+  pentester: ['penetration', 'pentest', 'vapt', 'offensive', 'red team'],
+  soc: ['soc', 'security operations', 'incident response', 'threat', 'detection'],
+  grc: ['grc', 'governance', 'risk', 'compliance', 'audit'],
+  cloud: ['cloud', 'aws', 'azure', 'gcp', 'devsecops'],
+  security: ['security', 'cyber', 'infosec', 'soc', 'appsec'],
+  cyber: ['cyber', 'security', 'infosec'],
+  software: ['software', 'sde', 'developer', 'backend', 'frontend', 'full stack', 'fullstack'],
+  network: ['network', 'noc'],
+  data: ['data', 'analytics'],
+};
+const SENIOR_RE = /\b(senior|sr|staff|principal|lead|manager|director|head|vp|vice president|architect|chief|ii|iii|iv|expert)\b/i;
+const INTERN_RE = /\b(intern|internship|trainee|apprentice)\b/i;
+const INDIA_RE = /\b(india|bengaluru|bangalore|hyderabad|pune|mumbai|chennai|delhi|gurgaon|gurugram|noida|kolkata|ahmedabad|kochi|coimbatore|jaipur|chandigarh|indore|thiruvananthapuram|trivandrum|visakhapatnam|vizag|bhubaneswar|mysuru|mysore|thane)\b/i;
+const FOREIGN_RE = /\b(us|usa|united states|canada|uk|united kingdom|london|europe|emea|germany|france|netherlands|ireland|poland|spain|portugal|singapore|australia|japan|brazil|mexico|latam|americas|new york|san francisco|seattle|toronto|dubai|uae|israel|philippines|bulgaria|sweden)\b/i;
+const CITY_ALIASES = {
+  bengaluru: ['bengaluru', 'bangalore'], bangalore: ['bengaluru', 'bangalore'],
+  'delhi ncr': ['delhi', 'gurgaon', 'gurugram', 'noida'], delhi: ['delhi', 'gurgaon', 'gurugram', 'noida'],
+  mumbai: ['mumbai', 'bombay', 'thane'], vizag: ['visakhapatnam', 'vizag'], trivandrum: ['thiruvananthapuram', 'trivandrum'],
+};
+const hasWord = (text, term) => new RegExp('\\b' + term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).test(text);
+
+/** Per target role, the title words that count as a match (with a few synonyms). */
+export function roleTerms(roles) {
+  return roles.map(r => {
+    const words = String(r).toLowerCase().split(/[^a-z0-9+#]+/).filter(Boolean);
+    const specific = words.filter(w => !GENERIC_WORDS.has(w));
+    return [...new Set((specific.length ? specific : words).flatMap(w => ROLE_SYNONYMS[w] || [w]))];
+  }).filter(t => t.length);
+}
+
+/** Whether a board listing is worth scoring, from its title and location alone. */
+export function matchesPrefs(l, prefs) {
+  const title = String(l.role || '').toLowerCase();
+  if (!title) return false;
+  const terms = roleTerms(prefs.roles);
+  if (terms.length && !terms.some(ts => ts.some(t => hasWord(title, t)))) return false;
+  if (SENIOR_RE.test(title)) return false;
+  if ((prefs.jobType === 'internship' || prefs.level === 'intern') && !INTERN_RE.test(title)) return false;
+  if (prefs.jobType === 'fulltime' && /\bintern(ship)?\b/i.test(title)) return false;
+  if (prefs.avoid.some(a => a.split(/\s+/).length <= 2 && hasWord(title, a.toLowerCase()))) return false;
+
+  const loc = String(l.location || '').toLowerCase();
+  if (!loc || /^\d+ locations?$/.test(loc)) return true; // unknown: let the AI decide
+  const wants = prefs.locations.map(x => x.toLowerCase());
+  const anyIndia = !wants.length || prefs.relocate || wants.includes('anywhere in india');
+  if (INDIA_RE.test(loc) && (anyIndia || wants.some(w => (CITY_ALIASES[w] || [w]).some(a => hasWord(loc, a))))) return true;
+  const remote = l.remote || /\b(remote|work from home|wfh|anywhere)\b/.test(loc);
+  return remote && !FOREIGN_RE.test(loc) && (!wants.length || wants.includes('remote') || wants.includes('anywhere in india'));
+}
+
+/** New board listings worth scoring: matching, not seen before, at most n, taken in turn from each company. */
+export function boardCandidates(listings, prefs, seen, n = MAX_BOARD_CANDIDATES) {
+  const byCompany = new Map();
+  listings.forEach(l => {
+    if (seen.has(l.id) || !matchesPrefs(l, prefs)) return;
+    const list = byCompany.get(l.company) || []; list.push(l); byCompany.set(l.company, list);
+  });
+  const out = [], lists = [...byCompany.values()];
+  for (let i = 0; out.length < n && lists.some(x => x.length > i); i++) lists.forEach(x => { if (x[i] && out.length < n) out.push(x[i]); });
+  return out;
+}
+
+// ---------- ResumeFold hand-off ----------
+// ResumeFold (delta-dog.github.io/resumefold, MIT, runs in the browser) does the tailoring. We give it the CV as its
+// Resume JSON (Review → Import JSON) with the job filled in, so its keyword match works against that job.
+export const RESUMEFOLD_URL = 'https://delta-dog.github.io/resumefold/build/';
+const YM_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
+const MONTHS = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };
+
+/** Any date-ish text → "YYYY-MM" (or "" when it can't tell). "Present" → "". */
+export function toYearMonth(s) {
+  const t = String(s || '').trim().toLowerCase();
+  if (YM_RE.test(t)) return t;
+  let m = /^(\d{4})[-/.](\d{1,2})/.exec(t);
+  if (m && +m[2] >= 1 && +m[2] <= 12) return `${m[1]}-${pad2(+m[2])}`;
+  m = /^(\d{1,2})[-/.](\d{4})$/.exec(t);
+  if (m && +m[1] >= 1 && +m[1] <= 12) return `${m[2]}-${pad2(+m[1])}`;
+  m = /([a-z]{3})[a-z]*[.,]?\s*'?(\d{4})/.exec(t);
+  if (m && MONTHS[m[1]]) return `${m[2]}-${pad2(MONTHS[m[1]])}`;
+  m = /\b(19|20)\d{2}\b/.exec(t);
+  return m ? `${m[0]}-01` : '';
+}
+
+export function resumeFoldPrompt(cv) {
+  return 'Convert this CV into JSON for a resume builder. Do NOT tailor, rewrite or improve anything: copy the facts as written. ' +
+    'Never add experience, employers, dates, numbers, skills, tools or certifications that are not in the CV. Leave out date of birth, nationality and photos.\n' +
+    'Dates are "YYYY-MM" (use "-01" when only the year is known, "" when unknown); set current=true for ongoing roles.\n' +
+    'Return JSON: {"contact":{"fullName":"","headline":"","email":"","phone":"","location":"","website":"","linkedin":"","github":""},"summary":"",' +
+    '"experience":[{"title":"","company":"","location":"","start":"","end":"","current":false,"bullets":[""]}],' +
+    '"education":[{"school":"","degree":"","field":"","location":"","start":"","end":"","gpa":"","details":[""]}],' +
+    '"skills":[{"category":"","items":[""]}],"projects":[{"name":"","link":"","tech":"","start":"","end":"","bullets":[""]}],' +
+    '"certifications":[{"name":"","issuer":"","date":"","link":""}]}\n\nCV:\n' + clip(cv, 12000);
+}
+
+/** Makes AI output safe for ResumeFold's schema: strings only, ids added, dates as YYYY-MM. */
+export function cleanResumeFold(raw) {
+  const r = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : null;
+  if (!r) return null;
+  const s = (v, n = 300) => (typeof v === 'string' ? v.trim().slice(0, n) : typeof v === 'number' ? String(v) : '');
+  const list = (v, n = 30, len = 400) => (Array.isArray(v) ? v.map(x => s(x, len)).filter(Boolean).slice(0, n) : []);
+  const rows = (v, prefix, fn) => (Array.isArray(v) ? v.filter(x => x && typeof x === 'object').slice(0, 30).map((x, i) => Object.assign({ id: `${prefix}${i + 1}` }, fn(x))) : []);
+  const c = r.contact && typeof r.contact === 'object' ? r.contact : {};
+  const out = {
+    contact: Object.fromEntries(['fullName', 'headline', 'email', 'phone', 'location', 'website', 'linkedin', 'github'].map(k => [k, s(c[k], 200)])),
+    summary: s(r.summary, 2000),
+    experience: rows(r.experience, 'exp', x => {
+      const current = x.current === true || /present|current|now/i.test(String(x.end || ''));
+      return { title: s(x.title), company: s(x.company), location: s(x.location), start: toYearMonth(x.start), end: current ? '' : toYearMonth(x.end), current, bullets: list(x.bullets) };
+    }),
+    education: rows(r.education, 'edu', x => ({ school: s(x.school), degree: s(x.degree), field: s(x.field), location: s(x.location), start: toYearMonth(x.start), end: toYearMonth(x.end), gpa: s(x.gpa, 40), details: list(x.details) })),
+    skills: rows(r.skills, 'skill', x => ({ category: s(x.category, 80), items: list(x.items, 40, 80) })).filter(x => x.items.length),
+    projects: rows(r.projects, 'proj', x => ({ name: s(x.name), link: isHttpUrl(x.link) ? s(x.link, 300) : '', tech: s(x.tech), start: toYearMonth(x.start), end: toYearMonth(x.end), bullets: list(x.bullets) })),
+    certifications: rows(r.certifications, 'cert', x => ({ name: s(x.name), issuer: s(x.issuer), date: toYearMonth(x.date), link: isHttpUrl(x.link) ? s(x.link, 300) : '' })).filter(x => x.name),
+  };
+  return out.contact.fullName || out.experience.length || out.education.length ? out : null;
+}
+
+/** The file to import into ResumeFold: the CV plus this job, so ResumeFold can tailor against it. */
+export function resumeFoldFor(base, job, description) {
+  const r = JSON.parse(JSON.stringify(base));
+  r.meta = {
+    analysis: {
+      jobTitle: String(job.role || '').slice(0, 200), company: String(job.company || '').slice(0, 200),
+      jobDescription: String(description || job.details || '').slice(0, 30000), keywords: '', keywordsMode: 'suggested', addedSkills: [], source: 'draft',
+    },
+    exportSettings: { filename: resumeFileBase(r.contact.fullName, job.company, job.role) },
+    template: 'standard', paper: 'a4',
+  };
+  return r;
 }

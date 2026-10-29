@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as C from '../web/js/core.js';
-import { zipStore, unzipFile, docxXmlToText, docxToText, resumeToDocx, resumeDocumentXml, crc32 } from '../web/js/docx.js';
+import { zipStore, unzipFile, docxXmlToText, docxToText, crc32 } from '../web/js/docx.js';
 import { parseJsonLoose, activeProviders } from '../web/js/ai.js';
 
 const classify = (subject, from, body) => C.ruleClassify({ subject, from, body });
@@ -75,18 +75,21 @@ test('prefsText lists what the scorer needs', () => {
   assert.match(t, /Currently based in: Hyderabad/);
   assert.match(t, /Avoid: Sales/);
 });
-test('autoUpdateDue', () => {
+test('autoUpdateDue: on sign-in unless minutes ago; while open every N hours', () => {
   const d = C.emptyData();
   const now = new Date('2026-10-29T12:00:00Z');
-  assert.equal(C.autoUpdateDue(d, now), false); // not onboarded
+  assert.equal(C.autoUpdateDue(d, now, true), false); // not onboarded
   d.settings.onboarded = true;
-  assert.equal(C.autoUpdateDue(d, now), true); // never ran
+  assert.equal(C.autoUpdateDue(d, now, true), true); // never ran
+  d.lastRunAt = '2026-10-29T11:55:00Z';
+  assert.equal(C.autoUpdateDue(d, now, true), false); // 5 min ago
   d.lastRunAt = '2026-10-29T06:00:00Z';
-  assert.equal(C.autoUpdateDue(d, now), false); // 6h < 12h
+  assert.equal(C.autoUpdateDue(d, now, true), true); // signing in: sync
+  assert.equal(C.autoUpdateDue(d, now, false), false); // open page: 6h < 12h
   d.lastRunAt = '2026-10-28T20:00:00Z';
-  assert.equal(C.autoUpdateDue(d, now), true);
+  assert.equal(C.autoUpdateDue(d, now, false), true);
   d.settings.autoUpdateHours = 0;
-  assert.equal(C.autoUpdateDue(d, now), false);
+  assert.equal(C.autoUpdateDue(d, now, true), false);
 });
 test('normalizeData keeps shape', () => {
   const d = C.normalizeData({ applications: [{ a: 1 }, null], seen: [1, 'x'], cvFile: { name: 'x' } });
@@ -195,55 +198,6 @@ test('scorePrompt carries the preferences', () => {
 });
 
 // ---------- resume ----------
-const raw = {
-  name: ' Test Person ', headline: 'Security Analyst', contact: ['a@example.com', 123, null, { x: 1 }],
-  summary: 'Short summary.', photo: 'http://x',
-  skills: [{ group: 'Tools', items: ['Nmap', 'Wireshark'] }, { group: 'Empty', items: [] }, 'bad', ...Array(6).fill({ group: 'G', items: ['x'] })],
-  experience: [{ title: 'Intern', org: 'Acme', dates: '2025', bullets: ['a', 'b', 'c', 'd', 'e'] }, { bullets: ['no title'] }],
-  projects: Array(5).fill({ name: 'P', tech: 'Python', bullets: ['x'] }),
-  education: [{ school: 'Example University', degree: 'B.Tech', dates: '2022–2026' }, { degree: 'no school' }],
-  certifications: ['CEH', ''], extras: 'not a list',
-};
-test('cleanResume: no name means no resume', () => {
-  assert.equal(C.cleanResume(null), null);
-  assert.equal(C.cleanResume({ name: '  ' }), null);
-  assert.equal(C.cleanResume('text'), null);
-});
-test('cleanResume: keeps known fields as strings, drops junk, caps lists', () => {
-  const r = C.cleanResume(raw);
-  assert.equal(r.name, 'Test Person');
-  assert.deepEqual(r.contact, ['a@example.com', '123']);
-  assert.equal('photo' in r, false);
-  assert.equal(r.skills.length, 4);
-  assert.equal(r.experience.length, 1);
-  assert.equal(r.experience[0].bullets.length, 4);
-  assert.equal(r.projects.length, 3);
-  assert.equal(r.education.length, 1);
-  assert.deepEqual(r.certifications, ['CEH']);
-  assert.deepEqual(r.extras, []);
-});
-test('resumeBlocks and applyResumeEdits round-trip edits', () => {
-  const r = C.cleanResume(raw);
-  const blocks = C.resumeBlocks(r);
-  assert.equal(blocks[0].t, 'name');
-  assert.ok(blocks.some(b => b.t === 'section' && b.text === 'Experience'));
-  const edits = blocks.filter(b => b.path).map(b => ({ path: b.path, text: b.label ? b.text : b.text }));
-  const same = C.applyResumeEdits(r, edits);
-  assert.deepEqual(same, r);
-  const changed = C.applyResumeEdits(r, [
-    { path: ['name'], text: 'New  Name' },
-    { path: ['experience', 0, 'line'], text: 'Analyst, Beta Corp, India' },
-    { path: ['experience', 0, 'bullets', 1], text: '' },
-    { path: ['skills', 0], text: 'Nmap, Burp' },
-    { path: ['contact'], text: 'x@example.com  •  Hyderabad' },
-  ]);
-  assert.equal(changed.name, 'New Name');
-  assert.equal(changed.experience[0].title, 'Analyst');
-  assert.equal(changed.experience[0].org, 'Beta Corp, India');
-  assert.equal(changed.experience[0].bullets.length, 3);
-  assert.deepEqual(changed.skills[0].items, ['Nmap', 'Burp']);
-  assert.deepEqual(changed.contact, ['x@example.com', 'Hyderabad']);
-});
 test('resumeFileBase', () => {
   assert.equal(C.resumeFileBase('Test Person', 'Acme & Co.', 'SOC Analyst (L1)'), 'Test_Person_Resume_Acme_Co_SOC_Analyst_L1');
 });
@@ -287,17 +241,6 @@ test('docxXmlToText keeps paragraphs, bullets, tabs, entities', () => {
     '</w:body></w:document>';
   assert.equal(docxXmlToText(xml), 'Test Person\n• Built a SIEM & lab\n\nSkills\tNmap');
 });
-test('resume → docx → text round-trip', async () => {
-  const r = C.cleanResume(raw);
-  const xml = resumeDocumentXml(r);
-  assert.match(xml, /<w:pgSz w:w="11906" w:h="16838"\/>/);
-  assert.doesNotMatch(xml, /http:\/\/x/);
-  const text = await docxToText(resumeToDocx(r));
-  assert.match(text, /^Test Person\nSecurity Analyst/);
-  assert.match(text, /EXPERIENCE\nIntern, Acme\t2025\n• a/);
-  assert.match(text, /Tools: Nmap, Wireshark/);
-});
-
 // ---------- ai ----------
 test('parseJsonLoose', () => {
   assert.deepEqual(parseJsonLoose('[{"n":1}]'), [{ n: 1 }]);
@@ -309,4 +252,92 @@ test('parseJsonLoose', () => {
 test('activeProviders keeps order and fills default models', () => {
   const s = C.normalizeSettings({ ai: [{ provider: 'groq', key: 'g' }, { provider: 'gemini', key: 'k', model: 'gemini-x' }, { provider: 'openrouter', key: 'o' }] });
   assert.deepEqual(activeProviders(s).map(p => [p.provider, p.model]), [['groq', 'openai/gpt-oss-120b'], ['gemini', 'gemini-x']]);
+});
+
+// ---------- job boards ----------
+test('parseCareerUrl reads each board and refuses others', () => {
+  assert.deepEqual(C.parseCareerUrl('https://jobs.lever.co/cred/abc'), { ats: 'lever', slug: 'cred', name: 'Cred' });
+  assert.equal(C.parseCareerUrl('boards.greenhouse.io/zscaler').ats, 'greenhouse');
+  assert.equal(C.parseCareerUrl('https://boards.greenhouse.io/embed/job_board?for=groww').slug, 'groww');
+  assert.equal(C.parseCareerUrl('https://jobs.ashbyhq.com/sarvam').ats, 'ashby');
+  assert.equal(C.parseCareerUrl('https://careers.smartrecruiters.com/Visa').slug, 'Visa');
+  assert.equal(C.parseCareerUrl('https://apply.workable.com/huggingface/').ats, 'workable');
+  assert.equal(C.parseCareerUrl('https://bunq.recruitee.com/').slug, 'bunq');
+  assert.deepEqual(C.parseCareerUrl('nvidia.wd5.myworkdayjobs.com/en-US/NVIDIAExternalCareerSite'),
+    { ats: 'workday', slug: 'nvidia', name: 'Nvidia', host: 'nvidia.wd5.myworkdayjobs.com', site: 'NVIDIAExternalCareerSite' });
+  assert.deepEqual(C.parseCareerUrl('https://careers.example.com/jobs'), { unsupported: true, host: 'careers.example.com' });
+  assert.equal(C.parseCareerUrl('not a link'), null);
+});
+test('normalizeSettings keeps valid companies once', () => {
+  const s = C.normalizeSettings({ companies: [{ ats: 'lever', slug: 'cred', name: 'CRED' }, { ats: 'lever', slug: 'CRED' }, { ats: 'nope', slug: 'x' }, { ats: 'workday', slug: 'x', host: 'evil.com', site: 'a' }] });
+  assert.deepEqual(s.companies, [{ ats: 'lever', slug: 'cred', name: 'CRED' }]);
+});
+test('listingsFromBoard maps Greenhouse, Lever and Workday', () => {
+  const gh = C.listingsFromBoard({ ats: 'greenhouse', slug: 'z', name: 'Z' }, { jobs: [{ id: 7, title: 'SOC Analyst', location: { name: 'Bengaluru' }, absolute_url: 'https://z.example/7' }] });
+  assert.equal(gh[0].id, 'ats:greenhouse:z:7'); assert.equal(gh[0].location, 'Bengaluru'); assert.equal(gh[0].source, 'Greenhouse');
+  const lv = C.listingsFromBoard({ ats: 'lever', slug: 'c', name: 'C' }, [{ id: 'a', text: 'Security Intern', categories: { location: 'Pune', commitment: 'Intern' }, country: 'IN', hostedUrl: 'https://jobs.lever.co/c/a', workplaceType: 'remote' }]);
+  assert.equal(lv[0].location, 'Pune · India'); assert.equal(lv[0].remote, true);
+  const wd = C.listingsFromBoard(C.COMPANY_SUGGESTIONS.find(c => c.ats === 'workday'), { jobPostings: [{ title: 'Cyber Analyst', externalPath: '/job/India-Bengaluru/Cyber_JR1', locationsText: '2 Locations' }] });
+  assert.equal(wd[0].location, 'India Bengaluru (+1 more)');
+  assert.equal(wd[0].link, 'https://nvidia.wd5.myworkdayjobs.com/NVIDIAExternalCareerSite/job/India-Bengaluru/Cyber_JR1');
+});
+test('matchesPrefs: role words, seniority, job type, location', () => {
+  const p = C.normalizeSettings({ prefs: { roles: ['SOC Analyst', 'Penetration Tester'], level: 'fresher', jobType: 'both', locations: ['Hyderabad', 'Remote'], relocate: false, avoid: ['Sales'] } }).prefs;
+  const ok = (role, location, remote) => C.matchesPrefs({ role, location, remote }, p);
+  assert.equal(ok('SOC Analyst L1', 'Hyderabad, India'), true);
+  assert.equal(ok('Incident Response Associate', 'Hyderabad'), true); // synonym of SOC
+  assert.equal(ok('VAPT Engineer', 'Remote - India'), true); // synonym of penetration
+  assert.equal(ok('Financial Analyst', 'Hyderabad'), false); // only the generic word matches
+  assert.equal(ok('Senior SOC Analyst', 'Hyderabad'), false);
+  assert.equal(ok('SOC Analyst', 'Pune'), false); // not a chosen city, not relocating
+  assert.equal(ok('SOC Analyst', 'Remote (Canada)'), false);
+  assert.equal(ok('SOC Analyst', '3 Locations'), true); // unknown: the AI decides
+  assert.equal(ok('Security Sales Specialist', 'Hyderabad'), false); // skip list
+  const intern = Object.assign({}, p, { jobType: 'internship', relocate: true });
+  assert.equal(C.matchesPrefs({ role: 'SOC Analyst', location: 'Pune' }, intern), false);
+  assert.equal(C.matchesPrefs({ role: 'SOC Intern', location: 'Pune' }, intern), true);
+});
+test('boardCandidates skips seen ones and takes companies in turn', () => {
+  const p = C.normalizeSettings({ prefs: { roles: ['Security'], locations: [], relocate: true } }).prefs;
+  const L = (co, n) => ({ id: `${co}${n}`, company: co, role: 'Security Analyst', location: 'India' });
+  const out = C.boardCandidates([L('A', 1), L('A', 2), L('A', 3), L('B', 1)], p, new Set(['A1']), 3);
+  assert.deepEqual(out.map(l => l.id), ['A2', 'B1', 'A3']);
+});
+
+// ---------- ResumeFold ----------
+test('toYearMonth', () => {
+  assert.equal(C.toYearMonth('2021-03'), '2021-03');
+  assert.equal(C.toYearMonth('Mar 2021'), '2021-03');
+  assert.equal(C.toYearMonth('March, 2021'), '2021-03');
+  assert.equal(C.toYearMonth('03/2021'), '2021-03');
+  assert.equal(C.toYearMonth('2020'), '2020-01');
+  assert.equal(C.toYearMonth('Present'), '');
+});
+test('cleanResumeFold: schema-safe ids, dates and strings', () => {
+  assert.equal(C.cleanResumeFold(null), null);
+  assert.equal(C.cleanResumeFold({ summary: 'x' }), null);
+  const r = C.cleanResumeFold({
+    contact: { fullName: ' Test Person ', email: 'a@example.com', photo: 'x' },
+    experience: [{ title: 'Intern', company: 'Example Labs', start: 'May 2025', end: 'Present', bullets: ['Did a', 7, null] }],
+    skills: [{ category: 'Tools', items: ['Nmap'] }, { category: 'Empty', items: [] }],
+    projects: [{ name: 'Lab', link: 'javascript:alert(1)' }],
+    certifications: [{ name: 'CEH', date: '2024' }, { issuer: 'no name' }],
+  });
+  assert.equal(r.contact.fullName, 'Test Person'); assert.equal(r.contact.photo, undefined);
+  assert.deepEqual(r.experience[0], { id: 'exp1', title: 'Intern', company: 'Example Labs', location: '', start: '2025-05', end: '', current: true, bullets: ['Did a', '7'] });
+  assert.equal(r.skills.length, 1); assert.equal(r.skills[0].id, 'skill1');
+  assert.equal(r.projects[0].link, '');
+  assert.deepEqual(r.certifications.map(c => c.date), ['2024-01']);
+});
+test('resumeFoldFor fills in the job without touching the CV', () => {
+  const base = C.cleanResumeFold({ contact: { fullName: 'Test Person' }, education: [{ school: 'Example University' }] });
+  const out = C.resumeFoldFor(base, { company: 'Kestrel', role: 'SOC Analyst' }, 'Monitor SIEM alerts.');
+  assert.equal(out.meta.analysis.jobDescription, 'Monitor SIEM alerts.');
+  assert.equal(out.meta.analysis.company, 'Kestrel');
+  assert.equal(out.meta.exportSettings.filename, 'Test_Person_Resume_Kestrel_SOC_Analyst');
+  assert.equal(base.meta, undefined);
+});
+test('textHash changes with the text', () => {
+  assert.equal(C.textHash('abc'), C.textHash('abc'));
+  assert.notEqual(C.textHash('abc'), C.textHash('abd'));
 });

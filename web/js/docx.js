@@ -1,10 +1,8 @@
 /**
- * Word (.docx) in and out, with no libraries.
- * A .docx is a ZIP of XML files: we read word/document.xml for CV text,
- * and write a minimal document (stored ZIP, no compression) for resumes.
+ * Word (.docx) CV import, with no libraries.
+ * A .docx is a ZIP of XML files: we read word/document.xml and turn its paragraphs into lines.
+ * zipStore writes a ZIP (used by the tests to build sample files).
  */
-import { resumeBlocks } from './core.js';
-
 // ---------- ZIP ----------
 const CRC_TABLE = (() => {
   const t = new Uint32Array(256);
@@ -99,50 +97,4 @@ export async function docxToText(bytes) {
   const doc = await unzipFile(bytes, 'word/document.xml');
   if (!doc) throw new Error('No text found in this .docx.');
   return docxXmlToText(new TextDecoder().decode(doc));
-}
-
-// ---------- resume → DOCX ----------
-const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-const run = (text, rPr) => `<w:r>${rPr ? `<w:rPr>${rPr}</w:rPr>` : ''}<w:t xml:space="preserve">${esc(text)}</w:t></w:r>`;
-const para = (pPr, runs) => `<w:p>${pPr ? `<w:pPr>${pPr}</w:pPr>` : ''}${runs}</w:p>`;
-
-/** Resume → document.xml, same blocks as the on-screen sheet. sizes in half-points. */
-export function resumeDocumentXml(r) {
-  const out = resumeBlocks(r).map(b => {
-    switch (b.t) {
-      case 'name': return para('<w:jc w:val="center"/><w:spacing w:after="20"/>', run(b.text, '<w:sz w:val="40"/>'));
-      case 'headline': return para('<w:jc w:val="center"/><w:spacing w:after="20"/>', run(b.text, '<w:i/><w:sz w:val="21"/>'));
-      case 'contact': return para('<w:jc w:val="center"/><w:spacing w:after="80"/>', run(b.text, '<w:color w:val="444444"/><w:sz w:val="18"/>'));
-      case 'section': return para('<w:spacing w:before="160" w:after="60"/><w:pBdr><w:bottom w:val="single" w:sz="6" w:space="1" w:color="111111"/></w:pBdr>', run(b.text.toUpperCase(), '<w:b/><w:sz w:val="21"/>'));
-      case 'skill': return para('<w:spacing w:after="20"/>', (b.label ? run(b.label + ': ', '<w:b/>') : '') + run(b.text));
-      case 'line': return para('<w:tabs><w:tab w:val="right" w:pos="9638"/></w:tabs><w:spacing w:before="80" w:after="0"/>',
-        run(b.text, '<w:b/>') + (b.right ? `<w:r><w:tab/></w:r>${run(b.right, '<w:i/><w:color w:val="555555"/>')}` : ''));
-      case 'italic': return para('<w:spacing w:after="0"/>', run(b.text, '<w:i/>'));
-      case 'bullet': return para('<w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr><w:spacing w:after="10"/>', run(b.text));
-      default: return para('<w:spacing w:after="40"/>', run(b.text));
-    }
-  }).join('');
-  return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
-    '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>' + out +
-    '<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="680" w:right="900" w:bottom="680" w:left="900" w:header="0" w:footer="0" w:gutter="0"/></w:sectPr>' +
-    '</w:body></w:document>';
-}
-
-const W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"';
-const STYLES = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles ${W}><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Georgia" w:hAnsi="Georgia" w:cs="Georgia"/><w:sz w:val="20"/><w:color w:val="111111"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="0" w:line="252" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults></w:styles>`;
-const NUMBERING = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:numbering ${W}><w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="bullet"/><w:lvlText w:val="•"/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="300" w:hanging="200"/></w:pPr></w:lvl></w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num></w:numbering>`;
-const CONTENT_TYPES = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/></Types>';
-const ROOT_RELS = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>';
-const DOC_RELS = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/></Relationships>';
-
-/** Resume → .docx bytes. */
-export function resumeToDocx(r) {
-  return zipStore([
-    { name: '[Content_Types].xml', data: CONTENT_TYPES },
-    { name: '_rels/.rels', data: ROOT_RELS },
-    { name: 'word/document.xml', data: resumeDocumentXml(r) },
-    { name: 'word/styles.xml', data: STYLES },
-    { name: 'word/numbering.xml', data: NUMBERING },
-    { name: 'word/_rels/document.xml.rels', data: DOC_RELS },
-  ]);
 }

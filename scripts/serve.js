@@ -1,18 +1,35 @@
-// Tiny static server for local testing: node scripts/serve.js  →  http://localhost:5173
+// Tiny local server that behaves like the Vercel deploy: node scripts/serve.js  →  http://localhost:5173
+// Static files from web/, /app and /app/* → web/app.html (as in vercel.json), and /api/* → the functions in web/api.
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'web');
 const port = Number(process.env.PORT) || 5173;
-const types = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.json': 'application/json', '.webmanifest': 'application/manifest+json' };
+const types = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.json': 'application/json', '.webmanifest': 'application/manifest+json', '.woff2': 'font/woff2', '.txt': 'text/plain', '.xml': 'application/xml' };
+
+async function api(name, url, req, res) {
+  const file = path.join(root, 'api', name + '.js');
+  if (!/^[a-z-]+$/.test(name) || !fs.existsSync(file)) { res.writeHead(404).end(); return; }
+  const { default: handler } = await import(pathToFileURL(file).href);
+  const out = {
+    status(c) { res.statusCode = c; return out; },
+    setHeader(k, v) { res.setHeader(k, v); },
+    json(b) { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(b)); },
+  };
+  await handler({ method: req.method, query: Object.fromEntries(url.searchParams) }, out);
+}
+
 http.createServer((req, res) => {
-  const p = decodeURIComponent(new URL(req.url, 'http://x').pathname);
-  let file = path.join(root, p.endsWith('/') ? p + 'index.html' : p);
+  const url = new URL(req.url, 'http://x');
+  const p = decodeURIComponent(url.pathname);
+  if (p.startsWith('/api/')) { api(p.slice(5), url, req, res).catch(() => { res.writeHead(500).end(); }); return; }
+  const rel = p === '/app' || p.startsWith('/app/') ? '/app.html' : p.endsWith('/') ? p + 'index.html' : p;
+  const file = path.join(root, rel);
   if (!file.startsWith(root)) { res.writeHead(403).end(); return; }
   fs.readFile(file, (err, buf) => {
     if (err) { res.writeHead(404).end('Not found'); return; }
     res.writeHead(200, { 'Content-Type': types[path.extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-store' });
     res.end(buf);
   });
-}).listen(port, () => console.log(`Job Tracker on http://localhost:${port}  (demo: http://localhost:${port}/?demo)`));
+}).listen(port, () => console.log(`Job Hunter on http://localhost:${port}  (app: /app, demo: /app?demo)`));

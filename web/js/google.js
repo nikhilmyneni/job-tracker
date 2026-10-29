@@ -1,6 +1,7 @@
 /**
  * Google sign-in (Identity Services token client), Gmail read-only, and the app's hidden Drive folder.
- * The access token lives in memory only. Nothing here talks to anything but Google.
+ * The access token lives in memory, plus this tab's sessionStorage so a reload keeps you signed in.
+ * It's gone when the tab closes, after about an hour, or on sign-out. Nothing here talks to anything but Google.
  */
 export const SCOPES = [
   'https://www.googleapis.com/auth/gmail.readonly',
@@ -13,6 +14,21 @@ const DATA_NAME = 'job-tracker.json';
 export class NeedSignIn extends Error {}
 
 let client = null, token = '', tokenExp = 0, waiting = null;
+const SESSION_KEY = 'jh-session';
+
+function remember() {
+  try { if (token) sessionStorage.setItem(SESSION_KEY, JSON.stringify({ token, tokenExp })); else sessionStorage.removeItem(SESSION_KEY); } catch (e) { /* storage blocked: memory only */ }
+}
+
+/** After a reload: picks the token back up from this tab, if it's still valid. No popup. */
+export function resumeSession() {
+  try {
+    const s = JSON.parse(sessionStorage.getItem(SESSION_KEY) || 'null');
+    if (s && typeof s.token === 'string' && Number(s.tokenExp) > Date.now()) { token = s.token; tokenExp = Number(s.tokenExp); return true; }
+  } catch (e) { /* ignore */ }
+  token = ''; tokenExp = 0; remember();
+  return false;
+}
 
 /** Loads Google's sign-in script early, so the sign-in popup opens right on the click. */
 export function preload() {
@@ -55,6 +71,7 @@ export async function signIn(clientId, { hint, consent } = {}) {
   }
   token = r.access_token;
   tokenExp = Date.now() + (Number(r.expires_in) || 3600) * 1000 - 60e3;
+  remember();
   return token;
 }
 
@@ -62,7 +79,7 @@ export function signedIn() { return !!token && Date.now() < tokenExp; }
 
 export async function signOut() {
   const t = token;
-  token = ''; tokenExp = 0;
+  token = ''; tokenExp = 0; remember();
   if (t) { try { (await gis()).revoke(t, () => {}); } catch (e) {} }
 }
 
@@ -70,7 +87,7 @@ export async function signOut() {
 async function gfetch(url, opts = {}) {
   if (!signedIn()) throw new NeedSignIn('Your Google session ended. Click Continue to sign in again.');
   const res = await fetch(url, Object.assign({}, opts, { headers: Object.assign({ Authorization: 'Bearer ' + token }, opts.headers || {}) }));
-  if (res.status === 401) { token = ''; throw new NeedSignIn('Your Google session ended. Click Continue to sign in again.'); }
+  if (res.status === 401) { token = ''; remember(); throw new NeedSignIn('Your Google session ended. Click Continue to sign in again.'); }
   if (!res.ok) {
     let msg = '';
     try { const j = await res.json(); msg = (j.error && j.error.message) || ''; } catch (e) {}

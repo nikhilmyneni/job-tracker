@@ -10,3 +10,4 @@ cv*.txt
 # local only
 .vercel/
 Screenshot*.png
+.taste-skill/
