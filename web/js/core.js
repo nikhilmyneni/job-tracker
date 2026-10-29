@@ -61,6 +61,7 @@ export function defaultSettings() {
     jobsPerUpdate: 5,
     autoUpdateHours: 12,
     sinceDays: 120,
+    notify: false, // browser notifications after a sync
     companies: [], // company job boards to check: [{ats, slug, name, host?, site?}]
     ai: [], // [{provider: 'gemini'|'groq'|'openrouter', key, model}], tried in this order
   };
@@ -94,6 +95,7 @@ export function normalizeSettings(raw) {
     jobsPerUpdate: pick(r.jobsPerUpdate, JOBS_PER_UPDATE, d.jobsPerUpdate),
     autoUpdateHours: pick(r.autoUpdateHours, AUTO_UPDATE_HOURS, d.autoUpdateHours),
     sinceDays: pick(r.sinceDays, SINCE_DAYS, d.sinceDays),
+    notify: r.notify === true,
     companies: (Array.isArray(r.companies) ? r.companies : []).map(normalizeCompany).filter(Boolean)
       .filter((c, i, all) => all.findIndex(b => companyKey(b) === companyKey(c)) === i).slice(0, MAX_COMPANIES),
     ai: (Array.isArray(r.ai) ? r.ai : [])
@@ -120,7 +122,7 @@ export function prefsText(s) {
 
 // ---------- Data file ----------
 export function emptyData() {
-  return { version: 2, settings: defaultSettings(), applications: [], jobs: [], seen: [], log: [], cv: '', cvFile: null, cvFold: null, cvFoldHash: '', lastRunAt: '' };
+  return { version: 2, settings: defaultSettings(), applications: [], jobs: [], seen: [], log: [], cv: '', cvFile: null, cvFold: null, cvFoldHash: '', review: [], reviewDone: [], lastRunAt: '' };
 }
 
 export function normalizeData(raw) {
@@ -138,6 +140,8 @@ export function normalizeData(raw) {
     cvFile: r.cvFile && typeof r.cvFile === 'object' && r.cvFile.id ? r.cvFile : null,
     cvFold: r.cvFold && typeof r.cvFold === 'object' ? r.cvFold : null,
     cvFoldHash: typeof r.cvFoldHash === 'string' ? r.cvFoldHash : '',
+    review: arr(r.review).slice(0, MAX_REVIEW),
+    reviewDone: Array.isArray(r.reviewDone) ? r.reviewDone.map(String).slice(-500) : [],
     lastRunAt: typeof r.lastRunAt === 'string' ? r.lastRunAt : '',
   };
 }
@@ -208,8 +212,11 @@ export function classifyPrompt(batch) {
     '(confirmation, assessment/test invite, interview invite or reminder, rejection, offer/selection, withdrawal). ' +
     'Job alerts, newsletters, recommendations, courses, banking, shopping and anything else are NOT application updates.\n' +
     'Return a JSON array, one object per email: {"n": <email number>, "is_application_update": true|false, "company": "", "role": "", ' +
-    '"stage": "Applied"|"Screening"|"Interview"|"Offer"|"Rejected"|"Withdrawn", "next_step": "<short action for the candidate, or empty>"}.\n' +
-    'Rules: assessment or online test invite = Screening; interview invite or reminder = Interview; selection or offer = Offer. Use the real employer name, not the job board. Role empty if not stated.\n\n' +
+    '"stage": "Applied"|"Screening"|"Interview"|"Offer"|"Rejected"|"Withdrawn", "next_step": "<short action for the candidate, or empty>", ' +
+    '"next_at": "<YYYY-MM-DDTHH:MM of the interview slot or the test deadline if the email states one, else empty>", "next_kind": "interview"|"deadline"|"", ' +
+    '"round": "<e.g. Round 2, HR round, or empty>", "needs_review": true|false}.\n' +
+    'Rules: assessment or online test invite = Screening; interview invite or reminder = Interview; selection or offer = Offer. Use the real employer name, not the job board. Role empty if not stated. ' +
+    'Set needs_review=true (with is_application_update=false) for an email that is clearly about one of their applications but where you cannot tell the company or what happened.\n\n' +
     batch.map((e, i) => `### Email ${i}\nFrom: ${e.from}\nDate: ${e.date.toISOString().slice(0, 10)}\nSubject: ${e.subject}\n${e.body}`).join('\n\n');
 }
 
@@ -222,16 +229,17 @@ export function ruleClassify(e) {
   else if (/assessment|online test|coding test|shortlisted/.test(t)) stage = 'Screening';
   else if (/withdrawn/.test(t)) stage = 'Withdrawn';
   else if (/thank(s| you) for applying|application (has been )?received|received your application|your application/.test(t)) stage = 'Applied';
-  if (!stage) return { is_application_update: false };
+  const looksRelated = /\b(application|applied|interview|assessment|shortlist(ed)?|offer|candidature)\b/i.test(e.subject);
+  if (!stage) return { is_application_update: false, needs_review: looksRelated };
   const company = companyFromSender(e.from);
   const rm = e.subject.match(/(?:for|–|-)\s+(?:the\s+)?(.+?)\s+(?:position|role|job|opening|internship)/i) || e.subject.match(/application for\s+(.+)$/i);
-  return { is_application_update: !!company, company, role: rm ? rm[1].trim() : '', stage, next_step: stage === 'Screening' ? 'Complete the assessment' : stage === 'Interview' ? 'Prepare for / schedule the interview' : '' };
+  return { is_application_update: !!company, needs_review: !company, company, role: rm ? rm[1].trim() : '', stage, next_step: stage === 'Screening' ? 'Complete the assessment' : stage === 'Interview' ? 'Prepare for / schedule the interview' : '' };
 }
 
 export function companyFromSender(from) {
   const name = (from.match(/^"?([^"<]+?)"?\s*</) || [])[1];
   const domain = (from.match(/@([^>\s]+)/) || [])[1] || '';
-  const generic = /^(careers?|jobs?|recruit(ing|ment)?|talent|hr|no-?reply|notifications?|team)$/i;
+  const generic = /^(careers?|jobs?|recruit(ing|ment|ers?)?|talent( team| acquisition)?|hr( team)?|hiring( team)?|campus( hiring| team)?|people( team)?|no-?reply|notifications?|team)$/i;
   if (name && !generic.test(name.trim()) && !/no-?reply/i.test(name)) return name.replace(/\b(careers?|recruiting|talent acquisition|hiring team|jobs)\b/ig, '').trim();
   const parts = domain.split('.').filter(p => !/^(mail|careers?|jobs|email|no-?reply|recruiting|myworkday|greenhouse|lever|com|in|co|io|org|net|ai)$/i.test(p));
   return parts.length ? parts[parts.length - 1].replace(/^\w/, c => c.toUpperCase()) : '';
@@ -245,9 +253,14 @@ export function channelFromSender(from) {
 }
 
 // ---------- Applications list ----------
-export const newResult = () => ({ appsNew: 0, appsChanged: [], jobsNew: [], due: [], notes: [] });
+export const newResult = () => ({ appsNew: 0, appsChanged: [], changes: [], jobsNew: [], due: [], review: 0, notes: [] });
 
-/** u: {company, role, stage, next_step, date: 'yyyy-mm-dd', channel, link} */
+const isNextAt = (v) => /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$/.test(String(v || ''));
+const addHistory = (app, on, status, by) => {
+  app.history = (Array.isArray(app.history) ? app.history : []).concat({ on, status, by }).slice(-30);
+};
+
+/** u: {company, role, stage, next_step, next_at, next_kind, round, date: 'yyyy-mm-dd', channel, link (the email), posting (the job ad)} */
 export function upsertApplication(apps, u, result) {
   const company = String(u.company || '').trim();
   if (!company) return null;
@@ -260,10 +273,14 @@ export function upsertApplication(apps, u, result) {
     const app = {
       id: newId(), company, role, channel: u.channel || 'Company site', applied_on: u.date, status: stage,
       furthest: STAGES.indexOf(stage) >= 0 ? stage : 'Applied', last_update: u.date, next_step: u.next_step || '', email_link: u.link || '', key,
+      posting_link: isHttpUrl(u.posting) ? u.posting : '',
     };
+    setNext(app, u);
+    addHistory(app, u.date, stage, 'email');
     apps.push(app);
     result.appsNew++;
     result.appsChanged.push(`${company}${role ? ' – ' + role : ''}: ${stage}`);
+    result.changes.push({ company, role, from: '', to: stage });
     return app;
   }
   const prev = cur.status;
@@ -273,12 +290,29 @@ export function upsertApplication(apps, u, result) {
   cur.last_update = u.date;
   cur.next_step = u.next_step || (['Rejected', 'Withdrawn', 'Offer'].indexOf(stage) >= 0 ? '' : cur.next_step);
   if (u.link) cur.email_link = u.link;
-  if (prev !== stage) result.appsChanged.push(`${cur.company}${cur.role ? ' – ' + cur.role : ''}: ${prev} → ${stage}`);
+  if (isHttpUrl(u.posting) && !cur.posting_link) cur.posting_link = u.posting;
+  setNext(cur, u);
+  if (prev !== stage) {
+    addHistory(cur, u.date, stage, 'email');
+    result.appsChanged.push(`${cur.company}${cur.role ? ' – ' + cur.role : ''}: ${prev} → ${stage}`);
+    result.changes.push({ company: cur.company, role: cur.role, from: prev, to: stage });
+  }
   return cur;
+}
+
+/** The next interview slot or deadline, when the email gave one. A closed application has none. */
+function setNext(app, u) {
+  if (['Rejected', 'Withdrawn', 'Offer'].indexOf(app.status) >= 0) { app.next_at = ''; app.next_kind = ''; app.round = ''; return; }
+  if (isNextAt(u.next_at)) {
+    app.next_at = u.next_at;
+    app.next_kind = u.next_kind === 'deadline' ? 'deadline' : 'interview';
+    app.round = String(u.round || '').trim().slice(0, 40);
+  }
 }
 
 export function setApplicationStatus(app, status, today) {
   if (STATUSES.indexOf(status) < 0) throw new Error('Unknown status.');
+  if (app.status !== status) addHistory(app, today, status, 'you');
   app.status = status;
   if (STAGES.indexOf(status) > STAGES.indexOf(app.furthest)) app.furthest = status;
   app.last_update = today;
@@ -290,6 +324,8 @@ export function markGhosted(apps, now, result) {
     const last = a.last_update ? new Date(a.last_update + 'T00:00:00').getTime() : 0;
     if (a.status === 'Applied' && last && last < cutoff) {
       a.status = 'Ghosted';
+      addHistory(a, ymd(now), 'Ghosted', 'quiet');
+      result.changes.push({ company: a.company, role: a.role, from: 'Applied', to: 'Ghosted' });
       result.appsChanged.push(`${a.company}: no reply for ${GHOST_DAYS}+ days → Ghosted`);
     }
   });
@@ -318,6 +354,65 @@ export function summaryText(r) {
   if (r.due.length) lines.push(`Waiting on you:\n- ${r.due.join('\n- ')}`);
   if (r.notes.length) lines.push(r.notes.join('\n'));
   return lines.join('\n\n');
+}
+
+// ---------- Board, next steps, timeline ----------
+/** How a status is shown. "Screening" is stored, "Assessment" is what people call it. */
+export const STATUS_LABEL = { Applied: 'Applied', Screening: 'Assessment', Interview: 'Interview', Offer: 'Offer', Rejected: 'Rejected', Withdrawn: 'Withdrawn', Ghosted: 'No reply' };
+/** Board columns and the statuses each one holds; dropping a card on a column sets its first status. */
+export const BOARD = [
+  { id: 'Applied', label: 'Applied', statuses: ['Applied', 'Ghosted'] },
+  { id: 'Screening', label: 'Assessment', statuses: ['Screening'] },
+  { id: 'Interview', label: 'Interview', statuses: ['Interview'] },
+  { id: 'Offer', label: 'Offer', statuses: ['Offer'] },
+  { id: 'Rejected', label: 'Rejected', statuses: ['Rejected', 'Withdrawn'] },
+];
+export const boardColumn = (status) => (BOARD.find(c => c.statuses.indexOf(status) >= 0) || BOARD[0]).id;
+
+const WEEKDAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MONTH = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/**
+ * The pill on a card: "Round 2 · Tue 3 Nov, 11:00" for an interview slot, "Due Fri" (or "Due 12 Nov",
+ * "Due today", "Overdue") for a deadline, else the short next step. Empty when there's nothing to do.
+ */
+export function nextLabel(app, now = new Date()) {
+  if (['Rejected', 'Withdrawn', 'Offer'].indexOf(app.status) >= 0) return { text: '', tone: '' };
+  if (isNextAt(app.next_at)) {
+    const [d, t] = String(app.next_at).split('T');
+    const at = new Date(d + 'T' + (t || '23:59') + ':00');
+    const days = Math.round((new Date(d + 'T00:00:00') - new Date(ymd(now) + 'T00:00:00')) / 864e5);
+    const day = `${WEEKDAY[at.getDay()]} ${at.getDate()} ${MONTH[at.getMonth()]}`;
+    if (app.next_kind === 'deadline') {
+      if (days < 0) return { text: 'Overdue', tone: 'red' };
+      if (days === 0) return { text: 'Due today', tone: 'orange' };
+      return { text: days < 7 ? `Due ${WEEKDAY[at.getDay()]}` : `Due ${at.getDate()} ${MONTH[at.getMonth()]}`, tone: 'orange' };
+    }
+    if (days >= 0) return { text: `${app.round || 'Interview'} · ${day}${t ? ', ' + t : ''}`, tone: 'blue' };
+  }
+  if (app.status === 'Ghosted') return { text: `No reply for ${GHOST_DAYS}+ days`, tone: '' };
+  return { text: app.next_step ? clip(app.next_step, 40) : '', tone: app.status === 'Screening' ? 'orange' : app.status === 'Interview' ? 'blue' : '' };
+}
+
+/** Every status change as an event, newest first: {on, company, role, status, by, app}. */
+export function timeline(apps) {
+  const out = [];
+  apps.forEach(a => {
+    const h = Array.isArray(a.history) && a.history.length ? a.history
+      : [{ on: a.applied_on, status: 'Applied', by: 'email' }].concat(a.status !== 'Applied' ? [{ on: a.last_update, status: a.status, by: 'email' }] : []);
+    h.forEach(e => { if (isYmd(e.on)) out.push({ on: e.on, company: a.company, role: a.role, status: e.status, by: e.by || 'email', app: a }); });
+  });
+  return out.sort((x, y) => y.on.localeCompare(x.on));
+}
+
+/** Emails that look like an application update but couldn't be matched; shown under "N emails need a look". */
+export const MAX_REVIEW = 50;
+export function addReview(data, e, guess) {
+  if (data.review.some(r => r.id === e.id) || (data.reviewDone || []).indexOf(e.id) >= 0) return false;
+  data.review.unshift({ id: e.id, from: String(e.from || '').slice(0, 200), subject: String(e.subject || '').slice(0, 200), date: ymd(e.date), link: e.link || '',
+    company: String((guess && guess.company) || companyFromSender(e.from) || '').slice(0, 80), stage: (guess && STATUSES.indexOf(guess.stage) >= 0) ? guess.stage : 'Applied' });
+  data.review = data.review.slice(0, MAX_REVIEW);
+  return true;
 }
 
 // ---------- Recommended jobs ----------
@@ -667,4 +762,79 @@ export function resumeFoldFor(base, job, description) {
     template: 'standard', paper: 'a4',
   };
   return r;
+}
+
+// ---------- Profile from the CV (no AI needed) ----------
+/** Indian cities people search jobs in, plus the two non-city choices. Used for location suggestions. */
+export const PLACES = ['Remote', 'Anywhere in India', 'Hyderabad', 'Bengaluru', 'Pune', 'Chennai', 'Mumbai', 'Navi Mumbai', 'Thane', 'Delhi', 'New Delhi', 'Gurugram', 'Noida',
+  'Greater Noida', 'Faridabad', 'Ghaziabad', 'Delhi NCR', 'Kolkata', 'Ahmedabad', 'Gandhinagar', 'Vadodara', 'Surat', 'Rajkot', 'Jaipur', 'Udaipur', 'Jodhpur', 'Lucknow',
+  'Kanpur', 'Noida Extension', 'Varanasi', 'Prayagraj', 'Agra', 'Dehradun', 'Chandigarh', 'Mohali', 'Panchkula', 'Ludhiana', 'Amritsar', 'Jalandhar', 'Shimla', 'Jammu',
+  'Srinagar', 'Indore', 'Bhopal', 'Gwalior', 'Jabalpur', 'Raipur', 'Bhilai', 'Nagpur', 'Nashik', 'Aurangabad', 'Kolhapur', 'Solapur', 'Goa', 'Panaji', 'Margao', 'Mangaluru',
+  'Mysuru', 'Hubballi', 'Belagavi', 'Davanagere', 'Manipal', 'Kochi', 'Thiruvananthapuram', 'Kozhikode', 'Thrissur', 'Kollam', 'Coimbatore', 'Madurai', 'Tiruchirappalli',
+  'Salem', 'Tiruppur', 'Vellore', 'Hosur', 'Puducherry', 'Visakhapatnam', 'Vijayawada', 'Guntur', 'Tirupati', 'Nellore', 'Kakinada', 'Rajahmundry', 'Kurnool', 'Anantapur',
+  'Warangal', 'Karimnagar', 'Nizamabad', 'Khammam', 'Secunderabad', 'Bhubaneswar', 'Cuttack', 'Rourkela', 'Patna', 'Gaya', 'Ranchi', 'Jamshedpur', 'Dhanbad', 'Guwahati',
+  'Shillong', 'Siliguri', 'Durgapur', 'Asansol', 'Imphal', 'Agartala', 'Aizawl', 'Gangtok'];
+const CITY_ALIAS_IN_CV = { bangalore: 'Bengaluru', bombay: 'Mumbai', gurgaon: 'Gurugram', vizag: 'Visakhapatnam', trivandrum: 'Thiruvananthapuram', mysore: 'Mysuru', mangalore: 'Mangaluru', cochin: 'Kochi', calcutta: 'Kolkata', madras: 'Chennai', pondicherry: 'Puducherry', baroda: 'Vadodara' };
+
+/** Places matching what's typed: names starting with it first, then names containing it. */
+export function placeMatches(q, taken = [], n = 8) {
+  const t = String(q || '').trim().toLowerCase();
+  if (!t) return [];
+  const have = new Set(taken.map(x => x.toLowerCase()));
+  const alias = Object.entries(CITY_ALIAS_IN_CV).filter(([k]) => k.startsWith(t)).map(([, v]) => v);
+  const starts = PLACES.filter(p => p.toLowerCase().startsWith(t) || p.toLowerCase().split(/\s+/).some(w => w.startsWith(t)));
+  const inside = t.length < 2 ? [] : PLACES.filter(p => !starts.includes(p) && p.toLowerCase().includes(t));
+  return [...new Set([...starts, ...alias, ...inside])].filter(p => !have.has(p.toLowerCase())).slice(0, n);
+}
+
+// What a CV says → which roles to suggest. Order matters only for ties.
+const ROLE_SIGNALS = [
+  ['SOC Analyst', /\b(soc|siem|splunk|wazuh|qradar|sentinel|elk|incident response|threat hunting|log analysis|blue team)\b/gi],
+  ['Penetration Tester', /\b(penetration|pentest\w*|vapt|burp|owasp|metasploit|ceh|oscp|bug bount\w+|red team|kali)\b/gi],
+  ['Cloud Security', /\b(cloud security|aws|azure|gcp|iam|devsecops|terraform|kubernetes)\b/gi],
+  ['GRC Analyst', /\b(grc|iso ?27001|nist|compliance|risk assessment|audit|gdpr|soc ?2|pci)\b/gi],
+  ['Network Engineer', /\b(ccna|ccnp|routing|switching|network engineer|tcp\/ip|firewall|cisco|lan|wan|vlan)\b/gi],
+  ['Security Analyst', /\b(cyber ?security|information security|infosec|security analyst|vulnerabilit\w+|nmap|wireshark)\b/gi],
+  ['Software Developer', /\b(react|node\.?js|javascript|typescript|java|spring|django|flask|full ?stack|frontend|backend|web developer|rest api)\b/gi],
+  ['Data Analyst', /\b(data analy\w+|power ?bi|tableau|excel|pandas|sql|statistics|dashboards?)\b/gi],
+  ['ML Engineer', /\b(machine learning|deep learning|tensorflow|pytorch|nlp|computer vision|scikit-learn|llm)\b/gi],
+];
+const SKILL_WORDS = ['Python', 'Java', 'JavaScript', 'TypeScript', 'C++', 'C', 'Go', 'Bash', 'PowerShell', 'SQL', 'Linux', 'Windows Server', 'AWS', 'Azure', 'GCP',
+  'Docker', 'Kubernetes', 'Terraform', 'Git', 'React', 'Node.js', 'Django', 'Flask', 'Spring', 'HTML', 'CSS', 'MongoDB', 'MySQL', 'PostgreSQL', 'Nmap', 'Wireshark',
+  'Burp Suite', 'Metasploit', 'Splunk', 'Wazuh', 'QRadar', 'Sentinel', 'SIEM', 'IDS/IPS', 'Firewall', 'TCP/IP', 'OWASP', 'VAPT', 'IAM', 'ISO 27001', 'NIST',
+  'Incident Response', 'Threat Hunting', 'Vulnerability Assessment', 'Power BI', 'Tableau', 'Excel', 'Pandas', 'TensorFlow', 'PyTorch', 'Machine Learning', 'CCNA'];
+
+/** Name, city, suggested roles, level and skills read from the CV text with simple rules. */
+export function profileFromCv(text, now = new Date()) {
+  const t = String(text || '');
+  const lines = t.split('\n').map(l => l.trim()).filter(Boolean);
+  const name = (lines.slice(0, 5).find(l => /^[A-Za-z][A-Za-z.' -]{2,40}$/.test(l) && l.split(/\s+/).length >= 2 && l.split(/\s+/).length <= 4 &&
+    !/\b(resume|curriculum|vitae|profile|summary|objective)\b/i.test(l)) || '').replace(/\s+/g, ' ');
+  const head = t.slice(0, 800).toLowerCase(), all = t.toLowerCase();
+  const findCity = (s) => {
+    let best = null;
+    PLACES.slice(2).concat(Object.keys(CITY_ALIAS_IN_CV)).forEach(p => {
+      const i = s.search(new RegExp('\\b' + p.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b'));
+      if (i >= 0 && (!best || i < best.i)) best = { i, p: CITY_ALIAS_IN_CV[p] || p };
+    });
+    return best ? best.p : '';
+  };
+  const city = findCity(head) || findCity(all);
+  const scores = ROLE_SIGNALS.map(([role, re]) => [role, (t.match(re) || []).length]).filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1]);
+  const roles = scores.slice(0, 3).map(([r]) => r);
+  const years = [...t.matchAll(/\b(20\d{2})\b/g)].map(m => Number(m[1]));
+  const studying = /\b(pursuing|expected|currently studying|final[- ]year|pre-final)\b/i.test(t) || (years.length && Math.max(...years) > now.getFullYear());
+  const skills = SKILL_WORDS.filter(w => new RegExp('(^|[^a-z0-9+#])' + w.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '($|[^a-z0-9+#])').test(all));
+  return { name, city, roles, level: studying ? 'both' : 'fresher', skills };
+}
+
+/** Fills the setup answers from the CV, but only where you haven't answered yet. */
+export function applyCvProfile(d, p) {
+  const def = defaultSettings();
+  if (!d.name && p.name) d.name = p.name;
+  if (!d.city && p.city) d.city = p.city;
+  if (!d.prefs.roles.length && p.roles.length) d.prefs.roles = p.roles.slice();
+  if (p.level && d.prefs.level === def.prefs.level) d.prefs.level = p.level;
+  if (p.city && JSON.stringify(d.prefs.locations) === JSON.stringify(def.prefs.locations)) d.prefs.locations = [p.city, 'Remote', 'Anywhere in India'].filter((x, i, a) => a.indexOf(x) === i);
+  return d;
 }

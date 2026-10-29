@@ -152,30 +152,60 @@ const PILL_TONE = { Screening: 'orange', Assessment: 'orange', Interview: 'blue'
 export const pill = (v, tone) => { const t = tone === undefined ? PILL_TONE[v] : tone; return h('span', { class: 'pill' + (t ? ' pill-' + t : '') }, v); };
 export const emptyRow = (cols, text) => h('tr', {}, h('td', { colSpan: cols, class: 'empty' }, text));
 
-/** Chips you can add to and remove from. Returns {el, get()}. suggestions: extra one-click chips. */
-export function chipInput(values, { placeholder, suggestions = [], label, max = 12 } = {}) {
-  let list = values.slice();
+/**
+ * Chips you can add to and remove from. Returns {el, get(), set(list)}. suggestions: extra one-click chips.
+ * search(q, current): live matches shown from the first letter typed (a combobox: arrows, Enter, Escape).
+ */
+let comboId = 0;
+export function chipInput(values, { placeholder, suggestions = [], label, max = 12, search } = {}) {
+  let list = values.slice(), matches = [], active = -1;
+  const id = 'combo-' + (++comboId);
   const wrap = h('div', { class: 'chips' });
-  const input = h('input', { type: 'text', placeholder: placeholder || 'Type and press Enter', 'aria-label': label || placeholder });
+  const input = h('input', { type: 'text', placeholder: placeholder || 'Type and press Enter', 'aria-label': label || placeholder, autocomplete: 'off' });
+  const box = h('ul', { class: 'combo', id, role: 'listbox', 'aria-label': (label || 'Suggestions'), hidden: true });
+  if (search) { input.setAttribute('role', 'combobox'); input.setAttribute('aria-controls', id); input.setAttribute('aria-expanded', 'false'); input.setAttribute('aria-autocomplete', 'list'); }
   const sugg = h('div', { class: 'chip-sugg' });
   const add = (v) => {
     v = String(v || '').trim().slice(0, 80);
     if (!v || list.length >= max || list.some(x => x.toLowerCase() === v.toLowerCase())) return;
     list.push(v); draw();
   };
+  const drawMatches = () => {
+    matches = search ? search(input.value, list) : [];
+    if (active >= matches.length) active = matches.length - 1;
+    box.hidden = !matches.length;
+    input.setAttribute('aria-expanded', String(!!matches.length));
+    if (active >= 0) input.setAttribute('aria-activedescendant', `${id}-${active}`); else input.removeAttribute('aria-activedescendant');
+    box.replaceChildren(...matches.map((m, i) => h('li', { id: `${id}-${i}`, role: 'option', 'aria-selected': String(i === active),
+      onmousedown: (e) => { e.preventDefault(); pick(m); } }, m)));
+  };
+  const pick = (v) => { add(v); input.value = ''; active = -1; drawMatches(); input.focus(); };
   const draw = () => {
     wrap.replaceChildren(...list.map((v, i) => h('span', { class: 'chip' }, v,
       h('button', { type: 'button', 'aria-label': 'Remove ' + v, onclick: () => { list.splice(i, 1); draw(); } }, '×'))), input);
     sugg.replaceChildren(...suggestions.filter(s => !list.some(x => x.toLowerCase() === s.toLowerCase()))
       .map(s => h('button', { type: 'button', class: 'chip-add', onclick: () => add(s) }, '+ ' + s)));
   };
+  input.addEventListener('input', () => { active = search && input.value.trim() ? 0 : -1; drawMatches(); });
   input.addEventListener('keydown', (e) => {
-    if ((e.key === 'Enter' || e.key === ',') && input.value.trim()) { e.preventDefault(); add(input.value); input.value = ''; }
-    else if (e.key === 'Backspace' && !input.value && list.length) { list.pop(); draw(); }
+    if (search && matches.length && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+      e.preventDefault(); active = (active + (e.key === 'ArrowDown' ? 1 : -1) + matches.length) % matches.length; drawMatches();
+    } else if (search && e.key === 'Escape' && matches.length) { e.preventDefault(); matches = []; box.hidden = true; input.setAttribute('aria-expanded', 'false'); }
+    else if ((e.key === 'Enter' || e.key === ',' || e.key === 'Tab') && input.value.trim()) {
+      if (e.key === 'Tab' && !(search && active >= 0)) return;
+      e.preventDefault(); pick(search && active >= 0 && matches[active] ? matches[active] : input.value);
+    } else if (e.key === 'Backspace' && !input.value && list.length) { list.pop(); draw(); }
   });
-  input.addEventListener('blur', () => { if (input.value.trim()) { add(input.value); input.value = ''; } });
+  input.addEventListener('blur', () => {
+    if (!search && input.value.trim()) { add(input.value); input.value = ''; }
+    box.hidden = true; input.setAttribute('aria-expanded', 'false');
+  });
   draw();
-  return { el: h('div', {}, wrap, sugg), get: () => { if (input.value.trim()) { add(input.value); input.value = ''; } return list.slice(); } };
+  return {
+    el: h('div', { class: 'chip-field' }, wrap, box, sugg),
+    get: () => { if (input.value.trim()) { add(input.value); input.value = ''; } return list.slice(); },
+    set: (v) => { list = v.slice(); draw(); },
+  };
 }
 
 /** One-of buttons. options: {value: label}. Returns {el, get()}. */

@@ -1,9 +1,9 @@
 // Caches only this site's own files so the app opens fast and offline. Never caches Google, AI, job-board or /api responses.
-const CACHE = 'job-hunter-v4';
+const CACHE = 'job-hunter-v5';
 const SHELL = ['/', '/app', '/privacy.html', '/config.js', '/icon.svg', '/manifest.webmanifest',
   '/css/tokens.css', '/css/app.css', '/css/landing.css',
   '/vendor/fonts/bricolage.woff2', '/vendor/fonts/instrument-sans.woff2', '/vendor/fonts/jetbrains-mono.woff2',
-  '/js/ai.js', '/js/app.js', '/js/core.js', '/js/demo.js', '/js/docx.js', '/js/files.js', '/js/google.js', '/js/landing.js', '/js/onboarding.js', '/js/sources.js', '/js/ui.js', '/js/update.js', '/js/view-applications.js', '/js/view-matches.js', '/js/view-settings.js', '/js/view-tailor.js'];
+  '/js/ai.js', '/js/app.js', '/js/core.js', '/js/demo.js', '/js/docx.js', '/js/files.js', '/js/google.js', '/js/landing.js', '/js/notify.js', '/js/onboarding.js', '/js/sources.js', '/js/ui.js', '/js/update.js', '/js/view-applications.js', '/js/view-board.js', '/js/view-matches.js', '/js/view-settings.js', '/js/view-tailor.js'];
 
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', (e) => {
@@ -18,4 +18,13 @@ self.addEventListener('fetch', (e) => {
     if (res.ok) { const copy = res.clone(); caches.open(CACHE).then(c => c.put(key, copy)); }
     return res;
   }).catch(() => caches.match(key, { ignoreSearch: true })));
+});
+// A click on a notification opens (or focuses) Job Hunter on the right screen.
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  const url = (e.notification.data && e.notification.data.url) || '/app';
+  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
+    const open = list.find(c => new URL(c.url).pathname.startsWith('/app'));
+    return open ? open.focus().then(c => c.navigate(url)) : self.clients.openWindow(url);
+  }));
 });

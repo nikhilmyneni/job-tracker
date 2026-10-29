@@ -341,3 +341,66 @@ test('textHash changes with the text', () => {
   assert.equal(C.textHash('abc'), C.textHash('abc'));
   assert.notEqual(C.textHash('abc'), C.textHash('abd'));
 });
+
+// ---------- step 2: board, next steps, review, CV profile, notifications ----------
+test('upsertApplication keeps history, slot and changes', () => {
+  const apps = [], r = C.newResult();
+  C.upsertApplication(apps, { company: 'Kestrel', role: 'SOC Analyst', stage: 'Applied', date: '2026-10-01' }, r);
+  C.upsertApplication(apps, { company: 'Kestrel', role: 'SOC Analyst', stage: 'Interview', date: '2026-10-20', next_at: '2026-11-03T11:00', next_kind: 'interview', round: 'Round 2' }, r);
+  assert.deepEqual(apps[0].history.map(x => x.status), ['Applied', 'Interview']);
+  assert.equal(apps[0].next_at, '2026-11-03T11:00');
+  assert.deepEqual(r.changes[1], { company: 'Kestrel', role: 'SOC Analyst', from: 'Applied', to: 'Interview' });
+  C.upsertApplication(apps, { company: 'Kestrel', role: 'SOC Analyst', stage: 'Rejected', date: '2026-11-05' }, r);
+  assert.equal(apps[0].next_at, '');
+});
+test('nextLabel: interview slot, deadlines, ghosted, closed', () => {
+  const now = new Date('2026-10-29T10:00:00');
+  assert.deepEqual(C.nextLabel({ status: 'Interview', next_at: '2026-11-03T11:00', next_kind: 'interview', round: 'Round 2' }, now), { text: 'Round 2 · Tue 3 Nov, 11:00', tone: 'blue' });
+  assert.equal(C.nextLabel({ status: 'Screening', next_at: '2026-10-30', next_kind: 'deadline' }, now).text, 'Due Fri');
+  assert.equal(C.nextLabel({ status: 'Screening', next_at: '2026-11-12', next_kind: 'deadline' }, now).text, 'Due 12 Nov');
+  assert.equal(C.nextLabel({ status: 'Screening', next_at: '2026-10-29', next_kind: 'deadline' }, now).text, 'Due today');
+  assert.deepEqual(C.nextLabel({ status: 'Screening', next_at: '2026-10-20', next_kind: 'deadline' }, now), { text: 'Overdue', tone: 'red' });
+  assert.equal(C.nextLabel({ status: 'Ghosted' }, now).text, 'No reply for 21+ days');
+  assert.equal(C.nextLabel({ status: 'Offer', next_step: 'Sign' }, now).text, '');
+});
+test('board columns and timeline', () => {
+  assert.equal(C.boardColumn('Ghosted'), 'Applied');
+  assert.equal(C.boardColumn('Withdrawn'), 'Rejected');
+  assert.equal(C.boardColumn('Screening'), 'Screening');
+  const t = C.timeline([{ company: 'A', role: '', applied_on: '2026-10-01', status: 'Offer', last_update: '2026-10-10' }, { company: 'B', history: [{ on: '2026-10-05', status: 'Applied', by: 'email' }] }]);
+  assert.deepEqual(t.map(e => `${e.on} ${e.company} ${e.status}`), ['2026-10-10 A Offer', '2026-10-05 B Applied', '2026-10-01 A Applied']);
+});
+test('addReview dedupes and skips dismissed emails', () => {
+  const d = C.emptyData();
+  const e = { id: 'm1', from: 'Hiring <hr@northwind.in>', subject: 'Your application', date: new Date('2026-10-24T09:00:00'), link: '' };
+  assert.equal(C.addReview(d, e, { stage: 'Applied' }), true);
+  assert.equal(C.addReview(d, e), false);
+  assert.equal(d.review[0].company, 'Northwind');
+  d.reviewDone.push('m2');
+  assert.equal(C.addReview(d, Object.assign({}, e, { id: 'm2' })), false);
+  assert.deepEqual(C.normalizeData(JSON.parse(JSON.stringify(d))).review.length, 1);
+});
+test('ruleClassify flags unclear application emails for review', () => {
+  assert.equal(classify('Next steps for your candidature', 'no-reply@ats.example', 'please see the portal').needs_review, true);
+  assert.equal(classify('Weekly digest', 'news@site.com', 'hello').needs_review, false);
+});
+test('profileFromCv reads name, city, roles, level and skills', () => {
+  const cv = 'Riya Verma\nriya@mail.in · +91 9 · Bangalore\nB.Tech CSE 2022 – 2026 (pursuing)\nHome SOC lab with Wazuh SIEM and Splunk. Web VAPT with Burp Suite, OWASP.\nSkills: Python, SQL, Nmap';
+  const p = C.profileFromCv(cv, new Date('2026-10-29'));
+  assert.equal(p.name, 'Riya Verma');
+  assert.equal(p.city, 'Bengaluru');
+  assert.deepEqual(p.roles.slice(0, 2), ['SOC Analyst', 'Penetration Tester']);
+  assert.equal(p.level, 'both');
+  assert.ok(p.skills.includes('Burp Suite') && p.skills.includes('Python'));
+  const d = C.applyCvProfile(C.defaultSettings(), p);
+  assert.equal(d.name, 'Riya Verma');
+  assert.deepEqual(d.prefs.locations, ['Bengaluru', 'Remote', 'Anywhere in India']);
+  const kept = C.defaultSettings(); kept.prefs.roles = ['Data Analyst'];
+  assert.deepEqual(C.applyCvProfile(kept, p).prefs.roles, ['Data Analyst']);
+});
+test('placeMatches searches from the first letter', () => {
+  assert.deepEqual(C.placeMatches('h').slice(0, 1), ['Hyderabad']);
+  assert.ok(C.placeMatches('ban').includes('Bengaluru'));
+  assert.ok(!C.placeMatches('mu', ['Mumbai']).includes('Mumbai'));
+  assert.deepEqual(C.placeMatches(''), []);
+});

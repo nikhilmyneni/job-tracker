@@ -2,7 +2,7 @@
  * First-run setup: one question per step. The same field blocks make up the Preferences part of Settings.
  */
 import { h, chipInput, segmented, busy, errText, extLink, icon } from './ui.js';
-import { LEVELS, JOB_TYPES, JOBS_PER_UPDATE, AUTO_UPDATE_HOURS, SINCE_DAYS, ATS, COMPANY_SUGGESTIONS, companyKey, normalizeCompany, parseCareerUrl } from './core.js';
+import { LEVELS, JOB_TYPES, JOBS_PER_UPDATE, AUTO_UPDATE_HOURS, SINCE_DAYS, ATS, COMPANY_SUGGESTIONS, companyKey, normalizeCompany, parseCareerUrl, placeMatches, profileFromCv, applyCvProfile } from './core.js';
 import { fetchBoard } from './sources.js';
 import { PROVIDERS, listModels } from './ai.js';
 import { readCvFile, CV_ACCEPT } from './files.js';
@@ -25,8 +25,8 @@ export function youBlock(s) {
   };
 }
 
-export function wantBlock(s) {
-  const roles = chipInput(s.prefs.roles, { placeholder: 'Add a role and press Enter', suggestions: ROLE_SUGGESTIONS, label: 'Target roles' });
+export function wantBlock(s, fromCv = []) {
+  const roles = chipInput(s.prefs.roles, { placeholder: 'Add a role and press Enter', suggestions: [...new Set([...fromCv, ...ROLE_SUGGESTIONS])], label: 'Target roles' });
   const level = segmented(LEVELS, s.prefs.level, 'Level');
   const type = segmented(JOB_TYPES, s.prefs.jobType, 'Job type');
   const paid = check(s.prefs.paidOnly, 'Paid roles only');
@@ -39,7 +39,7 @@ export function wantBlock(s) {
 }
 
 export function whereBlock(s) {
-  const places = chipInput(s.prefs.locations, { placeholder: 'Add a city and press Enter', suggestions: PLACE_SUGGESTIONS, label: 'Locations' });
+  const places = chipInput(s.prefs.locations, { placeholder: 'Start typing a city', suggestions: PLACE_SUGGESTIONS, label: 'Locations', search: (q, have) => placeMatches(q, have) });
   const relocate = check(s.prefs.relocate, 'Open to relocating for the right job');
   return {
     el: h('div', { class: 'stack' }, field('Preferred locations, most wanted first', places.el), relocate.el),
@@ -68,33 +68,64 @@ export function routineBlock(s) {
   };
 }
 
-/** CV: upload a file or paste text. collect sets d.cv and d.cvUpload (the File, if a new one was picked). */
+/**
+ * CV: drop a file on the zone (it leans toward the file as you drag, like kitchen's "Magnetic Drop Zone"),
+ * browse for one, or paste the text. collect sets d.cv and d.cvUpload (the File, if new).
+ * opts.onRead(text) runs after a file is read, so the wizard can fill in the next questions.
+ */
 export function cvBlock(cvText, cvFile, opts = {}) {
-  const ta = h('textarea', { spellcheck: false, placeholder: 'Paste your CV text here, or upload a file above.' });
+  const ta = h('textarea', { spellcheck: false, placeholder: 'Or paste your CV text here.', 'aria-label': 'CV text' });
   ta.value = cvText || '';
   const status = h('div', { class: 'status', role: 'status' });
   let picked = null;
   const input = h('input', { type: 'file', accept: CV_ACCEPT, class: 'visually-hidden', id: 'cv-file-' + Math.random().toString(36).slice(2, 7) });
-  input.addEventListener('change', async () => {
-    const f = input.files[0];
+  const read = async (f) => {
     if (!f) return;
     status.className = 'status'; status.textContent = `Reading ${f.name}…`;
     try {
       const { text, warning } = await readCvFile(f);
       ta.value = text; picked = f;
-      status.className = warning ? 'status warn' : 'status';
-      status.textContent = warning || `Read ${f.name}. Check the text below and fix anything that came out wrong.`;
+      fileLine.replaceChildren(icon('file'), h('span', {}, h('b', {}, f.name), ` · ${Math.max(1, Math.round(f.size / 1024))} KB`));
+      fileLine.hidden = false;
+      status.className = warning ? 'status warn' : 'status ok';
+      status.textContent = warning || 'Read it. Check the text below and fix anything that came out wrong.';
+      paste.open = true;
+      if (opts.onRead) opts.onRead(text);
     } catch (e) { status.className = 'status err'; status.textContent = errText(e); }
-    input.value = '';
-  });
-  const existing = cvFile ? h('span', { class: 'hint' }, `Saved file: ${cvFile.name}`, opts.onDownload ? [' · ', h('button', { type: 'button', class: 'link', onclick: opts.onDownload }, 'Download')] : '') : '';
+  };
+  input.addEventListener('change', () => { read(input.files[0]); input.value = ''; });
+
+  const zone = h('div', { class: 'drop' },
+    icon('upload'),
+    h('p', { class: 'drop-title' }, 'Drop your CV here'),
+    h('p', { class: 'drop-sub' }, 'PDF, Word (.docx) or .txt, up to 5 MB. It’s read in your browser.'),
+    h('label', { class: 'btn btn-primary', for: input.id }, 'Choose a file'),
+    input);
+  // Magnetic pull: the zone leans a few pixels toward the dragged file and lights up.
+  let depth = 0;
+  const lean = (e) => {
+    const r = zone.getBoundingClientRect();
+    const dx = (e.clientX - (r.left + r.width / 2)) / r.width, dy = (e.clientY - (r.top + r.height / 2)) / r.height;
+    zone.style.setProperty('--dx', (dx * 10).toFixed(1) + 'px'); zone.style.setProperty('--dy', (dy * 10).toFixed(1) + 'px');
+  };
+  zone.addEventListener('dragenter', (e) => { e.preventDefault(); depth++; zone.classList.add('over'); });
+  zone.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; lean(e); });
+  zone.addEventListener('dragleave', () => { if (--depth <= 0) { depth = 0; zone.classList.remove('over'); } });
+  zone.addEventListener('drop', (e) => { e.preventDefault(); depth = 0; zone.classList.remove('over'); read(e.dataTransfer.files[0]); });
+
+  const fileLine = h('p', { class: 'file-line', hidden: true });
+  if (cvFile) {
+    fileLine.replaceChildren(icon('file'), h('span', {}, 'Saved file: ', h('b', {}, cvFile.name)),
+      opts.onDownload ? h('button', { type: 'button', class: 'link', onclick: opts.onDownload }, 'Download') : '');
+    fileLine.hidden = false;
+  }
+  const paste = h('details', { class: 'paste', open: !!ta.value && !cvFile }, h('summary', {}, 'Check or edit the text'), ta);
   return {
-    el: h('div', { class: 'stack' },
-      h('div', { class: 'upload' }, h('label', { class: 'btn btn-quiet', for: input.id }, 'Upload CV (PDF, Word or .txt)'), input, existing),
-      status, ta,
-      h('p', { class: 'hint' }, 'Resumes are written only from this text. Nothing is made up.')),
+    el: h('div', { class: 'stack' }, zone, fileLine, status, paste,
+      h('p', { class: 'hint' }, 'Resumes are only ever built from this text. Nothing is made up.')),
     collect: (d) => { d.cv = ta.value.trim(); d.cvUpload = picked || d.cvUpload || null; },
     textarea: ta,
+    open: () => { paste.open = true; },
   };
 }
 
@@ -185,12 +216,13 @@ export function companiesBlock(list, opts = {}) {
 }
 
 // ---------- the wizard ----------
+const FROM_CV = 'Filled in from your CV. Change anything that isn’t right.';
 const STEPS = [
-  { id: 'you', title: 'Hi! Let’s set up your job hunt', intro: 'A few quick questions. You can change any answer later.', block: (d) => youBlock(d) },
-  { id: 'want', title: 'What are you looking for?', block: (d) => wantBlock(d) },
+  { id: 'cv', title: 'Start with your CV', intro: 'Job Hunter reads it to fill in the next questions, score openings and tailor resumes.', block: (d, ctx, w) => cvBlock(d.cv, d.cvFile, { onRead: w.onCvRead }) },
+  { id: 'you', title: 'About you', intro: (d, w) => (w.fromCv ? FROM_CV : 'You can change any answer later.'), block: (d) => youBlock(d) },
+  { id: 'want', title: 'What are you looking for?', intro: (d, w) => (w.fromCv && w.profile.roles.length ? 'Roles picked from your CV. Add or remove any.' : ''), block: (d, ctx, w) => wantBlock(d, w.profile.roles) },
   { id: 'where', title: 'Where would you like to work?', block: (d) => whereBlock(d) },
   { id: 'avoid', title: 'Anything to skip?', intro: 'Openings with these are left out.', block: (d) => avoidBlock(d) },
-  { id: 'cv', title: 'Add your CV', intro: 'Upload your CV or paste its text. It’s used to score openings and tailor resumes.', block: (d) => cvBlock(d.cv, d.cvFile) },
   { id: 'companies', title: 'Companies to follow (optional)', intro: 'Job Hunter already reads your job-alert emails from LinkedIn, Naukri, Indeed, Internshala, Wellfound and foundit. Add company career pages for more.', block: (d, ctx) => companiesBlock(d.companies, { demo: ctx.demo }) },
   { id: 'ai', title: 'Turn on AI (free, optional)', intro: 'With a free AI key, Job Hunter sorts your emails more accurately, scores openings and reads your CV. Without one, it still tracks applications using keyword rules.', block: (d, ctx) => aiBlock(d.ai, { demo: ctx.demo, id: 'wiz' }) },
   { id: 'routine', title: 'Your routine', block: (d) => routineBlock(d) },
@@ -200,7 +232,10 @@ const STEPS = [
 export function runWizard(root, ctx) {
   const d = JSON.parse(JSON.stringify(ctx.data.settings));
   d.cv = ctx.data.cv; d.cvFile = ctx.data.cvFile; d.cvUpload = null;
-  if (!d.name && ctx.me && ctx.me.name) d.name = ctx.me.name;
+  // The CV fills in later answers once, and only the ones still at their defaults.
+  const w = { fromCv: false, profile: { roles: [] } };
+  w.onCvRead = (text) => { w.profile = profileFromCv(text); applyCvProfile(d, w.profile); w.fromCv = true; };
+  if (d.cv) w.profile = profileFromCv(d.cv);
   let i = 0, cur = null;
   const total = STEPS.length + 1;
   const draw = () => {
@@ -210,20 +245,25 @@ export function runWizard(root, ctx) {
     let body, next;
     if (!done) {
       const st = STEPS[i];
-      cur = st.block(d, ctx);
-      body = [h('h1', { class: 'wiz-title', tabIndex: -1 }, st.title), st.intro ? h('p', { class: 'wiz-intro' }, st.intro) : '', cur.el];
+      cur = st.block(d, ctx, w);
+      const intro = typeof st.intro === 'function' ? st.intro(d, w) : st.intro;
+      body = [h('h1', { class: 'wiz-title', tabIndex: -1 }, st.title), intro ? h('p', { class: 'wiz-intro' }, intro) : '', cur.el];
       next = h('button', { type: 'button', class: 'btn btn-primary', onclick: () => {
         cur.collect(d);
+        if (st.id === 'cv') {
+          if (d.cv && !w.fromCv) w.onCvRead(d.cv); // pasted text, not a file
+          if (!d.name && ctx.me && ctx.me.name) d.name = ctx.me.name;
+        }
         if (st.id === 'want' && !d.prefs.roles.length) { status.className = 'status err'; status.textContent = 'Add at least one role you want.'; return; }
         i++; draw();
-      } }, (st.id === 'ai' && !(d.ai || []).length) || (st.id === 'companies' && !(d.companies || []).length) ? 'Skip for now' : 'Next');
-      if (st.id === 'ai' || st.id === 'companies') cur.el.addEventListener('click', () => { next.textContent = 'Next'; });
+      } }, (st.id === 'ai' && !(d.ai || []).length) || (st.id === 'companies' && !(d.companies || []).length) || (st.id === 'cv' && !d.cv) ? 'Skip for now' : 'Next');
+      if (st.id === 'ai' || st.id === 'companies' || st.id === 'cv') ['click', 'input', 'drop'].forEach(ev => cur.el.addEventListener(ev, () => { next.textContent = 'Next'; }));
     } else {
       cur = null;
       const p = d.prefs;
       const row = (k, v) => h('div', { class: 'sum-row' }, h('span', {}, k), h('b', {}, v || '—'));
       body = [h('h1', { class: 'wiz-title', tabIndex: -1 }, 'All set. Here’s your plan'),
-        h('div', { class: 'card sum' },
+        h('div', { class: 'sum' },
           row('Roles', p.roles.join(', ')), row('Level', LEVELS[p.level]), row('Job type', JOB_TYPES[p.jobType]),
           row('Pay', (p.paidOnly ? 'Paid only' : 'Unpaid OK') + (p.minPay ? `, at least ${p.minPay}` : '')),
           row('Locations', p.locations.join(', ') + (p.relocate ? ' · open to relocating' : '')),

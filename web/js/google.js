@@ -178,3 +178,4 @@ export async function deleteAllData() {
   await Promise.all((j.files || []).map(f => gfetch(`${DRIVE}/${f.id}`, { method: 'DELETE' })));
   dataFileId = '';
 }
+

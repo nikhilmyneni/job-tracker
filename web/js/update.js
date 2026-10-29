@@ -62,18 +62,25 @@ async function newMessages(q, max, me, seen, idPrefix, bodyLen, onThread) {
   return out.sort((a, b) => a.date - b.date);
 }
 
-/** One batch → application updates, by AI or (if that fails or there's no key) by keyword rules. */
-async function classifyBatch(s, batch, note, report) {
+/**
+ * One batch → {updates, review}: application updates, and emails that look like one but couldn't be matched.
+ * By AI, or (if that fails or there's no key) by keyword rules.
+ */
+async function classifyBatch(s, batch, note) {
+  let all = null;
   if (hasAi(s)) {
     try {
       const out = await ask(s, C.classifyPrompt(batch), true, () => {});
-      return (Array.isArray(out) ? out : []).map(u => Object.assign({ email: batch[Number(u.n)] }, u))
-        .filter(u => u.email && u.is_application_update && u.company);
+      all = (Array.isArray(out) ? out : []).map(u => Object.assign({ email: batch[Number(u.n)] }, u)).filter(u => u.email);
     } catch (e) {
       note(`AI couldn't sort some emails (${e.message}). Used keyword rules for those.`);
     }
   }
-  return batch.map(e => Object.assign({ email: e }, C.ruleClassify(e))).filter(u => u.is_application_update);
+  if (!all) all = batch.map(e => Object.assign({ email: e }, C.ruleClassify(e)));
+  return {
+    updates: all.filter(u => u.is_application_update && u.company),
+    review: all.filter(u => u.needs_review || (u.is_application_update && !u.company)),
+  };
 }
 
 async function syncApplications(data, me, afterStr, seen, result, report, note, refresh) {
@@ -89,11 +96,12 @@ async function syncApplications(data, me, afterStr, seen, result, report, note, 
     const group = batches.slice(i, i + SORT_PARALLEL);
     const from = i * SORT_BATCH + 1, to = Math.min(emails.length, (i + group.length) * SORT_BATCH);
     report(`Sorting emails ${from}–${to} of ${emails.length}…`, 0.3 + 0.5 * (from - 1) / emails.length);
-    const outs = await Promise.all(group.map(b => classifyBatch(s, b, note, report)));
-    outs.flat().sort((a, b) => a.email.date - b.email.date).forEach(u => C.upsertApplication(data.applications, {
-      company: u.company, role: u.role, stage: u.stage, next_step: u.next_step,
+    const outs = await Promise.all(group.map(b => classifyBatch(s, b, note)));
+    outs.flatMap(o => o.updates).sort((a, b) => a.email.date - b.email.date).forEach(u => C.upsertApplication(data.applications, {
+      company: u.company, role: u.role, stage: u.stage, next_step: u.next_step, next_at: u.next_at, next_kind: u.next_kind, round: u.round,
       date: C.ymd(u.email.date), channel: C.channelFromSender(u.email.from), link: u.email.link,
     }, result));
+    outs.flatMap(o => o.review).forEach(u => { if (C.addReview(data, u.email, u)) result.review++; });
     group.flat().forEach(e => seen.add(e.id));
     refresh();
   }

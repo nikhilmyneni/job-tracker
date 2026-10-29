@@ -1,7 +1,11 @@
-/** Applications: everything you've applied to, kept up to date from Gmail. */
+/** Applications: everything you've applied to, kept up to date from Gmail. Board, table or timeline. */
 import { h, busy, icon, pageHead, ago, openDialog, isHttp, toast, errText } from './ui.js';
-import { STATUSES, summary, bySource } from './core.js';
+import { STATUSES, STATUS_LABEL, summary, bySource } from './core.js';
+import { renderBoard, renderTimeline, editDialog } from './view-board.js';
+import { notifySupported, notifyAllowed } from './notify.js';
 
+const VIEWS = ['Board', 'Table', 'Timeline'];
+let view = (() => { try { return VIEWS.includes(localStorage.getItem('jh-apps-view')) ? localStorage.getItem('jh-apps-view') : 'Board'; } catch (e) { return 'Board'; } })();
 let sortCol = 'applied_on', sortDir = -1, query = '';
 
 export function renderApplications(ctx, root) {
@@ -9,57 +13,81 @@ export function renderApplications(ctx, root) {
   const apps = data.applications, sum = summary(apps);
   const sync = h('button', { type: 'button', class: 'btn btn-primary', id: 'sync-now', onclick: () => act.updateNow() }, icon('refresh'), h('span', {}, 'Sync now'));
   const add = h('button', { type: 'button', class: 'btn btn-quiet', onclick: () => addDialog(ctx) }, icon('plus'), h('span', {}, 'Add manually'));
+  const body = h('div', { class: 'apps-body' });
   const search = h('input', { type: 'search', class: 'search', placeholder: 'Search company, role or next step', 'aria-label': 'Search applications', value: query,
-    oninput: () => { query = search.value; drawTable(); } });
+    oninput: () => { query = search.value; drawBody(); } });
+
+  const matching = () => {
+    const q = query.trim().toLowerCase();
+    return apps.filter(a => !q || ['company', 'role', 'channel', 'status', 'next_step'].some(k => String(k === 'status' ? STATUS_LABEL[a.status] : a[k] || '').toLowerCase().includes(q)));
+  };
+  const drawBody = () => {
+    const list = matching();
+    if (!apps.length) {
+      body.replaceChildren(h('div', { class: 'empty-block' }, h('h2', {}, data.lastRunAt ? 'No applications found yet' : 'Your applications will appear here'),
+        h('p', {}, data.lastRunAt ? 'Nothing in your Gmail looked like an application. Add one by hand, or sync again after you apply somewhere.' : 'Sync now reads your Gmail (read-only) and sorts every application email it finds.')));
+      return;
+    }
+    body.replaceChildren(view === 'Board' ? renderBoard(ctx, list) : view === 'Timeline' ? renderTimeline(list) : table(ctx, list));
+  };
+
+  const tabs = h('div', { class: 'tabs', role: 'tablist', 'aria-label': 'View' }, ...VIEWS.map(v => h('button', {
+    type: 'button', role: 'tab', 'aria-selected': String(v === view), onclick: () => {
+      view = v; try { localStorage.setItem('jh-apps-view', v); } catch (e) { /* fine */ }
+      tabs.querySelectorAll('[role=tab]').forEach(b => b.setAttribute('aria-selected', String(b.textContent === v)));
+      drawBody();
+    },
+  }, v)));
+  drawBody();
 
   const stats = h('section', { class: 'stats', 'aria-label': 'Totals' }, ...[
     ['Total', sum.total, 'applications sent'], ['Active', sum.active, 'still in play'],
     ['Interviews', sum.interviews, 'reached a round'], ['Offers', sum.offers, 'received'],
   ].map(([k, v, s]) => h('div', { class: 'stat' }, h('p', { class: 'stat-k' }, k), h('p', { class: 'stat-v' }, v), h('p', { class: 'stat-s' }, s))));
 
-  const tbody = h('tbody');
-  const head = h('tr', {}, ...[['company', 'Company'], ['role', 'Role'], ['channel', 'Channel'], ['applied_on', 'Applied'], ['status', 'Status'], ['next_step', 'Next step']]
-    .map(([k, l]) => h('th', { scope: 'col', 'aria-sort': k === sortCol ? (sortDir > 0 ? 'ascending' : 'descending') : null },
-      h('button', { type: 'button', class: 'th-sort', onclick: () => { if (k === sortCol) sortDir = -sortDir; else { sortCol = k; sortDir = k === 'applied_on' ? -1 : 1; } renderApplications(ctx, root); } }, l))),
-    h('th', {}, h('span', { class: 'visually-hidden' }, 'Actions')));
-  const drawTable = () => {
-    const q = query.trim().toLowerCase();
-    const rows = apps.filter(a => !q || ['company', 'role', 'channel', 'status', 'next_step'].some(k => String(a[k] || '').toLowerCase().includes(q)))
-      .sort((a, b) => sortDir * String(a[sortCol] || '').localeCompare(String(b[sortCol] || '')));
-    if (!rows.length) {
-      tbody.replaceChildren(h('tr', {}, h('td', { colSpan: 7, class: 'empty' }, apps.length ? 'No applications match that search.' : 'No applications yet. Sync now reads your Gmail, or add one by hand.')));
-      return;
-    }
-    tbody.replaceChildren(...rows.map(a => {
-      const sel = h('select', { class: 'select-sm', 'aria-label': 'Status for ' + a.company, onchange: async () => {
-        sel.disabled = true;
-        try { await act.setApplicationStatus(a, sel.value); } catch (e) { toast(errText(e), true); sel.disabled = false; }
-      } }, ...STATUSES.map(st => h('option', { value: st, selected: st === a.status }, st)));
-      return h('tr', {},
-        h('td', {}, h('span', { class: 'cell-co' }, h('span', { class: 'ini' }, (a.company || '?').charAt(0).toUpperCase()), h('b', {}, a.company))),
-        h('td', {}, isHttp(a.email_link) ? h('a', { href: a.email_link, target: '_blank', rel: 'noopener noreferrer', title: 'Open the email in Gmail' }, a.role || 'Role not stated') : (a.role || 'Role not stated')),
-        h('td', {}, a.channel), h('td', { class: 'num' }, a.applied_on), h('td', {}, sel), h('td', { class: 'muted' }, a.next_step || ''),
-        h('td', {}, h('button', { type: 'button', class: 'icon-btn', 'aria-label': `Remove ${a.company}`, onclick: async () => {
-          if (!confirm(`Remove ${a.company}${a.role ? ' – ' + a.role : ''}?`)) return;
-          try { await act.deleteApplication(a); } catch (e) { toast(errText(e), true); }
-        } }, icon('x'))));
-    }));
-  };
-  drawTable();
+  const review = data.review.length ? h('div', { class: 'notice notice-orange' }, icon('alert'),
+    h('p', {}, h('b', {}, `${data.review.length} email${data.review.length === 1 ? '' : 's'} need${data.review.length === 1 ? 's' : ''} a look.`), ' They seem to be about an application, but the company or stage wasn’t clear.'),
+    h('button', { type: 'button', class: 'btn btn-sm btn-quiet', onclick: () => reviewDialog(ctx) }, 'Review')) : '';
+
+  const askNotify = notifySupported() && !(data.settings.notify && notifyAllowed()) && !ctx.demo && !dismissedNotify() ? h('div', { class: 'notice' }, icon('bell'),
+    h('p', {}, h('b', {}, 'Get notified when a status changes.'), ' And when new matches arrive, while Job Hunter is open.'),
+    h('button', { type: 'button', class: 'btn btn-sm btn-primary', onclick: (e) => busy(e.currentTarget, 'Asking…', () => act.enableNotifications()) }, 'Turn on'),
+    h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Not now', onclick: () => { try { localStorage.setItem('jh-notify-later', '1'); } catch (e) { /* fine */ } askNotify.remove(); } }, icon('x'))) : '';
 
   const src = bySource(apps);
   root.replaceChildren(
     pageHead('Applications', data.lastRunAt ? `Last synced from Gmail ${ago(data.lastRunAt)}` : 'Not synced yet', search, sync, add),
-    stats,
-    h('section', { class: 'panel', 'aria-labelledby': 'apps-title' },
-      h('h2', { id: 'apps-title', class: 'panel-title' }, 'All applications'),
-      h('div', { class: 'table-box' }, h('table', { class: 'table' }, h('thead', {}, head), tbody))),
-    h('section', { class: 'panel panel-narrow', 'aria-labelledby': 'src-title' },
+    review, askNotify, stats,
+    h('section', { class: 'apps', 'aria-label': 'Your applications' }, tabs, body),
+    src.length ? h('section', { class: 'panel panel-narrow', 'aria-labelledby': 'src-title' },
       h('h2', { id: 'src-title', class: 'panel-title' }, 'Which channels get replies'),
-      src.length ? h('div', { class: 'table-box' }, h('table', { class: 'table' },
+      h('div', { class: 'table-box' }, h('table', { class: 'table' },
         h('thead', {}, h('tr', {}, h('th', {}, 'Channel'), h('th', { class: 'num' }, 'Sent'), h('th', { class: 'num' }, 'Replies'), h('th', { class: 'num' }, 'Reply rate'))),
-        h('tbody', {}, ...src.map(r => h('tr', {}, h('td', {}, r.channel), h('td', { class: 'num' }, r.sent), h('td', { class: 'num' }, r.replies), h('td', { class: 'num' }, r.rate + '%'))))))
-        : h('p', { class: 'empty' }, 'Reply rates show up once you have applications.')));
+        h('tbody', {}, ...src.map(r => h('tr', {}, h('td', {}, r.channel), h('td', { class: 'num' }, r.sent), h('td', { class: 'num' }, r.replies), h('td', { class: 'num' }, r.rate + '%'))))))) : '');
+}
+
+const dismissedNotify = () => { try { return localStorage.getItem('jh-notify-later') === '1'; } catch (e) { return false; } };
+
+function table(ctx, list) {
+  const { act } = ctx;
+  const head = h('tr', {}, ...[['company', 'Company'], ['role', 'Role'], ['channel', 'Channel'], ['applied_on', 'Applied'], ['status', 'Status'], ['next_step', 'Next step']]
+    .map(([k, l]) => h('th', { scope: 'col', 'aria-sort': k === sortCol ? (sortDir > 0 ? 'ascending' : 'descending') : null },
+      h('button', { type: 'button', class: 'th-sort', onclick: (e) => { if (k === sortCol) sortDir = -sortDir; else { sortCol = k; sortDir = k === 'applied_on' ? -1 : 1; } e.currentTarget.closest('.table-box').replaceWith(table(ctx, list)); } }, l))),
+    h('th', {}, h('span', { class: 'visually-hidden' }, 'Edit')));
+  const rows = list.slice().sort((a, b) => sortDir * String(a[sortCol] || '').localeCompare(String(b[sortCol] || '')));
+  const tbody = h('tbody', {}, ...(rows.length ? rows.map(a => {
+    const sel = h('select', { class: 'select-sm', 'aria-label': 'Status for ' + a.company, onchange: async () => {
+      sel.disabled = true;
+      try { await act.setApplicationStatus(a, sel.value); } catch (e) { toast(errText(e), true); sel.disabled = false; }
+    } }, ...STATUSES.map(st => h('option', { value: st, selected: st === a.status }, STATUS_LABEL[st])));
+    return h('tr', {},
+      h('td', {}, h('span', { class: 'cell-co' }, h('span', { class: 'ini' }, (a.company || '?').charAt(0).toUpperCase()), h('b', {}, a.company))),
+      h('td', {}, isHttp(a.posting_link) ? h('a', { href: a.posting_link, target: '_blank', rel: 'noopener noreferrer', title: 'Open the job posting' }, a.role || 'Role not stated') : (a.role || 'Role not stated'),
+        isHttp(a.email_link) ? h('a', { href: a.email_link, target: '_blank', rel: 'noopener noreferrer', class: 'cell-link', 'aria-label': `Open the latest ${a.company} email in Gmail` }, icon('mail')) : ''),
+      h('td', {}, a.channel), h('td', { class: 'num' }, a.applied_on), h('td', {}, sel), h('td', { class: 'muted' }, a.next_step || ''),
+      h('td', {}, h('button', { type: 'button', class: 'icon-btn', 'aria-label': `Edit ${a.company}`, onclick: () => editDialog(ctx, a) }, icon('file'))));
+  }) : [h('tr', {}, h('td', { colSpan: 7, class: 'empty' }, 'No applications match that search.'))]));
+  return h('div', { class: 'table-box panel' }, h('table', { class: 'table' }, h('thead', {}, head), tbody));
 }
 
 function addDialog(ctx) {
@@ -81,3 +109,25 @@ function addDialog(ctx) {
   company.focus();
 }
 
+/** Emails that couldn't be matched: open them in Gmail, add them as an application, or dismiss. */
+function reviewDialog(ctx) {
+  const { data, act } = ctx;
+  const list = h('ul', { class: 'review' });
+  const draw = () => {
+    if (!data.review.length) { close(); toast('All caught up'); return; }
+    list.replaceChildren(...data.review.map(r => {
+      const company = h('input', { value: r.company, 'aria-label': 'Company', placeholder: 'Company' });
+      const stage = h('select', { 'aria-label': 'Stage' }, ...STATUSES.map(s => h('option', { value: s, selected: s === r.stage }, STATUS_LABEL[s])));
+      const addBtn = h('button', { type: 'button', class: 'btn btn-sm btn-primary', onclick: () => busy(addBtn, 'Adding…', async () => {
+        await act.resolveReview(r, { company: company.value, stage: stage.value }); draw();
+      }) }, 'Add');
+      return h('li', {},
+        h('p', { class: 'review-subj' }, h('b', {}, r.subject || '(no subject)'), h('span', {}, `${r.from} · ${r.date}`)),
+        h('div', { class: 'review-ctl' }, company, stage, addBtn,
+          h('button', { type: 'button', class: 'btn btn-sm btn-quiet', onclick: async () => { await act.resolveReview(r, null); draw(); } }, 'Not an application'),
+          isHttp(r.link) ? h('a', { href: r.link, target: '_blank', rel: 'noopener noreferrer', class: 'icon-btn', 'aria-label': 'Open in Gmail' }, icon('external')) : ''));
+    }));
+  };
+  const close = openDialog('Emails that need a look', list);
+  draw();
+}

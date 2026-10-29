@@ -2,6 +2,7 @@
 import { h, busy, pageHead, holdButton, fmtDateTime } from './ui.js';
 import { youBlock, wantBlock, whereBlock, avoidBlock, routineBlock, cvBlock, aiBlock, companiesBlock } from './onboarding.js';
 import { downloadBlob } from './files.js';
+import { notifySupported, notifyAllowed } from './notify.js';
 
 const panel = (title, intro, ...body) => h('section', { class: 'panel' }, h('h2', { class: 'panel-title' }, title), intro ? h('p', { class: 'panel-sub' }, intro) : '', ...body);
 
@@ -51,9 +52,21 @@ export function renderSettings(ctx, root) {
         panel('Routine', '', routine.el, saveBar('Save routine', (d) => routine.collect(d), ctx)),
         panel('Companies to follow', 'Their open jobs are checked on every sync, alongside your job-alert emails.', companies.el, saveBar('Save companies', (d) => companies.collect(d), ctx))),
       h('div', { class: 'stack-lg' },
+        notifyPanel(ctx),
         panel('AI (free keys)', 'Sorts emails more accurately, scores openings and reads your CV.', ai.el, saveBar('Save keys', (d) => ai.collect(d), ctx)),
         panel('Your data', `Saved in a hidden app folder in ${ctx.me ? ctx.me.email + '’s' : 'your'} Google Drive. Only Job Hunter can open it.`,
           h('div', { class: 'row' }, exportBtn, del)),
         panel('Recent activity', '', h('ul', { class: 'log' }, ...(data.log.length ? data.log.slice(0, 12) : [{ at: '', msg: 'Nothing yet.' }])
           .map(l => h('li', {}, l.at ? h('time', {}, fmtDateTime(l.at)) : '', h('span', {}, l.msg))))))));
+}
+
+function notifyPanel(ctx) {
+  const { data, act } = ctx;
+  const on = data.settings.notify && notifyAllowed();
+  const status = h('div', { class: 'status', role: 'status' });
+  const btn = h('button', { type: 'button', class: on ? 'btn btn-quiet' : 'btn btn-primary', onclick: () => busy(btn, on ? 'Turning off…' : 'Asking…', () => (on ? act.disableNotifications() : act.enableNotifications()), status) },
+    on ? 'Turn off notifications' : 'Turn on notifications');
+  return panel('Notifications', notifySupported()
+    ? (on ? 'On. You’ll get one when an application changes status or new matches arrive, while Job Hunter is open.' : 'Get one when an application changes status or new matches arrive, while Job Hunter is open (a tab, or the installed app).')
+    : 'This browser can’t show notifications.', notifySupported() ? h('div', { class: 'save-bar' }, btn, status) : '');
 }

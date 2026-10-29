@@ -12,7 +12,10 @@
   --orange-soft: #FDEEE4; --orange-text: #9A3B0C;
   --green: #1B7A4B; --green-soft: #E3F4EA;
   --red: #B42318; --red-soft: #FDE8E7;
-  --night: #0F1730; --night-2: #22305A; --night-text: #C9D0E0;
+  --night: #0F1730; --night-2: #22305A; --night-text: #C9D0E0; --night-chip: #22305A; --night-chip-text: #DCE5FF; --night-miss: #4A2A1A; --night-miss-text: #FFD9C2;
+  --hover: #E9ECF3; --active: #E3E7F0; --track: #E9ECF3; --pill-bg: #EEF0F5; --chip-hover: #D5E0FA; --accent-line: #BCCBF2;
+  --paper: #FFFFFF; --paper-line: #D5DAE6; --paper-fill: #EDF0F6; --on-accent: #FFFFFF; --sync-fill: #7EA0FF;
+  --scrim: rgba(15, 23, 48, .4); --seg-shadow: 0 1px 2px rgba(15, 23, 48, .08);
 
   --display: "Bricolage Grotesque", "Instrument Sans", system-ui, sans-serif;
   --sans: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -23,7 +26,7 @@
   --shadow-lift: 0 1px 2px rgba(15, 23, 48, .06), 0 12px 32px rgba(15, 23, 48, .10);
   --ease: cubic-bezier(.23, 1, .32, 1);
   --tap: 44px;
-  color-scheme: light;
+  color-scheme: light dark;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -39,7 +42,7 @@ img, svg { display: block; }
 :focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; border-radius: 4px; }
 ::selection { background: var(--blue-soft); color: var(--ink); }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-.skip { position: absolute; left: 16px; top: -60px; background: var(--ink); color: #fff; padding: 10px 14px; border-radius: var(--r-control); z-index: 50; }
+.skip { position: absolute; left: 16px; top: -60px; background: var(--ink); color: var(--ground); padding: 10px 14px; border-radius: var(--r-control); z-index: 50; }
 .skip:focus { top: 12px; }
 
 /* line icons: 24 grid, 2px stroke */
@@ -54,9 +57,9 @@ img, svg { display: block; }
 .btn:hover { color: var(--btn-fg); }
 .btn:active:not(:disabled) { transform: translateY(2px); box-shadow: 0 0 0 var(--btn-edge); }
 .btn:disabled { opacity: .5; cursor: not-allowed; }
-.btn-primary { --btn-bg: var(--blue); --btn-fg: #fff; --btn-edge: var(--blue-hover); }
+.btn-primary { --btn-bg: var(--blue); --btn-fg: var(--on-accent); --btn-edge: var(--blue-hover); }
 .btn-primary:hover { --btn-bg: var(--blue-hover); }
-.btn-ink { --btn-bg: var(--ink); --btn-fg: #fff; --btn-edge: #000; }
+.btn-ink { --btn-bg: var(--ink); --btn-fg: var(--ground); --btn-edge: var(--ink-edge, #000); }
 .btn-ink:hover { --btn-bg: var(--night-2); }
 .btn-quiet { --btn-edge: var(--line-strong); }
 .btn-quiet:hover { --btn-bg: var(--blue-soft); --btn-fg: var(--blue-text); }
@@ -67,9 +70,28 @@ img, svg { display: block; }
 /* chips and pills */
 .kw { display: inline-flex; align-items: center; min-height: 26px; padding: 0 9px; border-radius: var(--r-chip); font: 500 12.5px/1 var(--mono); background: var(--blue-soft); color: var(--blue-text); }
 .kw-miss { background: var(--orange-soft); color: var(--orange-text); }
-.pill { display: inline-flex; align-items: center; min-height: 22px; padding: 0 8px; border-radius: 999px; font: 500 12.5px/1 var(--sans); font-style: normal; background: #EEF0F5; color: var(--muted); white-space: nowrap; }
+.pill { display: inline-flex; align-items: center; min-height: 22px; padding: 0 8px; border-radius: 999px; font: 500 12.5px/1 var(--sans); font-style: normal; background: var(--pill-bg); color: var(--muted); white-space: nowrap; }
 .pill-blue { background: var(--blue-soft); color: var(--blue-text); }
 .pill-orange { background: var(--orange-soft); color: var(--orange-text); }
 .pill-green { background: var(--green-soft); color: var(--green); }
 .pill-red { background: var(--red-soft); color: var(--red); }
-.ini { width: 32px; height: 32px; flex: none; border-radius: 9px; display: inline-flex; align-items: center; justify-content: center; background: var(--night); color: #fff; font: 700 14px/1 var(--display); }
+.ini { width: 32px; height: 32px; flex: none; border-radius: 9px; display: inline-flex; align-items: center; justify-content: center; background: var(--ini-bg, var(--night)); color: var(--ini-fg, #fff); font: 700 14px/1 var(--display); }
+
+/* Pitch dark, following the system setting. True blacks, lightness steps between surfaces, the same blue. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ground: #000000; --surface: #0D0E11; --ink: #F3F4F7; --text: #C9CDD6; --muted: #9AA1AF;
+    --line: #1E2128; --line-strong: #2E323B;
+    --blue: #4C74F0; --blue-hover: #6E8FFF; --blue-soft: #121C38; --blue-text: #A9BEFF;
+    --orange-soft: #2A1709; --orange-text: #FFB98A; --green: #5CCB92; --green-soft: #0C2318; --red: #FF8B80; --red-soft: #2B0F0E;
+    --night: #0D0E11; --night-2: #1A1D24; --night-text: #C9CDD6; --night-chip: #121C38; --night-chip-text: #A9BEFF; --night-miss: #2A1709; --night-miss-text: #FFB98A;
+    --hover: #16181D; --active: #1C1F26; --track: #16181D; --pill-bg: #1A1D24; --chip-hover: #1B2747; --accent-line: #24345E;
+    --paper: #E8EAEF; --paper-line: #B7BDCA; --paper-fill: #D3D7E0; --sync-fill: #6E8FFF;
+    --ini-bg: #22252D; --ini-fg: #F3F4F7; --ink-edge: #8D93A0;
+    --scrim: rgba(0, 0, 0, .7); --seg-shadow: none;
+    --shadow-lift: 0 0 0 1px #1E2128, 0 16px 40px rgba(0, 0, 0, .6);
+  }
+  .btn { box-shadow: 0 2px 0 var(--btn-edge); }
+  .btn-quiet:hover { --btn-bg: var(--blue-soft); }
+  ::selection { background: #24345E; color: #fff; }
+}

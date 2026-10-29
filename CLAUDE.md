@@ -12,8 +12,9 @@ for job sources that don't allow browser calls; they never see user data.
 - `/app`, `/app/matches`, `/app/tailor[/<jobId>]`, `/app/profile`, `/app/settings`: the app
   (`app.html`; Vercel rewrites `/app/*` to it, and `scripts/serve.js` does the same locally).
 
-Flow: sign in → first-run **setup wizard** (roles, level, job type, pay, locations, skip list, CV,
-companies to follow, AI keys, routine) → Applications. Everything from setup can be changed in
+Flow: sign in → first-run **setup wizard**, CV first (drop a file or paste; `profileFromCv` then fills in name,
+city, roles, level and locations), then roles, level, job type, pay, locations (city search from the first letter,
+`placeMatches`), skip list, companies to follow, AI keys, routine → Applications (Board / Table / Timeline). Everything from setup can be changed in
 Profile and CV or Settings.
 
 The Google OAuth app is published but unverified, so users see the unverified screen and there's a 100-user cap.
@@ -67,7 +68,8 @@ The Google OAuth app is published but unverified, so users see the unverified sc
 - `js/ai.js`: providers, `ask()` with fallback, `listModels()`, `parseJsonLoose()`.
 - `js/google.js`: sign-in, Gmail, Drive app data (`job-tracker.json`, `cv-original.*`).
 - `js/update.js`: `runUpdate()` and `cvForResumeFold()`. `js/files.js`: CV import (pdf.js / DOCX / TXT), downloads.
-- `js/app.js`: boot, routing, sync, actions. Screens: `view-applications.js`, `view-matches.js`,
+- `js/notify.js`: browser notifications after a sync (status changes, new matches), only while the app is open; `notificationsFor()` is pure.
+- `js/app.js`: boot, routing, sync, actions. Screens: `view-applications.js` (+ `view-board.js`: board, timeline, edit dialog), `view-matches.js`,
   `view-tailor.js`, `view-settings.js` (Profile and Settings). `onboarding.js`: the wizard plus the shared
   field blocks. `ui.js`: `h()`, `busy`, `holdButton`, `setLabel`, `icon`, `pageHead`, chips, dialogs. `demo.js`.
 - `tests/core.test.mjs`: Node tests for core, docx and ai. `npm test` and `npm run check` must pass before any push.
@@ -75,23 +77,27 @@ The Google OAuth app is published but unverified, so users see the unverified sc
 - `docs/SETUP.md`: users and owner (Google Cloud + Vercel). Keep it in sync with behaviour changes. `docs/ROADMAP.md`: ideas.
 
 ## Data (one Drive app-data file per user, `job-tracker.json`)
-`{version: 2, settings, applications[], jobs[], seen[] (≤5000), log[] (newest first, ≤300), cv, cvFile, cvFold, cvFoldHash, lastRunAt}`.
+`{version: 2, settings, applications[], jobs[], seen[] (≤5000), log[] (newest first, ≤300), cv, cvFile, cvFold, cvFoldHash, review[] (≤50), reviewDone[], lastRunAt}`.
 - `settings`: onboarded, name, city, prefs {roles[], level, jobType, paidOnly, minPay,
-  locations[], relocate, avoid[]}, jobsPerUpdate, autoUpdateHours, sinceDays, companies[{ats, slug, name, host?, site?}],
+  locations[], relocate, avoid[]}, jobsPerUpdate, autoUpdateHours, sinceDays, notify, companies[{ats, slug, name, host?, site?}],
   ai[{provider, key, model}]. To add a setting, update `defaultSettings` + `normalizeSettings`
   (+ `prefsText` if the scorer should use it), the block in `onboarding.js`, and the docs.
 - **Application:** id, company, role, channel, applied_on, status, furthest, last_update,
-  next_step, email_link, key (`company|role` lowercased).
+  next_step, next_at (`YYYY-MM-DD[THH:MM]`), next_kind (interview/deadline), round, email_link, posting_link,
+  history[{on, status, by: email/you/quiet}] (≤30), key (`company|role` lowercased). `nextLabel()` makes the card pill.
+- **review:** emails that look like an application update but couldn't be matched ("N emails need a look"); `addReview()`.
 - **Job:** id, found_on, fit, company, role, location, pay, why, skill_gap, apply_by, link,
   details, status (New/Saved/Applied/Skipped/Expired), key, source, ref (board + id, for the full description), resumefold_at.
 - `cvFold`: the CV as ResumeFold's Resume JSON, made once per CV (`cvFoldHash`).
-- **Statuses:** Applied, Screening, Interview, Offer, Rejected, Withdrawn, Ghosted. Furthest stage never moves backwards.
+- **Statuses:** Applied, Screening, Interview, Offer, Rejected, Withdrawn, Ghosted (shown as `STATUS_LABEL`: Screening = "Assessment",
+  Ghosted = "No reply"). Board columns are `BOARD`. Furthest stage never moves backwards.
 
 ## Workflow
 - `npm run dev`, then open http://localhost:5173/ (landing), `/app?demo` (sample data) or `/app?demo=setup` (the wizard).
   A real sign-in needs the client id in `web/config.js`, with `http://localhost:5173` as an authorized origin.
 - Edit `web/`, then run `npm test` and `npm run check`.
-- Design: tokens in `css/tokens.css` (the brief's palette and fonts). Check screens with the
+- Design: tokens in `css/tokens.css` (the brief's palette and fonts; a pitch-dark theme under `prefers-color-scheme: dark`;
+  colours only through tokens). Phones get a bottom tab bar; every screen must work at 390px. Check screens with the
   `design-taste-frontend` inspector (`--app` for app screens).
 - Deploy: push to `main`, and Vercel builds `web/`.
 

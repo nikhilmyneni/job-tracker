@@ -32,9 +32,16 @@ export function demoData(fresh) {
     ['Zen Cloud', 'VAPT Trainee', 'Internshala', '2026-10-20', 'Screening', 'Screening', 'Complete the online test'],
     ['Orbit', 'Security Engineer', 'LinkedIn', '2026-10-22', 'Applied', 'Applied', ''],
   ];
+  const next = { 'Kavach Security': ['2026-11-03T11:00', 'interview', 'Round 2'], 'Zen Cloud': ['2026-11-06', 'deadline', ''] };
   d.applications = rows.map(([company, role, channel, applied_on, status, furthest, next_step], i) => ({
-    id: 'a' + i, company, role, channel, applied_on, status, furthest, last_update: applied_on, next_step, email_link: '', key: (company + '|' + role).toLowerCase(),
+    id: 'a' + i, company, role, channel, applied_on, status, furthest, last_update: status === 'Applied' ? applied_on : '2026-10-27', next_step, email_link: 'https://mail.google.com/mail/', posting_link: company === 'Orbit' || company === 'Kavach Security' ? 'https://jobs4you.vercel.app/' : '', key: (company + '|' + role).toLowerCase(),
+    next_at: (next[company] || [])[0] || '', next_kind: (next[company] || [])[1] || '', round: (next[company] || [])[2] || '',
+    history: [{ on: applied_on, status: 'Applied', by: 'email' }].concat(status !== 'Applied' ? [{ on: '2026-10-27', status, by: status === 'Ghosted' ? 'quiet' : 'email' }] : []),
   }));
+  d.review = [
+    { id: 'r1', from: 'Talent Team <no-reply@talentdesk.in>', subject: 'Your application: next steps', date: '2026-10-26', link: '', company: '', stage: 'Screening' },
+    { id: 'r2', from: 'Campus Hiring <campus@northwind.in>', subject: 'Re: Application for Security Intern', date: '2026-10-24', link: '', company: 'Northwind', stage: 'Applied' },
+  ];
   d.jobs = [
     { id: 'j1', found_on: '2026-10-28', fit: 5, company: 'Kestrel Systems', role: 'Security Analyst (Fresher)', location: 'Hyderabad', pay: '₹4–5 LPA', why: 'Your SIEM project and CEH match the SOC duties.', skill_gap: 'Splunk', apply_by: '2026-11-05', link: '', details: 'Monitor alerts, triage incidents.', status: 'New', key: 'kestrel systems|security analyst (fresher)', source: 'Greenhouse' },
     { id: 'j2', found_on: '2026-10-28', fit: 4, company: 'Nimbus', role: 'Cloud Security Intern', location: 'Remote', pay: '₹20k/month', why: 'AWS coursework and IAM lab fit.', skill_gap: 'Terraform', apply_by: '', link: '', details: 'IAM reviews, cloud posture checks.', status: 'New', key: 'nimbus|cloud security intern', source: 'Lever' },

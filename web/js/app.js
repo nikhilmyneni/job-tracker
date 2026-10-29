@@ -13,6 +13,7 @@ import { renderTailor } from './view-tailor.js';
 import { renderProfile, renderSettings } from './view-settings.js';
 import { demoData, DEMO_ME, DEMO_FOLD } from './demo.js';
 import { downloadBlob } from './files.js';
+import { askToNotify, notifySync } from './notify.js';
 
 const params = new URLSearchParams(location.search);
 const DEMO = params.has('demo');
@@ -123,7 +124,7 @@ Object.assign(ctx.act, {
   },
   async setJobStatus(job, status) {
     job.status = status;
-    if (status === 'Applied') C.upsertApplication(ctx.data.applications, { company: job.company, role: job.role, stage: 'Applied', date: today(), channel: job.source || 'Recommended job', link: job.link }, C.newResult());
+    if (status === 'Applied') C.upsertApplication(ctx.data.applications, { company: job.company, role: job.role, stage: 'Applied', date: today(), channel: job.source || 'Recommended job', posting: job.link }, C.newResult());
     await persist(); render(true);
   },
   async addApplication(a) {
@@ -132,6 +133,33 @@ Object.assign(ctx.act, {
     await persist(); render(true);
   },
   async setApplicationStatus(app, status) { C.setApplicationStatus(app, status, today()); await persist(); render(true); },
+  /** Manual correction from the card's dialog. */
+  async editApplication(app, e) {
+    if (e.status !== app.status) C.setApplicationStatus(app, e.status, today());
+    const role = String(e.role || '').trim().slice(0, 120);
+    if (role !== app.role) { app.role = role; app.key = (app.company + '|' + role).toLowerCase(); }
+    app.next_step = String(e.next_step || '').trim().slice(0, 200);
+    app.next_at = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$/.test(e.next_at) ? e.next_at : '';
+    app.next_kind = app.next_at ? (e.next_kind === 'deadline' ? 'deadline' : 'interview') : '';
+    await persist(); render(true);
+  },
+  /** An email from "needs a look": add it as an application (fix), or dismiss it (null). */
+  async resolveReview(r, fix) {
+    if (fix) {
+      if (!String(fix.company || '').trim()) throw new Error('Add the company name.');
+      C.upsertApplication(ctx.data.applications, { company: fix.company, stage: fix.stage, date: r.date, channel: C.channelFromSender(r.from), link: r.link }, C.newResult());
+    }
+    ctx.data.review = ctx.data.review.filter(x => x.id !== r.id);
+    ctx.data.reviewDone = (ctx.data.reviewDone || []).concat(r.id).slice(-500);
+    await persist(); render(true);
+  },
+  async enableNotifications() {
+    if (!await askToNotify()) throw new Error('Notifications weren’t allowed.');
+    ctx.data.settings.notify = true;
+    await persist(); render(true);
+    toast('Notifications on. You’ll hear about status changes and new matches while Job Hunter is open.');
+  },
+  async disableNotifications() { ctx.data.settings.notify = false; await persist(); render(true); },
   async deleteApplication(app) { ctx.data.applications = ctx.data.applications.filter(a => a !== app); await persist(); render(true); },
   async deleteAll() {
     if (DEMO) { toast('Demo: nothing to delete.'); return; }
@@ -161,9 +189,11 @@ async function updateNow() {
     syncBanner(true, first ? 'Loading your applications' : 'Syncing with Gmail', 'Starting…', 0.03);
     try {
       if (DEMO) { for (const [t, f] of [['Reading your application emails…', 0.3], ['Sorting emails 1–20 of 20…', 0.7], ['Checking company job boards…', 0.9]]) { syncBanner(true, null, t, f); await sleep(600); } toast('Demo sync done. Sign in to run it on your own Gmail.'); return; }
+      const before = new Set(ctx.data.jobs.map(j => j.id));
       const out = await guarded(() => runUpdate(ctx.data, ctx.me.email, (t, f) => syncBanner(true, null, t, f), () => render(true)));
       await persist();
       render(true);
+      if (!first) notifySync(ctx.data.settings, out.result, ctx.data.jobs.filter(j => !before.has(j.id)));
       const n = out.result.appsChanged.length, j = out.result.jobsNew.length;
       toast(`Synced. ${n} application update${n === 1 ? '' : 's'}, ${j} new match${j === 1 ? '' : 'es'}.` + (out.result.notes.length ? ' ' + out.result.notes[out.result.notes.length - 1] : ''));
     } catch (e) {
