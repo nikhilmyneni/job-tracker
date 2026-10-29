@@ -167,21 +167,29 @@ export function companiesBlock(list, opts = {}) {
 /** Connect Gmail (optional): what it reads, and Google's warning walked through before you see it. */
 export function gmailBlock(ctx) {
   const status = h('div', { class: 'status', role: 'status' });
-  const done = () => {
-    status.className = 'status ok'; status.textContent = 'Gmail connected (read-only). Your applications will load when you start.'; btn.hidden = true;
+  // before: Gmail was already allowed for this app in your Google account (an earlier sign-in), so Google
+  // includes it again without asking. Say so, and how to take it back, instead of claiming you just connected it.
+  const done = (before) => {
+    status.className = 'status ok';
+    status.replaceChildren(before
+      ? ['Gmail is already connected (read-only): you allowed it for Job Hunter before, and Google remembers. To take that back, remove Job Hunter at ',
+        h('a', { href: 'https://myaccount.google.com/permissions', target: '_blank', rel: 'noopener noreferrer' }, 'myaccount.google.com/permissions'), '.']
+      : 'Gmail connected (read-only). Your applications will load when you start.');
+    btn.hidden = true; warn.hidden = true;
     el.dispatchEvent(new Event('input')); // lets the wizard turn "Skip for now" into "Next"
   };
-  const btn = h('button', { type: 'button', class: 'btn btn-primary', onclick: () => busy(btn, 'Connecting…', async () => { await ctx.connectGmail(); done(); }, status) }, 'Connect Gmail');
+  const btn = h('button', { type: 'button', class: 'btn btn-primary', onclick: () => busy(btn, 'Connecting…', async () => { await ctx.connectGmail(); done(false); }, status) }, 'Connect Gmail');
+  let warn;
   const el = h('div', { class: 'stack' },
     h('ul', { class: 'ticks-list' },
       h('li', {}, 'It looks for application and job-alert emails and reads only those.'),
       h('li', {}, 'Read-only: it can’t send, delete, label or change anything.'),
       h('li', {}, 'Skip it and you can still get job matches, tailor resumes, and add or paste applications yourself.')),
-    h('div', { class: 'heads-up' },
+    warn = h('div', { class: 'heads-up' },
       h('p', {}, h('b', {}, 'Google will show a warning.'), ' Reading Gmail needs a permission Google only fully verifies after a paid review, which a free tool can’t afford. When you see “Google hasn’t verified this app”:'),
       h('ol', {}, h('li', {}, 'Choose ', h('b', {}, 'Advanced'), ', then ', h('b', {}, 'Go to Job Hunter'), '.'), h('li', {}, 'Tick the box to let it read your email.'), h('li', {}, 'Choose ', h('b', {}, 'Continue'), '.'))),
     btn, status);
-  if (ctx.gmailOn && ctx.gmailOn()) done();
+  if (ctx.gmailOn && ctx.gmailOn()) done(!ctx.demo);
   return { el, collect: () => {} };
 }
 
