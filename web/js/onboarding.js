@@ -219,8 +219,9 @@ export function companiesBlock(list, opts = {}) {
 const FROM_CV = 'Filled in from your CV. Change anything that isn’t right.';
 const STEPS = [
   { id: 'cv', title: 'Start with your CV', intro: 'Job Hunter reads it to fill in the next questions, score openings and tailor resumes.', block: (d, ctx, w) => cvBlock(d.cv, d.cvFile, { onRead: w.onCvRead }) },
-  { id: 'you', title: 'About you', intro: (d, w) => (w.fromCv ? FROM_CV : 'You can change any answer later.'), block: (d) => youBlock(d) },
-  { id: 'want', title: 'What are you looking for?', intro: (d, w) => (w.fromCv && w.profile.roles.length ? 'Roles picked from your CV. Add or remove any.' : ''), block: (d, ctx, w) => wantBlock(d, w.profile.roles) },
+  { id: 'you', title: 'About you', intro: (d, w) => (!w.fromCv ? 'You can change any answer later.' : w.profile.found.name && w.profile.found.city ? FROM_CV
+    : w.profile.found.name ? 'Your name is from your CV. Add the city you live in now.' : 'Your name wasn’t clear in the CV, so please check it.'), block: (d) => youBlock(d) },
+  { id: 'want', title: 'What are you looking for?', intro: (d, w) => (w.fromCv ? (w.profile.roles.length ? 'Roles that match your CV. Add or remove any.' : 'Your CV didn’t point clearly to a role, so pick a few.') : ''), block: (d, ctx, w) => wantBlock(d, w.profile.roles) },
   { id: 'where', title: 'Where would you like to work?', block: (d) => whereBlock(d) },
   { id: 'avoid', title: 'Anything to skip?', intro: 'Openings with these are left out.', block: (d) => avoidBlock(d) },
   { id: 'companies', title: 'Companies to follow (optional)', intro: 'Job Hunter already reads your job-alert emails from LinkedIn, Naukri, Indeed, Internshala, Wellfound and foundit. Add company career pages for more.', block: (d, ctx) => companiesBlock(d.companies, { demo: ctx.demo }) },
@@ -233,9 +234,10 @@ export function runWizard(root, ctx) {
   const d = JSON.parse(JSON.stringify(ctx.data.settings));
   d.cv = ctx.data.cv; d.cvFile = ctx.data.cvFile; d.cvUpload = null;
   // The CV fills in later answers once, and only the ones still at their defaults.
-  const w = { fromCv: false, profile: { roles: [] } };
-  w.onCvRead = (text) => { w.profile = profileFromCv(text); applyCvProfile(d, w.profile); w.fromCv = true; };
-  if (d.cv) w.profile = profileFromCv(d.cv);
+  const w = { fromCv: false, profile: { roles: [], found: {} } };
+  const hint = ctx.me && !ctx.demo ? ctx.me.name : '';
+  w.onCvRead = (text) => { w.profile = profileFromCv(text, new Date(), { hint }); applyCvProfile(d, w.profile); w.fromCv = true; };
+  if (d.cv) w.profile = profileFromCv(d.cv, new Date(), { hint });
   let i = 0, cur = null;
   const total = STEPS.length + 1;
   const draw = () => {

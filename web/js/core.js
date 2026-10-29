@@ -799,18 +799,92 @@ const ROLE_SIGNALS = [
   ['Data Analyst', /\b(data analy\w+|power ?bi|tableau|excel|pandas|sql|statistics|dashboards?)\b/gi],
   ['ML Engineer', /\b(machine learning|deep learning|tensorflow|pytorch|nlp|computer vision|scikit-learn|llm)\b/gi],
 ];
+const ROLE_SUGGESTIONS_ALL = ['SOC Analyst', 'Security Analyst', 'Penetration Tester', 'Cloud Security', 'Security Engineer', 'GRC Analyst', 'Network Engineer', 'Software Developer', 'Data Analyst', 'ML Engineer'];
 const SKILL_WORDS = ['Python', 'Java', 'JavaScript', 'TypeScript', 'C++', 'C', 'Go', 'Bash', 'PowerShell', 'SQL', 'Linux', 'Windows Server', 'AWS', 'Azure', 'GCP',
   'Docker', 'Kubernetes', 'Terraform', 'Git', 'React', 'Node.js', 'Django', 'Flask', 'Spring', 'HTML', 'CSS', 'MongoDB', 'MySQL', 'PostgreSQL', 'Nmap', 'Wireshark',
   'Burp Suite', 'Metasploit', 'Splunk', 'Wazuh', 'QRadar', 'Sentinel', 'SIEM', 'IDS/IPS', 'Firewall', 'TCP/IP', 'OWASP', 'VAPT', 'IAM', 'ISO 27001', 'NIST',
   'Incident Response', 'Threat Hunting', 'Vulnerability Assessment', 'Power BI', 'Tableau', 'Excel', 'Pandas', 'TensorFlow', 'PyTorch', 'Machine Learning', 'CCNA'];
 
-/** Name, city, suggested roles, level and skills read from the CV text with simple rules. */
-export function profileFromCv(text, now = new Date()) {
-  const t = String(text || '');
+/** "N I K H I L" → "NIKHIL" (CVs with letter-spaced headings), and tidy whitespace. */
+export function tidyCvText(t) {
+  return String(t || '').replace(/\r/g, '')
+    .replace(/\b(?:[A-Za-z] ){2,}[A-Za-z]\b/g, m => m.replace(/ /g, ''))
+    .replace(/[ \t]+/g, ' ').replace(/ *\n */g, '\n');
+}
+
+const NOT_A_NAME = /\b(resume|résumé|curriculum|vitae|cv|profile|summary|objective|contact|address|email|e-mail|phone|mobile|tel|education|skills|experience|projects?|internships?|certifications?|achievements|declaration|b\.?\s?tech|b\.?e|m\.?tech|mca|bca|bsc|msc|engineer|developer|analyst|student|intern|graduate|fresher|university|college|institute|school|india|linkedin|github|portfolio)\b/i;
+const caseName = (s) => (s === s.toUpperCase() || s === s.toLowerCase() ? s.toLowerCase().replace(/(^|[\s'-])\p{L}/gu, c => c.toUpperCase()) : s);
+
+const HEADINGS = ['career objective', 'objective', 'summary', 'professional summary', 'profile', 'about me', 'education', 'academic', 'skills', 'technical skills',
+  'experience', 'work experience', 'projects', 'certifications', 'internships', 'internship', 'achievements', 'contact', 'personal details', 'declaration', 'languages', 'hobbies'];
+const isHeading = (line) => {
+  const sq = line.toLowerCase().replace(/[^a-z]/g, '');
+  return HEADINGS.some(hd => sq === hd.replace(/ /g, '') || (sq.startsWith(hd.replace(/ /g, '')) && line.length < 40 && line === line.toUpperCase()));
+};
+
+/** "karthikreddyanumula" + ["karthik", "anumula"] → "Karthik Reddy Anumula" (the leftovers become words too). */
+function splitByTokens(squashed, tokens) {
+  const s = squashed.toLowerCase();
+  const hits = [];
+  tokens.filter(t => t.length >= 3).sort((a, b) => b.length - a.length).forEach(t => {
+    const i = s.indexOf(t);
+    if (i >= 0 && !hits.some(h => i < h[1] && i + t.length > h[0])) hits.push([i, i + t.length]);
+  });
+  if (!hits.length) return '';
+  hits.sort((a, b) => a[0] - b[0]);
+  const parts = [];
+  let at = 0;
+  hits.forEach(([a, b]) => { if (a > at) parts.push(s.slice(at, a)); parts.push(s.slice(a, b)); at = b; });
+  if (at < s.length) parts.push(s.slice(at));
+  if (parts.length < 2 || parts.length > 4 || parts.some(p => p.length < 2)) return '';
+  return parts.map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(' ');
+}
+
+/** The person's name from the top of the CV, above the first section heading. */
+function nameFromHeader(lines, hint, clues) {
+  const top = [];
+  for (const l of lines.slice(0, 12)) { if (isHeading(l)) break; top.push(l); }
+  const words = (s) => s.split(/\s+/).filter(Boolean);
+  const head = top.join(' ').toLowerCase().replace(/\s+/g, ' ');
+  const squashedHead = head.replace(/[^a-z]/g, '');
+  if (hint) {
+    const hw = words(String(hint).toLowerCase()).filter(w => w.length > 1);
+    if (hw.length >= 2 && hw.every(w => head.includes(w) || squashedHead.includes(w.replace(/[^a-z]/g, '')))) return String(hint).trim();
+  }
+  for (const line of top) {
+    for (const seg of line.split(/\s*[|•·,;:]\s*|\s{3,}|\t/)) {
+      const s = seg.trim().replace(/^(name\s*[-:]?\s*)/i, '');
+      const w = words(s);
+      if (w.length === 1 && /^\p{L}{6,40}$/u.test(s) && !NOT_A_NAME.test(s)) {
+        const split = splitByTokens(s, clues); // letters that ran together: use the email / LinkedIn to find the breaks
+        if (split) return split;
+        continue;
+      }
+      if (w.length < 2 || w.length > 4 || s.length > 40) continue;
+      if (!w.every(x => /^\p{L}[\p{L}.'-]*$/u.test(x)) || NOT_A_NAME.test(s)) continue;
+      return caseName(s);
+    }
+  }
+  return '';
+}
+
+/**
+ * What the CV says about you, read with rules (no AI): name, contact, city, suggested roles, level, skills.
+ * found tells which parts really came from the CV. hint: the Google account name, used when the CV contains it.
+ */
+export function profileFromCv(text, now = new Date(), { hint } = {}) {
+  const t = tidyCvText(text);
   const lines = t.split('\n').map(l => l.trim()).filter(Boolean);
-  const name = (lines.slice(0, 5).find(l => /^[A-Za-z][A-Za-z.' -]{2,40}$/.test(l) && l.split(/\s+/).length >= 2 && l.split(/\s+/).length <= 4 &&
-    !/\b(resume|curriculum|vitae|profile|summary|objective)\b/i.test(l)) || '').replace(/\s+/g, ' ');
-  const head = t.slice(0, 800).toLowerCase(), all = t.toLowerCase();
+  const all = t.toLowerCase();
+  const email = (t.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/) || [''])[0];
+  const phone = ((t.match(/(?:\+?91[\s-]?)?[6-9]\d{4}[\s-]?\d{5}\b/) || [''])[0]).replace(/\s+/g, ' ').trim();
+  const linkedin = (t.match(/(?:https?:\/\/)?(?:www\.)?linkedin\.com\/in\/[A-Za-z0-9_-]+/i) || [''])[0];
+  const github = (t.match(/(?:https?:\/\/)?(?:www\.)?github\.com\/[A-Za-z0-9_-]+/i) || [''])[0];
+  const clues = [email.split('@')[0], linkedin.split('/in/')[1] || '', github.split('.com/')[1] || '', hint || '']
+    .join(' ').toLowerCase().split(/[^a-z]+/).filter(x => x.length >= 3);
+  const name = nameFromHeader(lines, hint, clues);
+
+  // City: the contact lines at the top first, then anywhere.
   const findCity = (s) => {
     let best = null;
     PLACES.slice(2).concat(Object.keys(CITY_ALIAS_IN_CV)).forEach(p => {
@@ -819,13 +893,18 @@ export function profileFromCv(text, now = new Date()) {
     });
     return best ? best.p : '';
   };
-  const city = findCity(head) || findCity(all);
-  const scores = ROLE_SIGNALS.map(([role, re]) => [role, (t.match(re) || []).length]).filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1]);
+  const city = findCity(lines.slice(0, 8).join('\n').toLowerCase()) || findCity(all);
+
+  // Roles: a role named outright (objective, headline) counts most; otherwise it needs at least two signals.
+  const said = ROLE_SUGGESTIONS_ALL.filter(r => new RegExp('\\b' + r.toLowerCase().replace(/\s+/g, '\\s+') + 's?\\b').test(all));
+  const scores = ROLE_SIGNALS.map(([role, re]) => [role, new Set((t.match(re) || []).map(m => m.toLowerCase())).size + (said.includes(role) ? 5 : 0)])
+    .filter(([, n]) => n >= 2).sort((a, b) => b[1] - a[1]);
   const roles = scores.slice(0, 3).map(([r]) => r);
-  const years = [...t.matchAll(/\b(20\d{2})\b/g)].map(m => Number(m[1]));
-  const studying = /\b(pursuing|expected|currently studying|final[- ]year|pre-final)\b/i.test(t) || (years.length && Math.max(...years) > now.getFullYear());
+
+  const years = [...t.matchAll(/\b(20\d{2})\b/g)].map(m => Number(m[1])).filter(y => y <= now.getFullYear() + 6);
+  const studying = /\b(pursuing|expected|currently studying|final[- ]year|pre-final|third[- ]year|(?:2nd|3rd|4th) year)\b/i.test(t) || (years.length && Math.max(...years) > now.getFullYear());
   const skills = SKILL_WORDS.filter(w => new RegExp('(^|[^a-z0-9+#])' + w.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '($|[^a-z0-9+#])').test(all));
-  return { name, city, roles, level: studying ? 'both' : 'fresher', skills };
+  return { name, email, phone, linkedin, github, city, roles, level: studying ? 'both' : 'fresher', skills, found: { name: !!name, city: !!city, roles: roles.length > 0 } };
 }
 
 /** Fills the setup answers from the CV, but only where you haven't answered yet. */

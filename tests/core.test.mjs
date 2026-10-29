@@ -404,3 +404,33 @@ test('placeMatches searches from the first letter', () => {
   assert.ok(!C.placeMatches('mu', ['Mumbai']).includes('Mumbai'));
   assert.deepEqual(C.placeMatches(''), []);
 });
+
+// ---------- stricter CV reading ----------
+const prof = (t, hint) => C.profileFromCv(t, new Date('2026-10-29'), { hint });
+test('name: ALL CAPS line, "Name | email | phone", after a RESUME title', () => {
+  assert.equal(prof('NIKHIL MYNENI\nnikhil@mail.in | +91 98765 43210 | Hyderabad').name, 'Nikhil Myneni');
+  assert.equal(prof('Nikhil Myneni | nikhil@mail.in | 9876543210').name, 'Nikhil Myneni');
+  assert.equal(prof('RESUME\nCurriculum Vitae\nPriya K. Sharma\nEmail: p@mail.in').name, 'Priya K. Sharma');
+});
+test('name: letter-spaced headings, split using the email', () => {
+  assert.equal(prof('N I K H I L   M Y N E N I\nHyderabad').name, 'Nikhil Myneni');
+  assert.equal(prof('K A R T H I K R E D D Y A N U M U L A\nkarthik.anumula@mail.in | Secunderabad').name, 'Karthik Reddy Anumula');
+});
+test('name: never taken from below the first section heading, or from a skills line', () => {
+  const p = prof('SKILLS\nBurp Suite, Metasploit\nPROJECTS\nWeb App VAPT');
+  assert.equal(p.name, ''); assert.equal(p.found.name, false);
+  assert.equal(prof('C A R E E R O B J E C T I V E\nSeeking a role\nBurp Suite, Nmap').name, '');
+});
+test('name: the Google account name wins when the CV contains it', () => {
+  assert.equal(prof('SAINIKHILMYNENI\ncontact', 'Sai Nikhil Myneni').name, 'Sai Nikhil Myneni');
+  assert.equal(prof('Someone Else\nx', 'Sai Nikhil Myneni').name, 'Someone Else');
+});
+test('roles need real evidence; an objective naming a role counts most', () => {
+  assert.deepEqual(prof('A B\nCompleted an audit of the canteen accounts.').roles, []);
+  assert.equal(prof('Objective: Penetration Tester internship\nSkills: Python').roles[0], 'Penetration Tester');
+});
+test('contact details', () => {
+  const p = prof('Riya Verma\nriya.v@mail.in · +91 90000 11111 · linkedin.com/in/riya-v · github.com/riyav');
+  assert.equal(p.email, 'riya.v@mail.in'); assert.equal(p.phone, '+91 90000 11111');
+  assert.equal(p.linkedin, 'linkedin.com/in/riya-v'); assert.equal(p.github, 'github.com/riyav');
+});
