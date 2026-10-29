@@ -68,7 +68,7 @@ export function routineBlock(s) {
 }
 
 /**
- * CV: drop a file on the zone (it leans toward the file as you drag, like kitchen's "Magnetic Drop Zone"),
+ * CV: drop a file on the zone (its contents lean toward the file as you drag, like kitchen's "Magnetic Drop Zone"),
  * browse for one, or paste the text. collect sets d.cv and d.cvUpload (the File, if new).
  * opts.onRead(text) runs after a file is read, so the wizard can fill in the next questions.
  */
@@ -105,7 +105,7 @@ export function cvBlock(cvText, cvFile, opts = {}) {
   const lean = (e) => {
     const r = zone.getBoundingClientRect();
     const dx = (e.clientX - (r.left + r.width / 2)) / r.width, dy = (e.clientY - (r.top + r.height / 2)) / r.height;
-    zone.style.setProperty('--dx', (dx * 10).toFixed(1) + 'px'); zone.style.setProperty('--dy', (dy * 10).toFixed(1) + 'px');
+    zone.style.setProperty('--dx', (dx * 8).toFixed(1) + 'px'); zone.style.setProperty('--dy', (dy * 6).toFixed(1) + 'px');
   };
   zone.addEventListener('dragenter', (e) => { e.preventDefault(); depth++; zone.classList.add('over'); });
   zone.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; lean(e); });

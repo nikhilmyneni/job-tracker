@@ -277,11 +277,15 @@ input[type=time] { min-height: var(--tap); padding: 0 10px; border: 1px solid va
 
 /* ---------- CV drop zone (kitchen "Magnetic Drop Zone") ---------- */
 .drop { --dx: 0px; --dy: 0px; display: grid; justify-items: center; gap: 8px; text-align: center; padding: 32px 20px; border: 2px dashed var(--line-strong); border-radius: var(--r-panel); background: var(--ground);
-  transition: transform 220ms var(--ease), border-color 150ms var(--ease), background-color 150ms var(--ease); }
+  overflow: hidden; transition: border-color 150ms var(--ease), background-color 150ms var(--ease); }
+/* The box itself never moves or grows (so it can't cover what's around it); its contents lean toward the file. */
+.drop > * { transition: transform 220ms var(--ease); }
 .drop > .ic { width: 28px; height: 28px; color: var(--link); }
 .drop-title { font: 700 20px var(--display); color: var(--ink); }
 .drop-sub { color: var(--muted); font-size: 14px; margin-bottom: 6px; }
-.drop.over { border-color: var(--blue); background: var(--blue-soft); transform: translate(var(--dx), var(--dy)) scale(1.02); }
+.drop.over { border-color: var(--blue); border-style: solid; background: var(--blue-soft); }
+.drop.over > * { transform: translate(var(--dx), var(--dy)); }
+@media (prefers-reduced-motion: reduce) { .drop.over > * { transform: none; } }
 .file-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; color: var(--text); }
 .file-line b { color: var(--ink); }
 .paste summary { cursor: pointer; min-height: var(--tap); display: flex; align-items: center; color: var(--link); font-weight: 500; }
