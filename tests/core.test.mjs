@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as C from '../web/js/core.js';
 import { zipStore, unzipFile, docxXmlToText, docxToText, crc32 } from '../web/js/docx.js';
-import { parseJsonLoose, activeProviders } from '../web/js/ai.js';
+import { parseJsonLoose } from '../web/js/ai.js';
 
 const classify = (subject, from, body) => C.ruleClassify({ subject, from, body });
 
@@ -47,13 +47,13 @@ test('settings: defaults', () => {
   assert.equal(s.jobsPerUpdate, 5);
   assert.equal(s.autoUpdateHours, 12);
   assert.equal(s.prefs.paidOnly, true);
-  assert.deepEqual(s.ai, []);
+  assert.equal(s.ai, undefined);
 });
 test('settings: valid kept, invalid replaced, lists cleaned', () => {
   const s = C.normalizeSettings({
     onboarded: true, name: ' Test ', jobsPerUpdate: 10, autoUpdateHours: 7, sinceDays: 60,
     prefs: { roles: ['SOC Analyst', 'soc analyst', '', 5, 'Pentester'], level: 'boss', jobType: 'internship', paidOnly: false, locations: [] },
-    ai: [{ provider: 'groq', key: ' k1 ', model: 'm' }, { provider: 'groq', key: 'k2' }, { provider: 'evil', key: 'x' }, { provider: 'gemini', key: '' }],
+    ai: [{ provider: 'groq', key: 'old-key' }],
   });
   assert.equal(s.onboarded, true);
   assert.equal(s.name, 'Test');
@@ -65,7 +65,7 @@ test('settings: valid kept, invalid replaced, lists cleaned', () => {
   assert.equal(s.prefs.jobType, 'internship');
   assert.equal(s.prefs.paidOnly, false);
   assert.deepEqual(s.prefs.locations, []);
-  assert.deepEqual(s.ai, [{ provider: 'groq', key: 'k1', model: 'm' }]);
+  assert.equal(s.ai, undefined); // saved keys from before are dropped
 });
 test('prefsText lists what the scorer needs', () => {
   const s = C.normalizeSettings({ city: 'Hyderabad', prefs: { roles: ['SOC Analyst'], minPay: '3 LPA', avoid: ['Sales'] } });
@@ -248,10 +248,6 @@ test('parseJsonLoose', () => {
   assert.deepEqual(parseJsonLoose('{"items":[1,2]}'), [1, 2]);
   assert.deepEqual(parseJsonLoose('{"name":"x","skills":[]}'), { name: 'x', skills: [] });
   assert.equal(parseJsonLoose('no json here'), null);
-});
-test('activeProviders keeps order and fills default models', () => {
-  const s = C.normalizeSettings({ ai: [{ provider: 'groq', key: 'g' }, { provider: 'gemini', key: 'k', model: 'gemini-x' }, { provider: 'openrouter', key: 'o' }] });
-  assert.deepEqual(activeProviders(s).map(p => [p.provider, p.model]), [['groq', 'openai/gpt-oss-120b'], ['gemini', 'gemini-x']]);
 });
 
 // ---------- job boards ----------

@@ -1,5 +1,6 @@
 {
   "cleanUrls": false,
+  "functions": { "api/ai.js": { "maxDuration": 60 }, "api/workday.js": { "maxDuration": 20 } },
   "rewrites": [
     { "source": "/app", "destination": "/app.html" },
     { "source": "/app/:path*", "destination": "/app.html" }

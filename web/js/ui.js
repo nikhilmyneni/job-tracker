@@ -125,6 +125,18 @@ export function ago(iso, now = Date.now()) {
   return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
 }
 
+/** A small button that copies text and says "Copied" for a moment. */
+export function copyButton(text, label = 'Copy') {
+  const btn = h('button', { type: 'button', class: 'btn btn-sm btn-quiet copy', onclick: async () => {
+    try { await navigator.clipboard.writeText(text); } catch (e) {
+      const ta = h('textarea', { value: text, readOnly: true, class: 'visually-hidden' }); document.body.append(ta); ta.select();
+      try { document.execCommand('copy'); } finally { ta.remove(); }
+    }
+    setLabel(btn, 'Copied'); setTimeout(() => setLabel(btn, label), 1500);
+  } }, label);
+  return btn;
+}
+
 /** Opens the shared <dialog> with a title and content; returns a close function. */
 export function openDialog(title, ...body) {
   const d = $('dialog');

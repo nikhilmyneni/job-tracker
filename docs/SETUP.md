@@ -1,43 +1,50 @@
 # Job Hunter: guide
 
-A free website that tracks your job applications from Gmail, finds jobs that fit your CV, and writes a tailored one-page resume for each one. It runs in your browser. Your data stays in a hidden app folder in your own Google Drive.
+A free website for freshers that keeps every job application in one place from your Gmail (read-only),
+finds openings that fit your CV, and helps you tailor a one-page resume. It runs in your browser, and your
+data stays in a hidden app folder in your own Google Drive.
 
 ---
 
 ## For users (about 3 minutes)
 
-1. Open the Job Hunter site and click **Sign in with Google**.
-2. Google shows a "Google hasn't verified this app" screen. Click **Advanced → Go to Job Hunter**, then tick **both** boxes (read Gmail, and Job Hunter's own app data in Drive) and click **Continue**.
-3. Answer the setup questions: the roles you want, level, pay, locations, things to skip, and your CV (upload a PDF or Word file, or paste the text).
-4. **Optional but recommended:** add a free AI key. It makes email sorting more accurate, turns on job matching, and writes tailored resumes.
-   - **Google Gemini** (recommended): aistudio.google.com/apikey → *Create API key*.
-   - **Groq** (fast backup): console.groq.com/keys.
-   - **OpenRouter** (many free models): openrouter.ai/settings/keys, then pick a model ending in `:free`.
+1. Open the site and click **Sign in with Google**.
+2. Google shows a "Google hasn't verified this app" screen. Click **Advanced → Go to Job Hunter**, then tick
+   **both** boxes (read Gmail, and Job Hunter's own app data in Drive) and click **Continue**.
+3. Setup starts with your CV: drop a PDF, Word or text file, or paste the text. Job Hunter fills in the next
+   questions from it (name, city, roles, level, locations). Check them, then add pay, places, things to skip
+   and any companies you want to follow.
+4. Click **Start**. The first sync reads your Gmail from the last 30–120 days, and applications appear as
+   they're sorted.
 
-   Click **Test key** to check it and pick a model. Add more than one key and Job Hunter switches to the next when one runs out of free quota.
-5. Click **Start**. The first update reads your Gmail from the last 30–120 days, which can take a minute.
+There's nothing else to set up: the AI is built in and free.
 
 **Install it like an app:** in Chrome or Edge, use the install icon in the address bar. On a phone, use *Add to Home screen*.
 
 ### Everyday use
-- **Updates:** Job Hunter has no server, so it updates while the site is open: by itself every 6, 12 or 24 hours (your choice), or whenever you click **Update now**.
-- **Recommended jobs:** each one has a fit score from 1 to 5, why it fits, a skill to pick up, and **Apply now**.
-  - **Make resume** writes a one-page resume for that job, using only facts from your CV.
-  - You can click any text on the resume to edit it. Then use **Download PDF**, **Download Word**, or **Print**, and **Save edits** to keep your changes.
-  - **Mark applied** adds the job to your applications, and **Skip** hides it.
-- **Applications:** statuses update from your email (applied → test → interview → offer / rejected). An application is marked *Ghosted* after 21 days of silence. You can change a status by hand, remove an application, or **Add application** for ones that never sent an email.
-- **Settings:** change any answer from setup, upload a new CV, download your saved CV file, or manage your AI keys.
+- **Syncing:** there's no background server, so Job Hunter syncs while it's open: as soon as you sign in,
+  then every 6, 12 or 24 hours (your choice), or when you click **Sync now**.
+- **Applications:** Board, Table or Timeline. Drag a card to another column, or tap it to fix the status,
+  role, next step or interview time. "N emails need a look" lists emails it couldn't match.
+- **Job matches:** openings from your job-alert emails and the companies you follow, scored against your CV.
+  **Tailor resume** prepares your CV and the job for ResumeFold.
+- **Notifications:** turn them on to hear about status changes and new matches while Job Hunter is open.
+- **Profile and CV / Settings:** change any answer from setup, upload a new CV, follow companies, or manage your data.
 
 ### Privacy
 - Gmail is **read-only**. Job Hunter never sends, deletes or changes your email.
-- Your data (applications, jobs, resumes, CV, settings and AI keys) is in a hidden folder that only Job Hunter can open. You can see and remove it in Google Drive → Settings → Manage apps.
-- The person who runs the site can't see your data. There's no server, no analytics and no tracking.
-- With an AI key, short email snippets and your CV text go to that AI provider and nowhere else. Free tiers may use what you send to improve their models, so don't add a key if you're not OK with that.
-- **Settings → Your data** has *Export my data* and *Delete all my data*. To remove access entirely, go to myaccount.google.com/permissions → Job Hunter → Remove access.
+- Your data (applications, jobs, CV and settings) is in a hidden folder that only Job Hunter can open. You can
+  see and remove it in Google Drive → Settings → Manage apps.
+- The built-in AI sends short email snippets, job details and CV text through Job Hunter's AI function to Groq
+  (Google Gemini as a backup), only to get the answer. Nothing is stored or logged. Free AI tiers may use what's
+  sent to improve their models.
+- No analytics, ads, trackers or cookies.
+- **Settings → Your data** has *Export my data* and *Delete all my data*. To remove access entirely, go to
+  myaccount.google.com/permissions → Job Hunter → Remove access.
 
 ---
 
-## For the owner (one time, about 15 minutes)
+## For the owner (one time, about 20 minutes)
 
 You need a Google account, a free Vercel account and this repo on GitHub.
 
@@ -46,24 +53,34 @@ You need a Google account, a free Vercel account and this repo on GitHub.
 2. **APIs & Services → Library**: enable the **Gmail API** and the **Google Drive API**.
 3. **APIs & Services → OAuth consent screen** (Google Auth Platform):
    - User type **External**. App name *Job Hunter*, your support email, and your developer contact email.
+   - **Branding**: home page `https://<your-site>/`, privacy policy `https://<your-site>/privacy.html`, authorized domain `<your-site>`.
    - **Data access / Scopes**: add `.../auth/gmail.readonly`, `.../auth/drive.appdata`, `openid`, `.../auth/userinfo.email` and `.../auth/userinfo.profile`.
-   - **Audience**: click **Publish app** (In production). Don't submit it for verification. Users then see the unverified screen, and the app is limited to **100 users**. Going beyond that needs Google's verification plus a paid security assessment for the Gmail scope.
+   - **Audience**: click **Publish app** (In production). Don't submit it for verification. Users then see the
+     unverified screen, and the app is limited to **100 users**. Going beyond that needs Google's verification
+     plus a paid security assessment for the Gmail scope.
 4. **Credentials → Create credentials → OAuth client ID → Web application**.
-   - **Authorized JavaScript origins**: `http://localhost:5173`, and later your Vercel URL (for example `https://job-tracker-yourname.vercel.app`).
-   - No redirect URIs are needed.
+   - **Authorized JavaScript origins**: `http://localhost:5173` and your Vercel URL. No redirect URIs.
    - Copy the **Client ID** into `web/config.js` (`GOOGLE_CLIENT_ID`). It's public, not a secret.
 
-### 2. Try it locally
+### 2. The built-in AI (free keys, kept on the server)
+1. Create a free **Groq** key at console.groq.com/keys, and a free **Gemini** key at aistudio.google.com/apikey (the backup).
+2. In Vercel: **Project → Settings → Environment Variables**, add `GROQ_API_KEY` and `GEMINI_API_KEY`.
+   Optional: `AI_DAILY_LIMIT` (AI calls per user per day, default 80), `GROQ_MODEL`, `GEMINI_MODEL`. Redeploy.
+3. For local testing, put the same `NAME=value` lines in `.env.local` in the repo root. It's gitignored; never commit keys.
+
+Only signed-in Job Hunter users can use it: `web/api/ai.js` checks that the Google token was issued to your client id.
+
+### 3. Try it locally
 ```bash
-npm run dev            # http://localhost:5173  (demo: http://localhost:5173/?demo)
+npm run dev            # http://localhost:5173  (app: /app, demo: /app?demo, setup: /app?demo=setup)
 npm test               # logic tests
 npm run check          # syntax check
 ```
 
-### 3. Deploy on Vercel (free)
+### 4. Deploy on Vercel (free)
 1. vercel.com → **Add New → Project** → import the GitHub repo.
 2. Set **Root Directory** to `web`, Framework Preset to **Other**, and leave the build command empty. Then click **Deploy**.
 3. Add the Vercel URL to the OAuth client's **Authorized JavaScript origins** (step 1.4).
 4. Every push to `main` deploys automatically.
 
-If you use a custom domain, add it to the authorized origins too.
+If you use a custom domain, add it to the authorized origins and the Branding page too.

@@ -76,6 +76,8 @@ export async function signIn(clientId, { hint, consent } = {}) {
 }
 
 export function signedIn() { return !!token && Date.now() < tokenExp; }
+/** The current access token (for our own /api/ai check); throws NeedSignIn when it has expired. */
+export function accessToken() { if (!signedIn()) throw new NeedSignIn('Your Google session ended. Click Continue to sign in again.'); return token; }
 
 export async function signOut() {
   const t = token;

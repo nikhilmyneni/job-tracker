@@ -4,7 +4,7 @@ import * as C from './core.js';
 import * as G from './google.js';
 import { runUpdate, cvForResumeFold } from './update.js';
 import { jobDescription } from './sources.js';
-import { hasAi } from './ai.js';
+import { hasAi, useSharedAi, AiError } from './ai.js';
 import { $, h, busy, toast, errText, setLabel } from './ui.js';
 import { runWizard } from './onboarding.js';
 import { renderApplications } from './view-applications.js';
@@ -70,6 +70,20 @@ document.addEventListener('click', (e) => {
 });
 window.addEventListener('popstate', () => render());
 
+// ---------- the built-in AI ----------
+/** Calls /api/ai (the built-in AI) with your Google token, so only signed-in users can use it. */
+async function sharedAi(task, prompt, json) {
+  const token = G.accessToken();
+  let res;
+  try {
+    res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: JSON.stringify({ task, prompt, json }) });
+  } catch (e) { throw new AiError('Built-in AI: network error', true); }
+  const j = await res.json().catch(() => ({}));
+  if (res.status === 401) { showReconnect(true); throw new G.NeedSignIn(j.error || 'Sign in again.'); }
+  if (!res.ok) throw new AiError(j.error || `Built-in AI error ${res.status}`, res.status >= 500);
+  return j.result;
+}
+
 // ---------- saving ----------
 function showReconnect(on) { $('reconnect').hidden = !on; }
 
@@ -111,7 +125,7 @@ Object.assign(ctx.act, {
     let base = d.cvFold && d.cvFoldHash === hash ? d.cvFold : null;
     if (!base) {
       if (DEMO) { await sleep(700); base = DEMO_FOLD; } else {
-        if (!hasAi(d.settings)) throw new Error('Reading your CV into ResumeFold’s format needs a free AI key (Settings). Or upload your CV straight into ResumeFold.');
+        if (!hasAi(d.settings)) throw new Error('Reading your CV into ResumeFold’s format needs the AI, which isn’t available right now. You can upload your CV straight into ResumeFold instead.');
         base = await cvForResumeFold(d);
       }
       d.cvFold = base; d.cvFoldHash = hash;
@@ -265,6 +279,7 @@ async function boot() {
   if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('/sw.js').catch(() => {});
 
   if (DEMO) {
+    useSharedAi(async () => { throw new AiError('Demo: the AI runs once you sign in.', false); });
     $('demo-banner').hidden = false;
     ctx.me = DEMO_ME;
     ctx.data = demoData(params.get('demo') === 'setup');
@@ -272,6 +287,7 @@ async function boot() {
     return;
   }
   G.preload();
+  useSharedAi(sharedAi);
   const btn = $('signin-btn');
   btn.addEventListener('click', () => signInFlow(btn));
   if (!GOOGLE_CLIENT_ID) {

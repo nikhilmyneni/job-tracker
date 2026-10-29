@@ -20,7 +20,6 @@ export function demoData(fresh) {
   d.settings = normalizeSettings({
     onboarded: true, name: 'Test Person', city: 'Hyderabad',
     prefs: { roles: ['SOC Analyst', 'Security Analyst', 'Cloud Security'], level: 'fresher', jobType: 'both', paidOnly: true, minPay: '3 LPA', locations: ['Hyderabad', 'Remote', 'Bengaluru'], relocate: true, avoid: ['Sales', 'Telecalling'] },
-    ai: [{ provider: 'gemini', key: 'demo-key-1234', model: 'gemini-flash-latest' }],
     companies: [{ ats: 'greenhouse', slug: 'zscaler', name: 'Zscaler' }, { ats: 'lever', slug: 'cred', name: 'CRED' }],
   });
   const rows = [

@@ -27,7 +27,7 @@ export async function runUpdate(data, me, report, refresh = () => {}) {
   refresh();
 
   if (s.jobsPerUpdate > 0) {
-    if (!hasAi(s)) result.notes.push('Job matching is off. Add a free AI key in Settings to turn it on.');
+    if (!hasAi(s)) result.notes.push('Job matching is paused because the AI isn’t available right now.');
     else if (!data.cv) result.notes.push('Add your CV in Settings to get job matches.');
     else await findJobs(data, me, afterStr, seen, result, report, note);
   }
@@ -70,7 +70,7 @@ async function classifyBatch(s, batch, note) {
   let all = null;
   if (hasAi(s)) {
     try {
-      const out = await ask(s, C.classifyPrompt(batch), true, () => {});
+      const out = await ask(s, C.classifyPrompt(batch), true, () => {}, 'classify');
       all = (Array.isArray(out) ? out : []).map(u => Object.assign({ email: batch[Number(u.n)] }, u)).filter(u => u.email);
     } catch (e) {
       note(`AI couldn't sort some emails (${e.message}). Used keyword rules for those.`);
@@ -117,7 +117,7 @@ async function findJobs(data, me, afterStr, seen, result, report, note) {
     const batch = alerts.slice(i, i + 4);
     report(`Finding openings in job alerts ${i + 1}–${i + batch.length} of ${alerts.length}…`, 0.84);
     try {
-      const out = await ask(s, C.extractPrompt(batch), true, () => {});
+      const out = await ask(s, C.extractPrompt(batch), true, () => {}, 'extract');
       if (Array.isArray(out)) listings = listings.concat(out.map(l => Object.assign({}, l, { source: 'Job alert email' })));
       batch.forEach(a => seen.add(a.id));
     } catch (e) {
@@ -141,7 +141,7 @@ async function findJobs(data, me, afterStr, seen, result, report, note) {
   if (!candidates.length) return;
   report(`Scoring ${candidates.length} openings against your CV…`, 0.94);
   let scored;
-  try { scored = await ask(s, C.scorePrompt(data.cv, s, candidates), true, () => {}); } catch (e) {
+  try { scored = await ask(s, C.scorePrompt(data.cv, s, candidates), true, () => {}, 'score'); } catch (e) {
     note(`AI couldn't score the openings (${e.message}).`);
     return;
   }
@@ -153,7 +153,7 @@ async function findJobs(data, me, afterStr, seen, result, report, note) {
 
 /** The CV as ResumeFold's Resume JSON (not tailored: ResumeFold does that). Made once per CV and kept. */
 export async function cvForResumeFold(data) {
-  const r = C.cleanResumeFold(await ask(data.settings, C.resumeFoldPrompt(data.cv), true, () => {}));
+  const r = C.cleanResumeFold(await ask(data.settings, C.resumeFoldPrompt(data.cv), true, () => {}, 'cv'));
   if (!r) throw new Error('The AI could not read your CV into ResumeFold’s format. Try again.');
   return r;
 }

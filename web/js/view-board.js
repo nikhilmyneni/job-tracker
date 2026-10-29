@@ -71,12 +71,19 @@ export function editDialog(ctx, a) {
       isHttp(a.email_link) ? h('a', { href: a.email_link, target: '_blank', rel: 'noopener noreferrer', class: 'link-ext' }, icon('mail'), 'Open the latest email') : '',
       isHttp(a.posting_link) ? h('a', { href: a.posting_link, target: '_blank', rel: 'noopener noreferrer', class: 'link-ext' }, icon('external'), 'Open the job posting') : '') : '',
     msg,
-    h('div', { class: 'row-split' },
-      h('button', { type: 'button', class: 'btn btn-quiet', onclick: async () => {
-        if (!confirm(`Remove ${a.company}${a.role ? ' – ' + a.role : ''} from your applications?`)) return;
-        try { await ctx.act.deleteApplication(a); close(); } catch (err) { toast(errText(err), true); }
-      } }, 'Remove'), save));
+    h('div', { class: 'row-split' }, removeBtn(() => ctx.act.deleteApplication(a).then(() => close())), save));
   const close = openDialog(a.company, form);
+}
+
+/** Remove, confirmed in place: the button becomes "Yes, remove" and "Keep" (no second dialog). */
+function removeBtn(onRemove) {
+  const box = h('div', { class: 'confirm-inline' });
+  const ask = () => box.replaceChildren(h('span', { class: 'confirm-q', role: 'status' }, 'Remove it?'),
+    h('button', { type: 'button', class: 'btn btn-danger', onclick: (e) => busy(e.currentTarget, 'Removing…', onRemove) }, 'Yes, remove'),
+    h('button', { type: 'button', class: 'btn btn-quiet', onclick: idle }, 'Keep'));
+  const idle = () => box.replaceChildren(h('button', { type: 'button', class: 'btn btn-quiet', onclick: () => { ask(); box.querySelector('.btn-danger').focus(); } }, 'Remove'));
+  idle();
+  return box;
 }
 
 export function renderTimeline(apps) {

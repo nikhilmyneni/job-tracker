@@ -1,5 +1,5 @@
 /** Applications: everything you've applied to, kept up to date from Gmail. Board, table or timeline. */
-import { h, busy, icon, pageHead, ago, openDialog, isHttp, toast, errText } from './ui.js';
+import { h, busy, icon, pageHead, ago, openDialog, isHttp, toast, errText, copyButton } from './ui.js';
 import { STATUSES, STATUS_LABEL, summary, bySource } from './core.js';
 import { renderBoard, renderTimeline, editDialog } from './view-board.js';
 import { notifySupported, notifyAllowed } from './notify.js';
@@ -122,7 +122,8 @@ function reviewDialog(ctx) {
         await act.resolveReview(r, { company: company.value, stage: stage.value }); draw();
       }) }, 'Add');
       return h('li', {},
-        h('p', { class: 'review-subj' }, h('b', {}, r.subject || '(no subject)'), h('span', {}, `${r.from} · ${r.date}`)),
+        h('div', { class: 'review-subj' }, h('b', {}, r.subject || '(no subject)'), h('span', {}, `${r.from} · ${r.date}`),
+          /@/.test(r.from) ? copyButton((r.from.match(/[^\s<>"]+@[^\s<>"]+/) || [r.from])[0], 'Copy address') : ''),
         h('div', { class: 'review-ctl' }, company, stage, addBtn,
           h('button', { type: 'button', class: 'btn btn-sm btn-quiet', onclick: async () => { await act.resolveReview(r, null); draw(); } }, 'Not an application'),
           isHttp(r.link) ? h('a', { href: r.link, target: '_blank', rel: 'noopener noreferrer', class: 'icon-btn', 'aria-label': 'Open in Gmail' }, icon('external')) : ''));

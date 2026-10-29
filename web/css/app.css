@@ -17,7 +17,6 @@
 .gate-card { width: min(480px, 100%); background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-panel); padding: 32px; display: grid; gap: 18px; justify-items: start; }
 .gate-card h1 { font-size: 32px; margin-top: 12px; }
 .gate-card .btn { width: 100%; }
-.loading-line { color: var(--muted); }
 
 /* ---------- shell ---------- */
 .shell { display: grid; grid-template-columns: 240px minmax(0, 1fr); min-height: 100vh; }
@@ -156,14 +155,6 @@ input[type=checkbox], input[type=radio] { width: 18px; height: 18px; accent-colo
 .seg button { min-height: 36px; padding: 0 14px; border: 0; border-radius: 9px; background: none; color: var(--text); font: 500 14px var(--sans); cursor: pointer; }
 .seg button[aria-checked="true"] { background: var(--surface); color: var(--ink); font-weight: 600; box-shadow: var(--seg-shadow); }
 
-/* AI key rows */
-.ai-row { border: 1px solid var(--line); border-radius: var(--r-card); padding: 16px; display: grid; gap: 10px; }
-.ai-row.recommended { border-color: var(--accent-line); }
-.ai-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.ai-head b { color: var(--ink); }
-.ai-head label { margin-left: auto; }
-.ai-ctl { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) auto; gap: 8px; }
-@media (max-width: 600px) { .ai-ctl { grid-template-columns: 1fr; } }
 .link { background: none; border: 0; padding: 0; color: var(--blue); font: inherit; font-size: 14px; cursor: pointer; text-decoration: underline; min-height: 32px; justify-self: start; }
 
 /* the upload button */
@@ -318,4 +309,45 @@ input[type=time] { min-height: var(--tap); padding: 0 10px; border: 1px solid va
   .side-nav .count { position: absolute; top: 2px; left: calc(50% + 6px); margin: 0; min-width: 18px; height: 18px; font-size: 11px; line-height: 18px; padding: 0 4px; }
   .canvas { padding-bottom: 104px; }
   #toast { bottom: calc(84px + env(safe-area-inset-bottom)); }
+}
+
+/* loading: the shape of the app while your data arrives */
+.skeleton { display: grid; grid-template-columns: 240px minmax(0, 1fr); min-height: 100vh; }
+.skeleton[hidden] { display: none; }
+.sk-side { display: grid; align-content: start; gap: 10px; padding: 22px 16px; }
+.sk-main { display: grid; align-content: start; gap: 14px; padding: 36px 32px; }
+.sk-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.sk { display: block; border-radius: 10px; background: var(--hover); position: relative; overflow: hidden; }
+.sk::after { content: ""; position: absolute; inset: 0; transform: translateX(-100%); background: linear-gradient(90deg, transparent, var(--surface), transparent); opacity: .7; animation: sk 1.3s infinite; }
+@keyframes sk { to { transform: translateX(100%); } }
+.sk-logo { height: 28px; width: 140px; margin-bottom: 16px; }
+.sk-nav { height: 40px; }
+.sk-title { height: 34px; width: 240px; }
+.sk-sub { height: 16px; width: 200px; }
+.sk-stat { height: 96px; }
+.sk-col { height: 320px; }
+@media (max-width: 900px) { .skeleton { grid-template-columns: 1fr; } .sk-side { display: none; } .sk-main { padding: 24px 16px; } .sk-row { grid-template-columns: repeat(2, minmax(0, 1fr)); } .sk-col:nth-child(n+3) { display: none; } }
+@media (prefers-reduced-motion: reduce) { .sk::after { animation: none; display: none; } }
+
+/* sticky headers: table column names and board column titles stay in view */
+.panel > .table-box, .table-box.panel { max-height: 70vh; overflow: auto; }
+.table thead th { position: sticky; top: 0; z-index: 1; background: var(--surface); }
+.col-head { position: sticky; top: 0; z-index: 2; background: var(--hover); padding-bottom: 6px; margin: -10px -10px 0; padding: 10px 14px 6px; border-radius: var(--r-card) var(--r-card) 0 0; }
+.col.drop .col-head { background: var(--blue-soft); }
+
+/* remove, confirmed in place */
+.confirm-inline { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.confirm-q { font-weight: 600; color: var(--ink); }
+.copy { margin-top: 6px; justify-self: start; }
+
+/* print: the page's content in ink on white, no app chrome */
+@media print {
+  .side, .sync, .banner, .page-acts, .notice, .tabs, #toast, .app-card-links, .icon-btn, .cell-link, .skip { display: none !important; }
+  body, .panel, .stats, .col, .app-card, .tl-list { background: #fff !important; color: #000 !important; }
+  .shell { grid-template-columns: 1fr; }
+  .canvas { padding: 0; }
+  .board-box, .table-box, .panel > .table-box { overflow: visible; max-height: none; }
+  .board { grid-template-columns: repeat(5, 1fr); min-width: 0; }
+  .table thead th { position: static; }
+  a { color: #000; }
 }

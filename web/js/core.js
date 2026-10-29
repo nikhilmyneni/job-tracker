@@ -12,7 +12,6 @@ export const AUTO_UPDATE_HOURS = [0, 6, 12, 24]; // 0 = only when I click Update
 export const SINCE_DAYS = [30, 60, 120];
 export const LEVELS = { fresher: 'Fresher (0–1 year)', intern: 'Internship', both: 'Fresher jobs or internships' };
 export const JOB_TYPES = { fulltime: 'Full-time', internship: 'Internship', both: 'Full-time or internship' };
-export const AI_PROVIDERS = ['gemini', 'groq', 'openrouter'];
 export const GHOST_DAYS = 21;
 export const MAX_THREADS = 80, MAX_ALERT_THREADS = 25;
 export const MAX_SEEN = 5000, MAX_LOG = 300, MAX_JOBS = 1000, MAX_CV = 20000;
@@ -63,7 +62,6 @@ export function defaultSettings() {
     sinceDays: 120,
     notify: false, // browser notifications after a sync
     companies: [], // company job boards to check: [{ats, slug, name, host?, site?}]
-    ai: [], // [{provider: 'gemini'|'groq'|'openrouter', key, model}], tried in this order
   };
 }
 
@@ -98,10 +96,6 @@ export function normalizeSettings(raw) {
     notify: r.notify === true,
     companies: (Array.isArray(r.companies) ? r.companies : []).map(normalizeCompany).filter(Boolean)
       .filter((c, i, all) => all.findIndex(b => companyKey(b) === companyKey(c)) === i).slice(0, MAX_COMPANIES),
-    ai: (Array.isArray(r.ai) ? r.ai : [])
-      .filter(a => a && AI_PROVIDERS.indexOf(a.provider) >= 0 && typeof a.key === 'string' && a.key.trim())
-      .map(a => ({ provider: a.provider, key: a.key.trim().slice(0, 300), model: str(a.model, 100, '') }))
-      .filter((a, i, all) => all.findIndex(b => b.provider === a.provider) === i),
   };
 }
 

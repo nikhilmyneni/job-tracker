@@ -32,7 +32,17 @@
     <a href="#how">How it works</a>
     <a href="#features">Features</a>
     <a href="#privacy">Privacy</a>
+    <a href="#faq">Questions</a>
   </nav>
+  <details class="menu">
+    <summary aria-label="Menu"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></summary>
+    <div class="menu-list">
+      <a href="#how">How it works</a>
+      <a href="#features">Features</a>
+      <a href="#privacy">Privacy</a>
+      <a href="#faq">Questions</a>
+    </div>
+  </details>
   <a class="btn btn-ink" href="/app">Sign in with Google</a>
 </header>
 
@@ -162,10 +172,44 @@
       <dl class="privacy-points">
         <div><dt>Read-only Gmail</dt><dd>It can read job emails. It can’t send, delete, label or change anything.</dd></div>
         <div><dt>Stored in your own Drive</dt><dd>Applications, CV and resumes live in a hidden app folder that only Job Hunter can open.</dd></div>
-        <div><dt>No database, no tracking</dt><dd>No analytics, ads or cookies. Whoever runs this site can’t see your data.</dd></div>
+        <div><dt>No database, no tracking</dt><dd>No analytics, ads or cookies. The built-in AI passes text straight through and keeps nothing. Whoever runs this site can’t see your data.</dd></div>
         <div><dt>Gone in one click</dt><dd>Delete everything from Settings, or remove access in your Google account at any time.</dd></div>
       </dl>
       <a class="privacy-link" href="/privacy.html">Read the privacy policy</a>
+    </div>
+  </section>
+
+  <section class="faq wrap" id="faq" aria-labelledby="faq-title">
+    <h2 id="faq-title">Questions people ask</h2>
+    <div class="faq-list">
+      <details>
+        <summary>Is it really free?</summary>
+        <p>Yes. No card, no trial, no paid plan. The AI is built in and free too, with nothing to set up.</p>
+      </details>
+      <details>
+        <summary>Why does Google say the app isn’t verified?</summary>
+        <p>Reading Gmail needs a permission Google only fully verifies after a paid security review, which a small free tool can’t afford. Choose <b>Advanced</b>, then <b>Go to Job Hunter</b>. You can remove its access any time in your Google account.</p>
+      </details>
+      <details>
+        <summary>What can it see in my Gmail?</summary>
+        <p>It searches for application and job-alert emails and reads those. It can’t send, delete, label or change anything, and it never reads your other mail on purpose.</p>
+      </details>
+      <details>
+        <summary>Will it ever email anyone for me?</summary>
+        <p>No. It only reads. Applying, replying and following up stay with you.</p>
+      </details>
+      <details>
+        <summary>Where is my data, and how do I delete it?</summary>
+        <p>In a hidden app folder in your own Google Drive. Settings has <b>Export my data</b> and <b>Delete all my data</b>; you can also remove it in Google Drive under Settings, then Manage apps.</p>
+      </details>
+      <details>
+        <summary>Is my CV used to train AI?</summary>
+        <p>Job Hunter keeps nothing on its side: the AI request passes straight through. The free AI services it uses (Groq, with Google Gemini as a backup) have their own terms, and free tiers may use what’s sent to improve their models.</p>
+      </details>
+      <details>
+        <summary>Does it work on my phone?</summary>
+        <p>Yes. Open the site on your phone and choose <b>Add to Home screen</b> to use it like an app.</p>
+      </details>
     </div>
   </section>
 

@@ -29,7 +29,7 @@ export function renderMatches(ctx, root) {
         acts));
   })) : h('div', { class: 'empty-block' },
     h('h2', {}, show === 'New' ? 'No new matches yet' : `Nothing ${show.toLowerCase()} yet`),
-    h('p', {}, !hasAi(data.settings) ? 'Add a free AI key in Settings to score openings against your CV.'
+    h('p', {}, !hasAi(data.settings) ? 'Scoring is paused because the AI isn’t available right now.'
       : !data.cv ? 'Add your CV in Profile and CV, then sync.'
         : 'New openings arrive with each sync. Add companies to follow in Settings for more.'));
   root.replaceChildren(pageHead('Job matches', `${data.jobs.filter(j => j.status === 'New').length} new · scored against your CV and preferences`, filter), list);

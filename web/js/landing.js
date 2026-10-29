@@ -17,10 +17,13 @@ if (score && !reduce) {
   requestAnimationFrame(tick);
 }
 
-const groups = ['.how h2, .steps li', '.features > h2', '.feature', '.privacy h2, .privacy-points > div', '.final > *'];
+const groups = ['.how h2, .steps li', '.features > h2', '.feature', '.privacy h2, .privacy-points > div', '.faq h2, .faq details', '.final > *'];
 groups.forEach(sel => document.querySelectorAll(sel).forEach((el, i) => { el.dataset.reveal = ''; el.style.setProperty('--i', i % 4); }));
 document.querySelectorAll('.feature').forEach(f => f.querySelectorAll('.ui-job, .ui-row, .thumbs figure').forEach((el, i) => { el.dataset.reveal = ''; el.style.setProperty('--i', i + 2); }));
 const io = 'IntersectionObserver' in window ? new IntersectionObserver((entries) => entries.forEach(e => {
   if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
 }), { rootMargin: '0px 0px -10% 0px' }) : null;
 document.querySelectorAll('[data-reveal]').forEach(el => (io ? io.observe(el) : el.classList.add('in')));
+
+// The phone menu closes once you pick a section.
+document.querySelectorAll('.menu-list a').forEach(a => a.addEventListener('click', () => a.closest('details').removeAttribute('open')));

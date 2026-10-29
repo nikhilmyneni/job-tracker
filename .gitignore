@@ -11,3 +11,7 @@ cv*.txt
 .vercel/
 Screenshot*.png
 .taste-skill/
+
+# secrets for local functions
+.env
+.env.*

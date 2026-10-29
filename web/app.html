@@ -59,8 +59,14 @@
 </main>
 
 <!-- Coming back after a reload -->
-<main id="screen-loading" class="gate" hidden>
-  <div class="gate-card"><p class="loading-line">Opening your job hunt…</p></div>
+<main id="screen-loading" class="skeleton" hidden aria-busy="true">
+  <p class="visually-hidden" role="status">Opening your job hunt…</p>
+  <div class="sk-side" aria-hidden="true"><i class="sk sk-logo"></i><i class="sk sk-nav"></i><i class="sk sk-nav"></i><i class="sk sk-nav"></i><i class="sk sk-nav"></i></div>
+  <div class="sk-main" aria-hidden="true">
+    <i class="sk sk-title"></i><i class="sk sk-sub"></i>
+    <div class="sk-row"><i class="sk sk-stat"></i><i class="sk sk-stat"></i><i class="sk sk-stat"></i><i class="sk sk-stat"></i></div>
+    <div class="sk-row"><i class="sk sk-col"></i><i class="sk sk-col"></i><i class="sk sk-col"></i><i class="sk sk-col"></i></div>
+  </div>
 </main>
 
 

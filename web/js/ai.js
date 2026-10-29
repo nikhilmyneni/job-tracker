@@ -1,28 +1,20 @@
 /**
- * AI providers, each with the user's own free key. Calls go straight from the browser to the provider.
- * Providers are tried in the user's order; when one is out of quota (429) or down, the next one runs.
+ * AI is built in: the page calls our /api/ai function (useSharedAi), which uses the site's own free keys.
+ * Users never add keys. askWith() runs on the server (api/ai.js): providers are tried in order, and when one
+ * is out of quota (429) or down, the next runs. So this file must not touch window or the DOM.
  */
 export const PROVIDERS = {
   gemini: {
     label: 'Google Gemini',
-    keyUrl: 'https://aistudio.google.com/apikey',
-    keyHint: 'aistudio.google.com/apikey → Create API key',
     defaultModel: 'gemini-flash-latest',
-    note: 'Best quality on the free tier and a very long context. Google may use free-tier data to improve its products.',
   },
   groq: {
     label: 'Groq',
-    keyUrl: 'https://console.groq.com/keys',
-    keyHint: 'console.groq.com/keys → Create API key',
     defaultModel: 'openai/gpt-oss-120b',
-    note: 'Very fast, with a large daily free allowance per model. A good backup when Gemini runs out.',
   },
   openrouter: {
     label: 'OpenRouter',
-    keyUrl: 'https://openrouter.ai/settings/keys',
-    keyHint: 'openrouter.ai/settings/keys → Create key (pick a model ending in :free)',
     defaultModel: '',
-    note: 'One key for many free models (names ending in :free). Low daily limit on a free account.',
   },
 };
 
@@ -79,21 +71,19 @@ async function callOnce(p, prompt, json) {
   return json ? parseJsonLoose(text) : text;
 }
 
-/** The providers that have a key, in the user's order. */
-export function activeProviders(settings) {
-  return (settings.ai || []).filter(p => p.key && PROVIDERS[p.provider] && (p.model || PROVIDERS[p.provider].defaultModel))
-    .map(p => ({ provider: p.provider, key: p.key, model: p.model || PROVIDERS[p.provider].defaultModel }));
+// The built-in AI: set by the app (a function that calls /api/ai).
+let shared = null;
+export function useSharedAi(caller) { shared = caller; }
+export const hasAi = () => !!shared;
+
+/** Runs a prompt on the built-in AI. task names the job for the server's allow-list (classify, extract, score, cv). */
+export async function ask(settings, prompt, json, onNote, task = 'classify') {
+  if (!shared) throw new AiError('AI isn’t available right now.', false);
+  return shared(task, prompt, json);
 }
 
-export const hasAi = (settings) => activeProviders(settings).length > 0;
-
-/**
- * Runs a prompt on the first provider that works. Retries a busy provider twice, then falls back.
- * onNote(text) reports fallbacks so the page can show them.
- */
-export async function ask(settings, prompt, json, onNote) {
-  const list = activeProviders(settings);
-  if (!list.length) throw new AiError('Add a free AI key in Settings first.', false);
+/** Runs a prompt on the first provider in list that works. Retries a busy provider twice, then falls back. */
+export async function askWith(list, prompt, json, onNote) {
   let last;
   for (let i = 0; i < list.length; i++) {
     for (let attempt = 0; attempt < 3; attempt++) {
@@ -106,23 +96,4 @@ export async function ask(settings, prompt, json, onNote) {
     if (i + 1 < list.length && onNote) onNote(`${last.message}. Trying ${PROVIDERS[list[i + 1].provider].label}.`);
   }
   throw last;
-}
-
-/** Models this key can use now (free ones for OpenRouter), for the Settings picker. */
-export async function listModels(provider, key) {
-  if (provider === 'gemini') {
-    const res = await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=200', { headers: { 'x-goog-api-key': key } });
-    if (!res.ok) throw new AiError(`Key not accepted (${res.status}).`);
-    const j = await res.json();
-    return (j.models || []).filter(m => (m.supportedGenerationMethods || []).includes('generateContent'))
-      .map(m => m.name.replace(/^models\//, '')).filter(n => /gemini/.test(n) && !/embedding|image|tts|audio|live/.test(n)).sort();
-  }
-  const url = provider === 'groq' ? 'https://api.groq.com/openai/v1/models' : 'https://openrouter.ai/api/v1/models';
-  const res = await fetch(url, { headers: { Authorization: 'Bearer ' + key } });
-  if (!res.ok) throw new AiError(`Key not accepted (${res.status}).`);
-  const j = await res.json();
-  let ids = (j.data || []).map(m => m.id);
-  if (provider === 'openrouter') ids = ids.filter(id => /:free$/.test(id));
-  if (provider === 'groq') ids = ids.filter(id => !/whisper|tts|guard|playai|orpheus/i.test(id));
-  return ids.sort();
 }

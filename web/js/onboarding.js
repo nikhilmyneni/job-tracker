@@ -4,7 +4,6 @@
 import { h, chipInput, segmented, busy, errText, extLink, icon } from './ui.js';
 import { LEVELS, JOB_TYPES, JOBS_PER_UPDATE, AUTO_UPDATE_HOURS, SINCE_DAYS, ATS, COMPANY_SUGGESTIONS, companyKey, normalizeCompany, parseCareerUrl, placeMatches, profileFromCv, applyCvProfile } from './core.js';
 import { fetchBoard } from './sources.js';
-import { PROVIDERS, listModels } from './ai.js';
 import { readCvFile, CV_ACCEPT } from './files.js';
 
 const ROLE_SUGGESTIONS = ['SOC Analyst', 'Security Analyst', 'Penetration Tester', 'Cloud Security', 'Security Engineer', 'GRC Analyst', 'Network Engineer', 'Software Developer'];
@@ -129,56 +128,6 @@ export function cvBlock(cvText, cvFile, opts = {}) {
   };
 }
 
-/** AI keys. Shows the saved ones masked; "Test key" lists the models the key can use right now. */
-export function aiBlock(aiList, opts = {}) {
-  const byProvider = Object.fromEntries((aiList || []).map(a => [a.provider, a]));
-  const order = Object.keys(PROVIDERS);
-  const firstPick = (aiList && aiList[0] && aiList[0].provider) || 'gemini';
-  const rows = order.map(p => {
-    const info = PROVIDERS[p], saved = byProvider[p];
-    const key = h('input', { type: 'password', autocomplete: 'off', placeholder: saved ? `Saved (…${saved.key.slice(-4)}). Leave empty to keep it` : 'Paste your free key', 'aria-label': info.label + ' key' });
-    const model = h('select', { 'aria-label': info.label + ' model' });
-    const setModels = (list, sel) => {
-      const cur = sel || model.value || (saved && saved.model) || info.defaultModel;
-      const all = [...new Set([cur, ...list].filter(Boolean))];
-      model.replaceChildren(...(all.length ? all : ['']).map(m => h('option', { value: m, selected: m === cur }, m || 'Test your key to pick a model')));
-    };
-    setModels([]);
-    const status = h('span', { class: 'status' });
-    const test = h('button', { type: 'button', class: 'btn btn-quiet btn-sm', onclick: () => busy(test, 'Testing…', async () => {
-      const k = key.value.trim() || (saved && saved.key);
-      if (!k) throw new Error('Paste a key first.');
-      const models = opts.demo ? [info.defaultModel || 'demo-model:free', 'demo-model-2'] : await listModels(p, k);
-      if (!models.length) throw new Error('This key works, but no usable models came back.');
-      setModels(models, models.includes(model.value) ? model.value : (models.includes(info.defaultModel) ? info.defaultModel : models[0]));
-      status.className = 'status ok'; status.textContent = `Key works ✓ ${models.length} models`;
-    }, status) }, 'Test key');
-    const first = h('input', { type: 'radio', name: 'ai-first-' + (opts.id || 'x'), value: p, checked: p === firstPick });
-    const remove = saved ? h('button', { type: 'button', class: 'link', onclick: () => { byProvider[p] = null; key.value = ''; key.placeholder = 'Removed. Paste a key to add it back'; } }, 'Remove key') : '';
-    return {
-      p, first,
-      el: h('div', { class: 'ai-row' + (p === 'gemini' ? ' recommended' : '') },
-        h('div', { class: 'ai-head' }, h('b', {}, info.label), p === 'gemini' ? h('span', { class: 'pill pill-blue' }, 'Recommended') : '',
-          h('label', { class: 'inline small' }, first, ' Try first')),
-        h('p', { class: 'hint' }, info.note, ' Get a key: ', extLink(info.keyUrl, info.keyHint)),
-        h('div', { class: 'ai-ctl' }, key, model, test), status, remove),
-      collect: () => {
-        const k = key.value.trim() || (byProvider[p] && byProvider[p].key) || '';
-        return k ? { provider: p, key: k, model: model.value || info.defaultModel } : null;
-      },
-    };
-  });
-  return {
-    el: h('div', { class: 'stack' }, ...rows.map(r => r.el),
-      h('p', { class: 'hint' }, 'Add one key, or more as backups: when one runs out of free quota, the next is used. Keys stay in your own Google Drive and go only to that provider.')),
-    collect: (d) => {
-      const list = rows.map(r => r.collect()).filter(Boolean);
-      const firstP = (rows.find(r => r.first.checked) || {}).p;
-      d.ai = list.sort((a, b) => (b.provider === firstP) - (a.provider === firstP));
-    },
-  };
-}
-
 /**
  * Companies to follow: paste a careers-page link (Greenhouse, Lever, Ashby, SmartRecruiters, Workable, Recruitee
  * or Workday), or pick a suggestion. Each one is checked before it's added. The list fades at its edge when it scrolls.
@@ -225,7 +174,6 @@ const STEPS = [
   { id: 'where', title: 'Where would you like to work?', block: (d) => whereBlock(d) },
   { id: 'avoid', title: 'Anything to skip?', intro: 'Openings with these are left out.', block: (d) => avoidBlock(d) },
   { id: 'companies', title: 'Companies to follow (optional)', intro: 'Job Hunter already reads your job-alert emails from LinkedIn, Naukri, Indeed, Internshala, Wellfound and foundit. Add company career pages for more.', block: (d, ctx) => companiesBlock(d.companies, { demo: ctx.demo }) },
-  { id: 'ai', title: 'Turn on AI (free, optional)', intro: 'With a free AI key, Job Hunter sorts your emails more accurately, scores openings and reads your CV. Without one, it still tracks applications using keyword rules.', block: (d, ctx) => aiBlock(d.ai, { demo: ctx.demo, id: 'wiz' }) },
   { id: 'routine', title: 'Your routine', block: (d) => routineBlock(d) },
 ];
 
@@ -258,8 +206,8 @@ export function runWizard(root, ctx) {
         }
         if (st.id === 'want' && !d.prefs.roles.length) { status.className = 'status err'; status.textContent = 'Add at least one role you want.'; return; }
         i++; draw();
-      } }, (st.id === 'ai' && !(d.ai || []).length) || (st.id === 'companies' && !(d.companies || []).length) || (st.id === 'cv' && !d.cv) ? 'Skip for now' : 'Next');
-      if (st.id === 'ai' || st.id === 'companies' || st.id === 'cv') ['click', 'input', 'drop'].forEach(ev => cur.el.addEventListener(ev, () => { next.textContent = 'Next'; }));
+      } }, (st.id === 'companies' && !(d.companies || []).length) || (st.id === 'cv' && !d.cv) ? 'Skip for now' : 'Next');
+      if (st.id === 'companies' || st.id === 'cv') ['click', 'input', 'drop'].forEach(ev => cur.el.addEventListener(ev, () => { next.textContent = 'Next'; }));
     } else {
       cur = null;
       const p = d.prefs;
@@ -271,8 +219,7 @@ export function runWizard(root, ctx) {
           row('Locations', p.locations.join(', ') + (p.relocate ? ' · open to relocating' : '')),
           row('Skip', p.avoid.join(', ')), row('CV', d.cv ? `${d.cv.length.toLocaleString()} characters${d.cvUpload ? ' · ' + d.cvUpload.name : ''}` : 'Not added yet'),
           row('Companies', (d.companies || []).map(c => c.name).join(', ') || 'None yet'),
-          row('AI', (d.ai || []).length ? d.ai.map(a => PROVIDERS[a.provider].label).join(' → ') : 'Off (keyword rules only)'),
-          row('Updates', `${autoLabel(d.autoUpdateHours)} · ${d.jobsPerUpdate || 'no'} new jobs each time`)),
+                    row('Updates', `${autoLabel(d.autoUpdateHours)} · ${d.jobsPerUpdate || 'no'} new jobs each time`)),
         h('p', { class: 'hint' }, 'Start reads your Gmail (read-only) from the last ' + d.sinceDays + ' days. Applications appear as they’re sorted.')];
       next = h('button', { type: 'button', class: 'btn btn-primary', onclick: () => busy(next, 'Saving…', () => ctx.finish(d), status) }, 'Start');
     }

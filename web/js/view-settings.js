@@ -1,6 +1,6 @@
-/** Profile and CV (who you are and what you want) and Settings (routine, AI keys, job sources, your data). */
+/** Profile and CV (who you are and what you want) and Settings (routine, job sources, notifications, your data). */
 import { h, busy, pageHead, holdButton, fmtDateTime } from './ui.js';
-import { youBlock, wantBlock, whereBlock, avoidBlock, routineBlock, cvBlock, aiBlock, companiesBlock } from './onboarding.js';
+import { youBlock, wantBlock, whereBlock, avoidBlock, routineBlock, cvBlock, companiesBlock } from './onboarding.js';
 import { downloadBlob } from './files.js';
 import { notifySupported, notifyAllowed } from './notify.js';
 
@@ -38,10 +38,9 @@ export function renderProfile(ctx, root) {
 export function renderSettings(ctx, root) {
   const { data, act } = ctx;
   const s = data.settings;
-  const routine = routineBlock(s), ai = aiBlock(s.ai, { demo: ctx.demo, id: 'set' }), companies = companiesBlock(s.companies, { demo: ctx.demo });
+  const routine = routineBlock(s), companies = companiesBlock(s.companies, { demo: ctx.demo });
   const exportBtn = h('button', { class: 'btn btn-quiet', type: 'button', onclick: () => {
     const copy = JSON.parse(JSON.stringify(data));
-    copy.settings.ai = copy.settings.ai.map(a => ({ provider: a.provider, model: a.model, key: '(not exported)' }));
     downloadBlob(new Blob([JSON.stringify(copy, null, 2)], { type: 'application/json' }), 'job-hunter-export.json');
   } }, 'Export my data (.json)');
   const del = holdButton('Hold to delete all my data', () => act.deleteAll(), { done: 'Deleting…' });
@@ -53,7 +52,6 @@ export function renderSettings(ctx, root) {
         panel('Companies to follow', 'Their open jobs are checked on every sync, alongside your job-alert emails.', companies.el, saveBar('Save companies', (d) => companies.collect(d), ctx))),
       h('div', { class: 'stack-lg' },
         notifyPanel(ctx),
-        panel('AI (free keys)', 'Sorts emails more accurately, scores openings and reads your CV.', ai.el, saveBar('Save keys', (d) => ai.collect(d), ctx)),
         panel('Your data', `Saved in a hidden app folder in ${ctx.me ? ctx.me.email + '’s' : 'your'} Google Drive. Only Job Hunter can open it.`,
           h('div', { class: 'row' }, exportBtn, del)),
         panel('Recent activity', '', h('ul', { class: 'log' }, ...(data.log.length ? data.log.slice(0, 12) : [{ at: '', msg: 'Nothing yet.' }])
