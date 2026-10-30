@@ -352,8 +352,29 @@ async function signInFlow(btn) {
   }, status);
 }
 
+/** Desktop sidebar: collapse it to an icon rail (it slides back out on hover). The choice is a display preference. */
+function wireSidebar() {
+  const shell = $('screen-app'), btn = $('side-toggle');
+  const set = (collapsed) => {
+    shell.classList.toggle('side-collapsed', collapsed);
+    btn.setAttribute('aria-pressed', String(collapsed));
+    btn.setAttribute('aria-label', collapsed ? 'Keep the sidebar open' : 'Collapse the sidebar');
+    btn.title = collapsed ? 'Keep the sidebar open' : 'Collapse the sidebar';
+  };
+  let saved = false;
+  try { saved = localStorage.getItem('jh-side') === 'collapsed'; } catch (e) { /* fine */ }
+  set(saved);
+  btn.addEventListener('click', () => {
+    const collapsed = !shell.classList.contains('side-collapsed');
+    set(collapsed);
+    try { localStorage.setItem('jh-side', collapsed ? 'collapsed' : 'open'); } catch (e) { /* fine */ }
+    if (collapsed) btn.blur(); // let it tuck away now, instead of staying open while focused
+  });
+}
+
 async function boot() {
   $('reconnect-btn').addEventListener('click', () => signInFlow($('reconnect-btn')));
+  wireSidebar();
   $('connect-gmail').addEventListener('click', (e) => busy(e.currentTarget, 'Connecting…', () => ctx.act.connectGmail()));
   $('sign-out').addEventListener('click', async () => {
     if (DEMO) { location.href = '/'; return; }

@@ -111,7 +111,8 @@ and counts toward the 100-user cap. Without Gmail, users add applications by han
   A real sign-in needs the client id in `web/config.js`, with `http://localhost:5173` as an authorized origin.
 - Edit `web/`, then run `npm test` and `npm run check`.
 - Design: tokens in `css/tokens.css` (the brief's palette and fonts; a pitch-dark theme under `prefers-color-scheme: dark`;
-  colours only through tokens). Phones get a bottom tab bar; every screen must work at 390px. Check screens with the
+  colours only through tokens). Desktop sidebar collapses to an icon rail and slides back out on hover or focus
+  (`wireSidebar`, `.side-collapsed`; the choice is a display pref in localStorage). Phones get a bottom tab bar; every screen must work at 390px. Check screens with the
   `design-taste-frontend` inspector (`--app` for app screens).
 - Deploy: push to `main`, and Vercel builds `web/`.
 

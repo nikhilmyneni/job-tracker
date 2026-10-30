@@ -26,19 +26,24 @@
 
 <!-- App -->
 <div id="screen-app" class="shell" hidden>
-  <aside class="side" aria-label="Job Hunter">
-    <a class="wordmark" href="/app"><img src="/icon.svg" alt="" width="28" height="28">Job Hunter</a>
+  <aside class="side" id="side" aria-label="Job Hunter">
+    <div class="side-top">
+      <a class="wordmark" href="/app"><img src="/icon.svg" alt="" width="28" height="28"><span class="fade">Job Hunter</span></a>
+      <button type="button" class="icon-btn side-toggle fade" id="side-toggle" aria-label="Collapse the sidebar" aria-pressed="false">
+        <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg>
+      </button>
+    </div>
     <nav class="side-nav" aria-label="Main">
-      <a href="/app" data-route="applications"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 13h18"/></svg><span class="nav-full">Applications</span><span class="nav-short" aria-hidden="true">Tracker</span></a>
-      <a href="/app/matches" data-route="matches"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg><span class="nav-full">Job matches</span><span class="nav-short" aria-hidden="true">Matches</span><span class="count" id="nav-matches" hidden></span></a>
-      <a href="/app/tailor" data-route="tailor"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg><span class="nav-full">Resume tailor</span><span class="nav-short" aria-hidden="true">Tailor</span></a>
-      <a href="/app/profile" data-route="profile"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg><span class="nav-full">Profile and CV</span><span class="nav-short" aria-hidden="true">Profile</span></a>
-      <a href="/app/settings" data-route="settings"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span class="nav-full">Settings</span><span class="nav-short" aria-hidden="true">Settings</span></a>
+      <a href="/app" data-route="applications"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 13h18"/></svg><span class="nav-full fade">Applications</span><span class="nav-short" aria-hidden="true">Tracker</span></a>
+      <a href="/app/matches" data-route="matches"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg><span class="nav-full fade">Job matches</span><span class="nav-short" aria-hidden="true">Matches</span><span class="count fade" id="nav-matches" hidden></span></a>
+      <a href="/app/tailor" data-route="tailor"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg><span class="nav-full fade">Resume tailor</span><span class="nav-short" aria-hidden="true">Tailor</span></a>
+      <a href="/app/profile" data-route="profile"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg><span class="nav-full fade">Profile and CV</span><span class="nav-short" aria-hidden="true">Profile</span></a>
+      <a href="/app/settings" data-route="settings"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span class="nav-full fade">Settings</span><span class="nav-short" aria-hidden="true">Settings</span></a>
     </nav>
     <div class="side-account" id="account">
-      <p class="side-gmail"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg><span><b id="gmail-state">Gmail connected</b><small id="gmail-sub">Read-only</small><small id="account-name"></small></span></p>
-      <button type="button" class="btn btn-sm btn-primary" id="connect-gmail" hidden>Connect Gmail</button>
-      <button type="button" class="btn btn-sm btn-quiet" id="sign-out">Sign out</button>
+      <p class="side-gmail"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg><span class="fade"><b id="gmail-state">Gmail connected</b><small id="gmail-sub">Read-only</small><small id="account-name"></small></span></p>
+      <button type="button" class="btn btn-sm btn-primary fade" id="connect-gmail" hidden>Connect Gmail</button>
+      <button type="button" class="btn btn-sm btn-quiet fade" id="sign-out">Sign out</button>
     </div>
   </aside>
   <main id="content" class="canvas" tabindex="-1"></main>
