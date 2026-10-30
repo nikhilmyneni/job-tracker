@@ -352,7 +352,7 @@ async function signInFlow(btn) {
   }, status);
 }
 
-/** Desktop sidebar: collapse it to an icon rail (it slides back out on hover). The choice is a display preference. */
+/** Desktop sidebar: an icon rail by default that slides out on hover; the button keeps it open. A display preference. */
 function wireSidebar() {
   const shell = $('screen-app'), btn = $('side-toggle');
   const set = (collapsed) => {
@@ -361,9 +361,10 @@ function wireSidebar() {
     btn.setAttribute('aria-label', collapsed ? 'Keep the sidebar open' : 'Collapse the sidebar');
     btn.title = collapsed ? 'Keep the sidebar open' : 'Collapse the sidebar';
   };
-  let saved = false;
-  try { saved = localStorage.getItem('jh-side') === 'collapsed'; } catch (e) { /* fine */ }
-  set(saved);
+  // Collapsed is the default (it opens on hover); "Keep the sidebar open" is remembered on this device.
+  let collapsed = true;
+  try { collapsed = localStorage.getItem('jh-side') !== 'open'; } catch (e) { /* fine */ }
+  set(collapsed);
   btn.addEventListener('click', () => {
     const collapsed = !shell.classList.contains('side-collapsed');
     set(collapsed);
