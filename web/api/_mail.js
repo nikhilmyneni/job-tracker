@@ -31,7 +31,7 @@ export function jobsEmail(jobs, { appUrl, unsubUrl, now = new Date() }) {
     return `<tr><td style="padding:0 0 14px">
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border:1px solid ${line};border-radius:12px;background:#ffffff"><tr>
 <td width="90" valign="top" style="padding:18px 0 18px 18px">
-  <div style="width:78px;padding:8px 0;border-radius:10px;background:${matchLabel(j.score).tone === 'hi' ? navy : '#eef2fb'};color:${matchLabel(j.score).tone === 'hi' ? '#ffffff' : navy};font:700 12px/1.2 ${sans};text-align:center">${esc(matchLabel(j.score).label)}<br><span style="font-weight:500;font-size:10px;opacity:.85">match</span></div>
+  <div style="width:78px;padding:8px 0;border-radius:10px;background:${matchLabel(j.score).tone === 'top' ? '#1e6b3a' : matchLabel(j.score).tone === 'hi' ? navy : '#eef2fb'};color:${['top', 'hi'].includes(matchLabel(j.score).tone) ? '#ffffff' : navy};font:700 12px/1.2 ${sans};text-align:center">${esc(matchLabel(j.score).label)}<br><span style="font-weight:500;font-size:10px;opacity:.85">match</span></div>
 </td>
 <td valign="top" style="padding:16px 18px 18px 14px">
   <a href="${esc(apply)}" style="font:600 17px/1.3 ${serif};color:${ink};text-decoration:none">${esc(j.role)}</a>

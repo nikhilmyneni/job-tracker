@@ -10,5 +10,5 @@ test('one change, many changes, new jobs; first-sync rows are not news', () => {
   const many = notificationsFor({ changes: [{ company: 'A', from: 'Applied', to: 'Interview' }, { company: 'B', from: 'Interview', to: 'Offer' }] }, []);
   assert.equal(many[0].title, '2 applications changed');
   const jobs = notificationsFor({ changes: [] }, [{ role: 'SOC Analyst', company: 'K', fit: 4 }, { role: 'Intern', company: 'N', fit: 5 }]);
-  assert.deepEqual(jobs, [{ title: '2 new job matches', body: 'Best: Intern at N (Excellent match)', url: '/app/matches', tag: 'jobs' }]);
+  assert.deepEqual(jobs, [{ title: '2 new job matches', body: 'Best: Intern at N (Ambitious match)', url: '/app/matches', tag: 'jobs' }]);
 });

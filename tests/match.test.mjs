@@ -142,6 +142,6 @@ test('sales and calling jobs are left out even when the title mentions security'
 });
 
 test('match scores are shown as words', () => {
-  assert.deepEqual([85, 70, 55, 40, 20].map(s => C.matchLabel(s).label), ['Excellent', 'Good', 'Fair', 'Ambitious', 'Poor']);
-  assert.equal(C.matchLabel(80).label, 'Excellent'); assert.equal(C.matchLabel(79).label, 'Good');
+  assert.deepEqual([95, 85, 70, 55, 40].map(s => C.matchLabel(s).label), ['Ambitious', 'Excellent', 'Good', 'Fair', 'Poor']);
+  assert.equal(C.matchLabel(90).label, 'Ambitious'); assert.equal(C.matchLabel(89).label, 'Excellent'); assert.equal(C.matchLabel(79).label, 'Good');
 });

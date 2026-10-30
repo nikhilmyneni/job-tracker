@@ -28,6 +28,36 @@ const HINT_KEY = 'jh-hint';
 export function setHint(email) { try { if (email) sessionStorage.setItem(HINT_KEY, String(email)); else sessionStorage.removeItem(HINT_KEY); } catch (e) { /* fine */ } }
 export function lastHint() { try { return sessionStorage.getItem(HINT_KEY) || ''; } catch (e) { return ''; } }
 
+// Tabs share the sign-in: a new tab asks the open Job Hunter tabs for it, and one that's signed in answers, tab to tab
+// in memory (BroadcastChannel, this site only). Nothing is written anywhere new; each tab keeps its own copy as before.
+const tabs = typeof BroadcastChannel === 'function' ? new BroadcastChannel('jh-session') : null;
+if (tabs && tabs.unref) tabs.unref(); // Node (tests): don't keep the process alive
+let onSignedOutElsewhere = () => {};
+/** fn runs when you sign out in another tab (this tab has just been signed out too). */
+export function whenSignedOutElsewhere(fn) { onSignedOutElsewhere = fn; }
+if (tabs) tabs.addEventListener('message', (e) => {
+  const m = e.data || {};
+  if (m.type === 'ask' && token && tokenExp > Date.now() + 60e3) tabs.postMessage({ type: 'session', token, tokenExp, gmail, hint: lastHint() });
+  if (m.type === 'signout' && token) { token = ''; tokenExp = 0; gmail = false; remember(); setHint(''); onSignedOutElsewhere(); }
+});
+/** In a new tab: gets the sign-in from another open, signed-in tab. Resolves true if one answered within ms. */
+export function fromOtherTabs(ms = 700) {
+  return new Promise(resolve => {
+    if (!tabs) { resolve(false); return; }
+    const done = (ok) => { tabs.removeEventListener('message', on); clearTimeout(timer); resolve(ok); };
+    const on = (e) => {
+      const m = e.data || {};
+      if (m.type !== 'session' || typeof m.token !== 'string' || !(Number(m.tokenExp) > Date.now())) return;
+      token = m.token; tokenExp = Number(m.tokenExp); gmail = m.gmail === true; remember();
+      if (m.hint) setHint(m.hint);
+      done(true);
+    };
+    const timer = setTimeout(() => done(false), ms);
+    tabs.addEventListener('message', on);
+    tabs.postMessage({ type: 'ask' });
+  });
+}
+
 /** After a reload: picks the token back up from this tab, if it's still valid. No popup. */
 export function resumeSession() {
   try {
@@ -111,6 +141,7 @@ export function accessToken() { if (!signedIn()) throw new NeedSignIn('Your Goog
 export async function signOut() {
   const t = token;
   token = ''; tokenExp = 0; gmail = false; remember(); setHint('');
+  if (tabs) tabs.postMessage({ type: 'signout' }); // every other Job Hunter tab signs out too
   if (t) { try { (await gis()).revoke(t, () => {}); } catch (e) {} }
 }
 

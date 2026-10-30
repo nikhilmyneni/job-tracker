@@ -570,6 +570,7 @@ input.switch:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px
 
 /* ---------- match in words (Excellent, Good, Fair, Ambitious, Poor) ---------- */
 .lvl { display: inline-flex; align-items: center; justify-content: center; min-height: 26px; padding: 0 10px; border-radius: 999px; font: 600 12.5px/1 var(--sans); white-space: nowrap; }
+.lvl-top { background: var(--green); color: var(--on-accent); }
 .lvl-hi { background: var(--blue); color: var(--on-accent); }
 .lvl-mid { background: var(--blue-soft); color: var(--blue-text); }
 .lvl-low { background: var(--orange-soft); color: var(--orange-text); }

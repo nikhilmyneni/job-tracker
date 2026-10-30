@@ -512,6 +512,7 @@ async function boot() {
     return;
   }
   G.preload();
+  G.whenSignedOutElsewhere(() => { location.href = '/'; });
   useSharedAi(sharedAi);
   G.whenSlowedDown((secs) => { if (!$('sync').hidden) syncBanner(true, null, `Gmail asked us to slow down. Carrying on in ${secs}s…`); });
   const btn = $('signin-btn');
@@ -521,8 +522,8 @@ async function boot() {
     $('signin-status').textContent = 'Not set up yet: the site owner needs to add a Google OAuth client ID in config.js (see docs/SETUP.md).';
     return;
   }
-  // Reloaded within the hour: pick the session back up without a popup.
-  if (G.resumeSession()) {
+  // Reloaded within the hour, or opened in a new tab while another Job Hunter tab is signed in: carry on without a popup.
+  if (G.resumeSession() || await G.fromOtherTabs()) {
     show('loading');
     try { if (await loadAccount()) { await enter(); return; } } catch (e) { /* fall through to the sign-in screen */ }
   }

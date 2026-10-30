@@ -36,7 +36,8 @@ and counts toward the 100-user cap. Without Gmail, users add applications by han
   through: no storage, no logs. Job boards and `api/workday.js` only ever get a company's board name and a role. No analytics, no telemetry, no CDNs: fonts and pdf.js are vendored in
   `web/vendor/`. The CSP in each HTML page is the allow-list: keep it tight when adding an origin.
 - **Secrets:** the access token (and, for signing in again without the account picker, the account email) lives in memory plus this tab's sessionStorage (so a reload keeps you
-  signed in; gone when the tab closes or after about an hour). The AI keys are the owner's, only in Vercel
+  signed in; gone when the tab closes or after about an hour). A new tab asks open tabs for it over a `BroadcastChannel`
+  (`fromOtherTabs`, memory to memory, this origin only); signing out in one tab signs out all of them. The AI keys are the owner's, only in Vercel
   environment variables (`.env.local` locally, gitignored). Nothing personal goes in localStorage.
 - **Resume honesty.** Resumes use only facts from the user's CV text. Never invent experience,
   employers, numbers, skills, tools or certifications. The CV → ResumeFold conversion copies facts
@@ -45,7 +46,7 @@ and counts toward the 100-user cap. Without Gmail, users add applications by han
   daily) → `boardCandidates` (`rejectReason`: role / senior / internOnly / fullTimeOnly / skipList / location; Stretch range skips the role
   check) → `vetPostings` (reads the 3×n best postings; `postingProblem` drops 2+ years, unpaid, fees, "Dear Candidate" invites) →
   `pickByScore` on the real descriptions: at least half Core when there are good Core jobs (`roleKind`), Stretch only with ≤1 skill missing.
-- **Scores are shown in words**, never numbers: `matchLabel` (Excellent 80+, Good 65+, Fair 50+, Ambitious 35+, Poor).
+- **Scores are shown in words**, never numbers: `matchLabel` (Ambitious 90+, Excellent 80+, Good 65+, Fair 50+, Poor).
 - **Rules first, AI second.** Matching never needs the AI: `matchScore` is a weighted keyword overlap (title ×2,
   your keywords ×1.5, a fifth from the title's fit with your roles) over `SKILL_VOCAB` + aliases, your skills
   (`mySkills`: CV skills + added − removed) and your keywords. If the AI is down, over today's allowance or not set
@@ -95,7 +96,7 @@ and counts toward the 100-user cap. Without Gmail, users add applications by han
   and the dashboard numbers.
 - `js/pdf.js` (+ generated `js/pdf-fonts.js`, core-font widths from vendored pdf.js): **pure** resume → real-text PDF (`resumePdf(resume, template)`)
   in **ResumeFold's layouts** (Standard / Student / Combination / Senior as ResumeFold's own PDF export draws them: its `HEADINGS`, `ORDER`,
-  rows, rules, Helvetica for its Source Sans), scaled to fill one page; downloaded as `Name_Resume_Company_Role.pdf`. The on-screen sheet
+  rows, rules, and its font Source Sans 3 embedded from vendor/fonts via `js/ttf.js`; Helvetica if the fonts can't load), scaled to fill one page; downloaded as `Name_Resume_Company_Role.pdf`. The on-screen sheet
   (`renderSheet`) matches it. No print dialog. Tailoring follows ResumeFold strictly: don't invent a different resume design.
 - `js/sources.js`: fetches job boards and full job descriptions. `js/docx.js`: **pure** ZIP + DOCX → text, and the resume as a .docx (`resumeDocx`).
 - `js/ai.js`: `PROVIDERS`, `askWith()` (shared with the server, so no DOM in this file), `useSharedAi()` / `ask()` for the page, `parseJsonLoose()`.
