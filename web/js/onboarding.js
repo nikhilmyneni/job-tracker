@@ -2,7 +2,7 @@
  * First-run setup: one question per step. The same field blocks make up the Preferences part of Settings.
  */
 import { h, chipInput, segmented, busy, errText, extLink, icon } from './ui.js';
-import { LEVELS, JOB_TYPES, JOBS_PER_UPDATE, DAYS, ROLE_RANGES, SINCE_DAYS, ATS, COMPANY_SUGGESTIONS, INDIA_BOARDS, companyKey, normalizeCompany, parseCareerUrl, placeMatches, profileFromCv, applyCvProfile } from './core.js';
+import { LEVELS, JOB_TYPES, JOBS_PER_UPDATE, DAYS, ROLE_RANGES, SINCE_DAYS, ARCHIVE_DAYS, ATS, COMPANY_SUGGESTIONS, INDIA_BOARDS, companyKey, normalizeCompany, parseCareerUrl, placeMatches, profileFromCv, applyCvProfile } from './core.js';
 import { fetchBoard } from './sources.js';
 import { readCvFile, CV_ACCEPT } from './files.js';
 
@@ -83,6 +83,7 @@ export function routineBlock(s, { email = '' } = {}) {
   const range = segmented(ROLE_RANGES, s.prefs.roleRange, 'Role range');
   const jobs = segmented(Object.fromEntries(JOBS_PER_UPDATE.map(n => [n, n ? String(n) : 'Off'])), s.jobsPerUpdate, 'New jobs per day');
   const since = segmented(Object.fromEntries(SINCE_DAYS.map(n => [n, `${n} days`])), s.sinceDays, 'First search');
+  const archive = segmented(Object.fromEntries(ARCHIVE_DAYS.map(n => [n, n ? `${n} days` : 'Never'])), s.archiveDays, 'Archive after');
   return {
     el: h('div', { class: 'stack' },
       h('label', { class: 'switch-row' }, h('span', { class: 'field-lbl' }, 'Daily updates'), on, onText),
@@ -94,12 +95,13 @@ export function routineBlock(s, { email = '' } = {}) {
           h('a', { href: '/privacy.html#alerts', target: '_blank', rel: 'noopener' }, 'What’s kept'))),
       group('Role range', range.el, 'Which job titles count as a match for the roles you picked.'),
       group('New jobs per day', jobs.el),
-      group('First time, look back through Gmail for', since.el)),
+      group('First time, look back through Gmail for', since.el),
+      group('Move to the Archive after no change for', archive.el, 'Quiet applications leave the board. A new email brings one back.')),
     collect: (d) => {
       const picked = days.filter(b => b.getAttribute('aria-pressed') === 'true').map(b => Number(b.dataset.day));
       d.schedule = { on: on.checked && picked.length > 0, days: picked.length ? picked : sc.days, gmailAt: gmailAt.value || sc.gmailAt, jobsAt: jobsAt.value || sc.jobsAt };
       d.prefs = Object.assign({}, d.prefs, { roleRange: range.get() });
-      d.jobsPerUpdate = Number(jobs.get()); d.sinceDays = Number(since.get());
+      d.jobsPerUpdate = Number(jobs.get()); d.sinceDays = Number(since.get()); d.archiveDays = Number(archive.get());
       d.emailAlerts = alerts.checked;
     },
   };

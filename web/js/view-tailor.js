@@ -29,7 +29,7 @@ export function renderTailor(ctx, root, jobId) {
   const preview = h('section', { class: 'tl-col tl-preview', 'aria-labelledby': 'pv-h' });
 
   const draw = () => {
-    const all = [...tailorSuggestions(base, job, data.cv, data.settings.keywords), ...t.extra];
+    const all = [...tailorSuggestions(base, job, data.cv, data.settings.keywords, data.settings.prefs.roles), ...t.extra];
     const accepted = all.filter(s => t.accepted.includes(s.id));
     const { resume, changed } = applySuggestions(base, accepted);
     const baseScore = atsScore(base, job, data.settings.keywords).score;

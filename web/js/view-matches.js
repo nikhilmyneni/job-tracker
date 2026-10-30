@@ -129,7 +129,7 @@ function jobDetail(ctx, j, redraw, inDialog) {
 function readyResume(ctx, j) {
   const { data, act } = ctx;
   const base = act.baseResume();
-  const all = tailorSuggestions(base, j, data.cv, data.settings.keywords);
+  const all = tailorSuggestions(base, j, data.cv, data.settings.keywords, data.settings.prefs.roles);
   const t = j.tailored || {};
   const accepted = Array.isArray(t.accepted) ? all.filter(s => t.accepted.includes(s.id)) : all.filter(s => !s.warn);
   return { resume: applySuggestions(base, accepted).resume, template: t.template || 'standard' };

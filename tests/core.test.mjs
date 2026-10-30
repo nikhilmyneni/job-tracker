@@ -518,3 +518,29 @@ test('a letter-spaced name from a CV is put back into words with the Google name
   assert.equal(C.tidyName(n, ['Nikhil', 'nikhilmyneni.3@example.com']), 'Sai Nikhil Myneni');
   assert.equal(C.tidyName('Test Person', ['Someone Else']), 'Test Person'); // not letter-spaced: unchanged
 });
+
+test('conditional or future wording never moves an application', () => {
+  const t = (subject, body) => C.ruleClassify({ subject, body, from: 'Acme Careers <careers@acme.com>' }).stage;
+  assert.equal(t('Thank you for applying', 'We have received your application. If you are selected for an interview, our team will contact you.'), 'Applied');
+  assert.equal(t('Application received', 'Shortlisted candidates will be contacted for the next round of interviews.'), 'Applied');
+  assert.equal(t('Your application', 'Our process includes an online assessment and two interview rounds.'), 'Applied');
+  assert.equal(t('Next steps', 'We would like to invite you to an interview on Monday at 10 AM.'), 'Interview');
+  assert.equal(t('Update', 'You have been shortlisted. Please complete the coding test by Friday.'), 'Screening');
+  assert.match(C.classifyPrompt([{ from: 'a', subject: 'b', body: 'c', date: new Date() }]), /conditional or future wording/);
+});
+
+test('quiet applications move to the Archive; a new email or you bring them back', () => {
+  const data = C.normalizeData({});
+  const r = C.newResult();
+  C.upsertApplication(data.applications, { company: 'Acme', role: 'SOC Analyst', stage: 'Applied', date: '2026-09-01' }, r);
+  C.upsertApplication(data.applications, { company: 'Beta', role: 'Intern', stage: 'Interview', date: '2026-10-25' }, r);
+  assert.equal(C.archiveQuiet(data.applications, new Date('2026-10-31T12:00:00'), 30), 1);
+  const [acme, beta] = data.applications;
+  assert.equal(acme.archived, true); assert.ok(!beta.archived);
+  assert.equal(C.summary(data.applications).active, 1); // archived ones aren't "in play"
+  C.upsertApplication(data.applications, { company: 'Acme', role: 'SOC Analyst', stage: 'Screening', date: '2026-11-02' }, r);
+  assert.equal(acme.archived, false); // a new email brings it back
+  C.setArchived(beta, true, '2026-11-02'); C.setArchived(beta, false, '2026-11-03');
+  assert.equal(C.archiveQuiet(data.applications, new Date('2026-11-20T12:00:00'), 30), 0); // kept_on counts as a change
+  assert.equal(C.archiveQuiet(data.applications, new Date('2026-12-20T12:00:00'), 0), 0); // 0 = off
+});

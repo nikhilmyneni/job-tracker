@@ -35,6 +35,7 @@ export async function runUpdate(data, me, report, refresh = () => {}, { gmail = 
   // Emails left for next time (over this sync's limit): Gmail keeps being read from the same point until they're done.
   const left = gmail ? await syncApplications(data, me, afterStr, seen, result, report, note, refresh) : 0;
   C.markGhosted(data.applications, now, result);
+  C.archiveQuiet(data.applications, now, s.archiveDays);
   refresh();
 
   if (jobs && s.jobsPerUpdate > 0) {

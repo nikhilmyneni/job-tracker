@@ -294,6 +294,12 @@ Object.assign(ctx.act, {
     await persist(); render(true);
   },
   async setApplicationStatus(app, status) { C.setApplicationStatus(app, status, today()); await persist(); render(true); },
+  /** Archive or bring back one or more applications. */
+  async archiveApplications(list, on) {
+    list.forEach(a => C.setArchived(a, on, today()));
+    await persist(); render(true);
+    toast(on ? `Moved ${list.length} to the Archive.` : `${list.length === 1 ? 'It’s' : 'They’re'} back on the board.`);
+  },
   /** Manual correction from the card's dialog. */
   async editApplication(app, e) {
     if (e.status !== app.status) C.setApplicationStatus(app, e.status, today());
@@ -431,6 +437,8 @@ async function enter() {
     runWizard($('screen-wizard'), { data: ctx.data, me: ctx.me, demo: DEMO, finish: finishWizard, connectGmail: () => ctx.act.connectGmail(), gmailOn });
     return;
   }
+  // Quiet applications move to the Archive even between syncs.
+  if (!DEMO && C.archiveQuiet(ctx.data.applications, new Date(), ctx.data.settings.archiveDays)) persist().catch(() => {});
   show('app'); render();
   runScheduled();
   pickUpAlerts();

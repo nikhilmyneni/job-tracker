@@ -36,6 +36,8 @@ There's nothing else to set up: the AI is built in and free.
   "New jobs ready by" time, Job Hunter looks through the companies you follow even while it's closed and emails you the
   new matches (and they're waiting in Job matches next time you open it). It keeps only what matching needs, never your
   CV or Gmail; turning it off, or *Stop these emails* in an alert, deletes it.
+- **Archive:** applications with no change for 30 days (Settings → Routine: 14, 30, 60 days or never) move to the
+  **Archive** tab, off the board. A new email about one brings it back, or click **Unarchive**. You can archive by hand too.
 - **Applications:** Board, Table or Timeline. Drag a card to another column, or tap it to fix the status,
   role, next step or interview time. "N emails need a look" lists emails it couldn't match.
 - **Job matches:** openings from your job-alert emails and the companies you follow, scored by how much of

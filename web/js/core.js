@@ -12,6 +12,7 @@ export const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']; // Date.g
 export const ROLE_RANGES = { core: 'Just my roles', related: 'My roles + related ones I’d fit', stretch: 'Also stretch roles (one skill away)' };
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 export const SINCE_DAYS = [30, 60, 120];
+export const ARCHIVE_DAYS = [0, 14, 30, 60]; // 0 = never archive by itself
 export const MIN_MATCHES = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90];
 export const LEVELS = { fresher: 'Fresher (0–1 year)', intern: 'Internship', both: 'Fresher jobs or internships' };
 export const JOB_TYPES = { fulltime: 'Full-time', internship: 'Internship', both: 'Full-time or internship' };
@@ -72,6 +73,7 @@ export function defaultSettings() {
     // When syncs run on their own (this device's clock). The page does the work, so a time missed while it's closed runs on the next open.
     schedule: { on: true, days: [0, 1, 2, 3, 4, 5, 6], gmailAt: '07:00', jobsAt: '09:00' },
     sinceDays: 120,
+    archiveDays: 30, // an application with no change for this long moves to the Archive (0 = never)
     notify: false, // browser notifications after a sync
     emailAlerts: false, // opt-in: the server looks for jobs while the app is closed and emails them (api/alerts.js)
     keywords: [], // your own words to look for in job posts (they count as skills you have, and weigh more)
@@ -117,6 +119,7 @@ export function normalizeSettings(raw) {
     jobsPerUpdate: pick(r.jobsPerUpdate, JOBS_PER_UPDATE, d.jobsPerUpdate),
     schedule: normalizeSchedule(r.schedule, r.autoUpdateHours, d.schedule),
     sinceDays: pick(r.sinceDays, SINCE_DAYS, d.sinceDays),
+    archiveDays: pick(r.archiveDays, ARCHIVE_DAYS, d.archiveDays),
     notify: r.notify === true,
     emailAlerts: r.emailAlerts === true,
     autoCompanies: r.autoCompanies !== false,
@@ -320,7 +323,9 @@ export function classifyPrompt(batch) {
     '"stage": "Applied"|"Screening"|"Interview"|"Offer"|"Rejected"|"Withdrawn", "next_step": "<short action for the candidate, or empty>", ' +
     '"next_at": "<YYYY-MM-DDTHH:MM of the interview slot or the test deadline if the email states one, else empty>", "next_kind": "interview"|"deadline"|"", ' +
     '"round": "<e.g. Round 2, HR round, or empty>", "needs_review": true|false}.\n' +
-    'Rules: assessment or online test invite = Screening; interview invite or reminder = Interview; selection or offer = Offer. Use the real employer name, not the job board. Role empty if not stated. ' +
+    'Rules: assessment or online test invite = Screening; interview invite or reminder = Interview; selection or offer = Offer. ' +
+    'Only what HAS happened counts: conditional or future wording ("if you are selected for an interview", "shortlisted candidates will be contacted", ' +
+    '"next steps may include a test", "our process has 3 rounds") is NOT an interview, test or offer; an application confirmation saying that stays Applied. Use the real employer name, not the job board. Role empty if not stated. ' +
     'Set needs_review=true (with is_application_update=false) for an email that is clearly about one of their applications but where you cannot tell the company or what happened.\n\n' +
     batch.map((e, i) => `### Email ${i}\nFrom: ${e.from}\nDate: ${e.date.toISOString().slice(0, 10)}\nSubject: ${e.subject}\n${e.body}`).join('\n\n');
 }
@@ -353,13 +358,22 @@ export function jobSiteParts(text) {
   return { company: '', role: '' };
 }
 
+// Sentences about what might happen ("If you are selected for an interview, we'll call you", "Shortlisted candidates will
+// be contacted") don't move an application: only what has happened does.
+const MAYBE_RE = /\b(if|should|in case|once|whether|unless|may|might|potential(ly)?|possible)\b|\b(will|shall|'ll)\s+(be\s+)?(contact|reach|get in touch|be in touch|notify|inform|invite|let you know)|\b(selected|shortlisted|successful|eligible|suitable)\s+(candidates|applicants|profiles)\b|\bnext\s+steps?\s+(may|will|could|might)\b|\bprocess\s+(includes?|involves?|consists?)\b|\b(stages?|rounds?)\s+(of|in)\s+(the|our)\s+(hiring|selection|recruitment|interview)/i;
+/** The text without its conditional or "what happens next" sentences, lower-cased. */
+export function factualText(text) {
+  return String(text || '').split(/(?<=[.!?])\s+|\n+/).filter(x => !MAYBE_RE.test(x)).join(' ').toLowerCase();
+}
+
 export function ruleClassify(e) {
   const t = (e.subject + ' ' + e.body).toLowerCase();
+  const f = factualText(e.subject + '. ' + e.body); // stages beyond Applied need a sentence that says it happened
   let stage = null;
-  if (/unfortunately|not moving forward|regret to inform|not been selected|other candidates|not to take your application forward/.test(t)) stage = 'Rejected';
-  else if (/offer letter|pleased to offer|you have been selected|congratulations/.test(t)) stage = 'Offer';
-  else if (/interview/.test(t)) stage = 'Interview';
-  else if (/assessment|online test|coding test|shortlisted/.test(t)) stage = 'Screening';
+  if (/unfortunately|not moving forward|regret to inform|not been selected|other candidates|not to take your application forward/.test(f)) stage = 'Rejected';
+  else if (/offer letter|pleased to offer|you have been selected|congratulations/.test(f)) stage = 'Offer';
+  else if (/interview/.test(f)) stage = 'Interview';
+  else if (/assessment|online test|coding test|shortlisted/.test(f)) stage = 'Screening';
   else if (/withdrawn/.test(t)) stage = 'Withdrawn';
   else if (/thank(s| you) for applying|application (has been )?received|received your application|your application|successfully applied|applied successfully|application (was |has been )?(sent|submitted)|you applied|applied to/.test(t)) stage = 'Applied';
   const looksRelated = /\b(application|applied|interview|assessment|shortlist(ed)?|offer|candidature)\b/i.test(e.subject);
@@ -445,6 +459,7 @@ export function upsertApplication(apps, u, result, removed = []) {
     if (u.link && !cur.email_link) cur.email_link = u.link;
     return cur;
   }
+  if (cur.archived) { cur.archived = false; cur.kept_on = u.date; result.appsChanged.push(`${cur.company}${cur.role ? ' – ' + cur.role : ''}: back from the Archive`); }
   const prev = cur.status;
   if (STAGES.indexOf(stage) > STAGES.indexOf(cur.furthest)) cur.furthest = stage;
   cur.status = stage;
@@ -473,10 +488,32 @@ function setNext(app, u) {
 
 export function setApplicationStatus(app, status, today) {
   if (STATUSES.indexOf(status) < 0) throw new Error('Unknown status.');
+  if (app.archived && app.status !== status) { app.archived = false; app.kept_on = today; }
   if (app.status !== status) addHistory(app, today, status, 'you');
   app.status = status;
   if (STAGES.indexOf(status) > STAGES.indexOf(app.furthest)) app.furthest = status;
   app.last_update = today;
+}
+
+/**
+ * Applications whose status hasn't changed for `days` move to the Archive (off the board). They come back on any new
+ * email about them, a status change, or when you unarchive one (kept_on then counts as its last change).
+ * Returns how many were archived.
+ */
+export function archiveQuiet(apps, now, days) {
+  if (!days) return 0;
+  const cutoff = ymd(new Date(now.getTime() - days * 864e5));
+  let n = 0;
+  apps.forEach(a => {
+    const last = [a.last_update, a.kept_on, a.applied_on].filter(isYmd).sort().pop() || '';
+    if (!a.archived && last && last < cutoff) { a.archived = true; a.archived_on = ymd(now); a.archived_by = 'quiet'; n++; }
+  });
+  return n;
+}
+/** You archive or unarchive one by hand. */
+export function setArchived(app, on, today) {
+  app.archived = !!on;
+  if (on) { app.archived_on = today; app.archived_by = 'you'; } else app.kept_on = today;
 }
 
 export function markGhosted(apps, now, result) {
@@ -618,7 +655,7 @@ export function summary(apps) {
   const responses = apps.filter(a => a.furthest !== 'Applied').length;
   return {
     total, responses,
-    active: apps.filter(inPlay).length,
+    active: apps.filter(a => inPlay(a) && !a.archived).length,
     rate: total ? Math.round(responses / total * 100) : 0,
     interviews: apps.filter(a => ['Interview', 'Offer'].includes(a.furthest)).length,
     offers: apps.filter(a => a.furthest === 'Offer').length,
@@ -813,7 +850,8 @@ const ROLE_SYNONYMS = {
   penetration: ['penetration', 'pentest', 'vapt', 'offensive', 'red team', 'ethical hack'],
   pentester: ['penetration', 'pentest', 'vapt', 'offensive', 'red team'],
   soc: ['soc', 'security operations', 'incident response', 'threat', 'detection'],
-  grc: ['grc', 'governance', 'risk', 'compliance', 'audit'],
+  // Risk only in its security sense: "Credit Risk Analyst" is a finance job, not GRC.
+  grc: ['grc', 'governance', 'compliance', 'audit', 'it risk', 'cyber risk', 'technology risk', 'information risk', 'risk and compliance'],
   cloud: ['cloud', 'aws', 'azure', 'gcp', 'devsecops'],
   security: ['security', 'cyber', 'infosec', 'soc', 'appsec'],
   cyber: ['cyber', 'security', 'infosec'],
@@ -1503,7 +1541,7 @@ const hitsIn = (text, asked) => asked.filter(a => termsIn(text, [a]).has(a)).len
  * change only order or wording of what's there; 'Surface' adds to your skills something your CV already shows;
  * 'Add skill' adds something it doesn't (only if you can talk about it), so it carries a warning.
  */
-export function tailorSuggestions(base, job, cv, keywords = []) {
+export function tailorSuggestions(base, job, cv, keywords = [], roles = []) {
   const jd = [job.role, job.jd || job.details].join('\n');
   const asked = [...termsIn(jd, keywords)];
   const inResume = termsIn(resumeText(base), keywords), inCv = termsIn(cv, keywords);
@@ -1530,7 +1568,9 @@ export function tailorSuggestions(base, job, cv, keywords = []) {
   // The headline names the role you're applying for, with true focus areas from your skills.
   const focus = asked.filter(t => inResume.has(t)).slice(0, 3);
   const headline = [job.role, focus.join(', ')].filter(Boolean).join(' · ').slice(0, 120);
-  if (job.role && headline !== (base.contact && base.contact.headline)) out.push({ id: 'headline', kind: 'Reword', title: 'Headline for this role', text: `“${headline}”`, patch: { op: 'headline', value: headline } });
+  // Only for jobs in your field: a headline naming a role far from your roles would claim a title your CV doesn't support.
+  const inField = !roles.length || roleKind(job.role, roles) !== 'Stretch';
+  if (job.role && inField && headline !== (base.contact && base.contact.headline)) out.push({ id: 'headline', kind: 'Reword', title: 'Headline for this role', text: `“${headline}”`, patch: { op: 'headline', value: headline } });
   // Asked for, nowhere in the CV.
   asked.filter(t => !inCv.has(t) && !has(t)).slice(0, 3).forEach(t => out.push({ id: 'add:' + t, kind: 'Add skill', title: `Add ${t}`, text: `The job asks for ${t}, and your CV doesn't mention it.`, warn: 'Only add this if you can talk about it in an interview.', patch: { op: 'addSkill', term: t } }));
   return out;

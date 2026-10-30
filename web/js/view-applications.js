@@ -6,12 +6,13 @@ import { notifySupported, notifyAllowed } from './notify.js';
 
 const VIEWS = ['Board', 'Table', 'Timeline'];
 let view = (() => { try { return VIEWS.includes(localStorage.getItem('jh-apps-view')) ? localStorage.getItem('jh-apps-view') : 'Board'; } catch (e) { return 'Board'; } })();
-let sortCol = 'applied_on', sortDir = -1, query = '';
+let sortCol = 'applied_on', sortDir = -1, query = '', showArchive = false;
 const picked = new Set(); // applications ticked in the table (by id), for removing several at once
 
 export function renderApplications(ctx, root) {
   const { data, act } = ctx;
-  const apps = data.applications, sum = summary(apps);
+  const all = data.applications, sum = summary(all);
+  const archived = all.filter(a => a.archived), apps = all.filter(a => !a.archived);
   const sync = h('button', { type: 'button', class: 'btn btn-primary', id: 'sync-now', onclick: () => act.updateNow() }, icon('refresh'), h('span', {}, 'Sync now'));
   const add = h('button', { type: 'button', class: 'btn btn-quiet', onclick: () => addDialog(ctx) }, icon('plus'), h('span', {}, 'Add manually'));
   const paste = h('button', { type: 'button', class: 'btn btn-quiet', onclick: () => pasteDialog(ctx) }, icon('mail'), h('span', {}, 'Paste an email'));
@@ -32,16 +33,18 @@ export function renderApplications(ctx, root) {
           : data.gmailRunAt ? 'Nothing in your Gmail looked like an application. Add one by hand, or sync again after you apply somewhere.' : 'Sync now reads your Gmail (read-only) and sorts every application email it finds.')));
       return;
     }
+    if (showArchive) { body.replaceChildren(archiveList(ctx, archived.filter(a => !query.trim() || matchingOne(a)))); return; }
     body.replaceChildren(view === 'Board' ? renderBoard(ctx, list) : view === 'Timeline' ? renderTimeline(list) : table(ctx, list));
   };
+  const matchingOne = (a) => { const q = query.trim().toLowerCase(); return ['company', 'role', 'channel', 'next_step'].some(k => String(a[k] || '').toLowerCase().includes(q)); };
 
   const tabs = h('div', { class: 'tabs', role: 'tablist', 'aria-label': 'View' }, ...VIEWS.map(v => h('button', {
-    type: 'button', role: 'tab', 'aria-selected': String(v === view), onclick: () => {
-      view = v; try { localStorage.setItem('jh-apps-view', v); } catch (e) { /* fine */ }
-      tabs.querySelectorAll('[role=tab]').forEach(b => b.setAttribute('aria-selected', String(b.textContent === v)));
-      drawBody();
+    type: 'button', role: 'tab', 'aria-selected': String(v === view && !showArchive), onclick: () => {
+      view = v; showArchive = false; try { localStorage.setItem('jh-apps-view', v); } catch (e) { /* fine */ }
+      renderApplications(ctx, root);
     },
-  }, v)));
+  }, v)), h('button', { type: 'button', role: 'tab', class: 'tab-archive', 'aria-selected': String(showArchive), onclick: () => { showArchive = true; renderApplications(ctx, root); } },
+    icon('archive'), h('span', {}, `Archive (${archived.length})`)));
   drawBody();
 
   const stats = h('section', { class: 'stats', 'aria-label': 'Totals' }, ...[
@@ -91,6 +94,7 @@ function table(ctx, list) {
     h('span', {}, chosen.length ? `${chosen.length} selected` : 'Tick applications to remove several at once.'),
     playing.some(a => !picked.has(a.id)) ? h('button', { type: 'button', class: 'btn btn-quiet btn-sm', onclick: () => { playing.forEach(a => picked.add(a.id)); redraw(); } }, `Select all in play (${playing.length})`) : '',
     chosen.length ? h('button', { type: 'button', class: 'btn btn-quiet btn-sm', onclick: () => { picked.clear(); redraw(); } }, 'Clear') : '',
+    chosen.length ? h('button', { type: 'button', class: 'btn btn-quiet btn-sm', onclick: (e) => busy(e.currentTarget, 'Archiving…', () => act.archiveApplications(chosen, true).then(() => picked.clear())) }, `Archive ${chosen.length}`) : '',
     chosen.length ? removeBtn(() => act.deleteApplications(chosen).then(() => picked.clear()), `Remove ${chosen.length}`, `Remove ${chosen.length} application${chosen.length === 1 ? '' : 's'}?`) : '');
   const head = h('tr', {}, h('th', { class: 'cell-pick' }, all), ...[['company', 'Company'], ['role', 'Role'], ['channel', 'Channel'], ['applied_on', 'Applied'], ['status', 'Status'], ['next_step', 'Next step']]
     .map(([k, l]) => h('th', { scope: 'col', 'aria-sort': k === sortCol ? (sortDir > 0 ? 'ascending' : 'descending') : null },
@@ -185,4 +189,17 @@ function pasteDialog(ctx) {
   }, status) }, 'Read it');
   const close = openDialog('Paste an application email', h('div', { class: 'stack' }, text, status, h('div', { class: 'row-end' }, read), step2));
   text.focus();
+}
+
+/** The Archive: applications with no change for a while (or archived by hand). Any new email brings one back. */
+function archiveList(ctx, list) {
+  const days = ctx.data.settings.archiveDays;
+  const intro = h('p', { class: 'hint' }, days ? `Applications with no change for ${days} days move here by themselves, off the board. A new email about one brings it back; or bring it back yourself.`
+    : 'Applications you archive move here. A new email about one brings it back. (Archiving by itself is off: Settings → Routine.)');
+  if (!list.length) return h('div', { class: 'stack' }, intro, h('div', { class: 'empty-block' }, h('h2', {}, 'Nothing in the Archive'), h('p', {}, 'Quiet applications will show up here.')));
+  const rows = list.slice().sort((a, b) => String(b.last_update || '').localeCompare(String(a.last_update || ''))).map(a => h('li', { class: 'arch-row' },
+    h('span', { class: 'ini' }, (a.company || '?').charAt(0).toUpperCase()),
+    h('span', { class: 'arch-text' }, h('b', {}, a.company), h('span', {}, [a.role || 'Role not stated', STATUS_LABEL[a.status], a.last_update ? 'last change ' + a.last_update : ''].filter(Boolean).join(' · '))),
+    h('button', { type: 'button', class: 'btn btn-quiet btn-sm', onclick: (e) => busy(e.currentTarget, 'Bringing back…', () => ctx.act.archiveApplications([a], false)) }, 'Unarchive')));
+  return h('div', { class: 'stack' }, intro, h('ul', { class: 'arch-list panel' }, ...rows));
 }

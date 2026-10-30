@@ -65,7 +65,8 @@ and counts toward the 100-user cap. Without Gmail, users add applications by han
   (`settings.schedule`: on, days, `gmailAt`, `jobsAt`, on the device's clock) says when: `scheduleDue()` runs each part
   once after its latest time on a chosen day, so a time missed while the page was closed runs on the next open. On the signup day (`startedOn`) the job search also runs every `FIRST_DAY_GAP_H` hours until that day's `jobsPerUpdate` matches are in. Checked on
   open and every minute; a failed automatic try waits `MIN_UPDATE_GAP_MIN`. **Sync now** runs both. `navigator.locks` keeps it to one tab.
-- Gmail search (`appSearch`): application phrasings, Social left out, Promotions searched only for job sites and application systems (`APPLY_SENDERS`). A job site's email is filed under the employer it names (`jobSiteParts`), never the job site; none named → "needs a look". Emails missing from the AI's answer go through `ruleClassify`.
+- Gmail search (`appSearch`): application phrasings, Social left out, Promotions searched only for job sites and application systems (`APPLY_SENDERS`). A job site's email is filed under the employer it names (`jobSiteParts`), never the job site; none named → "needs a look". Emails missing from the AI's answer go through `ruleClassify`. Only what has happened moves a stage: `factualText` drops conditional or
+  future sentences ("if you are selected for an interview…", "shortlisted candidates will be contacted") and the AI prompt says the same.
 - Gmail API: `messages.list` (every page, up to `MAX_LISTED`) + `messages.get` (`format=full`) for unread ones only, 4 at a time. Up to `MAX_EMAILS` per sync, oldest first; the rest wait for the next sync (`gmailRunAt` only moves once none are left). Gmail limits reads per user per minute:
   on a 429 or a 403 rate/quota error, `gfetch` waits (Retry-After, else 8/15/30/60 s) and retries, and the sync bar says so. Keep per-run work bounded
   (`MAX_EMAILS`, `MAX_ALERT_EMAILS`, `MAX_BOARD_CANDIDATES`; AI batches of 20, two at a time,
@@ -114,13 +115,16 @@ and counts toward the 100-user cap. Without Gmail, users add applications by han
 `{version: 2, settings, applications[], jobs[], seen[] (≤5000), log[] (newest first, ≤300), cv, cvFile, cvFold, cvFoldHash, review[] (≤50), reviewDone[], lastRunAt, gmailRunAt, gmailScan, gmailRescan, jobsRunAt, startedOn, removed[] ({key, on}: removed applications; older emails don't bring them back)}`.
 `gmailRunAt` is when Gmail was last read (so connecting it later still looks back `sinceDays`); it only moves once every matching email is read. `gmailScan` = `GMAIL_SCAN` marks data read the current way; older data reads its application emails again once over `sinceDays` (`gmailRescan` while that runs). An email older than an application's last update, or from on/before your own last change, never moves its status.
 - `settings`: onboarded, name, city, prefs {roles[], level, jobType, paidOnly, minPay,
-  locations[], relocate, roleRange (core/related: `roleFits`), avoid[]}, schedule {on, days[] (0 = Sun), gmailAt, jobsAt}, jobsPerUpdate (per day), sinceDays, notify, emailAlerts, keywords[], minMatch (0–90),
+  locations[], relocate, roleRange (core/related: `roleFits`), avoid[]}, schedule {on, days[] (0 = Sun), gmailAt, jobsAt}, jobsPerUpdate (per day), sinceDays, archiveDays, notify, emailAlerts, keywords[], minMatch (0–90),
   matchView {location, experience, internships, hideApplied}, companies[{ats, slug, name, host?, site?}] (followed), autoCompanies (default true).
   To add a setting, update `defaultSettings` + `normalizeSettings`
   (+ `prefsText` if the scorer should use it), the block in `onboarding.js`, and the docs.
 - **Application:** id, company, role, channel, applied_on, status, furthest, last_update,
   next_step, next_at (`YYYY-MM-DD[THH:MM]`), next_kind (interview/deadline), round, email_link, posting_link,
-  history[{on, status, by: email/you/quiet}] (≤30), key (`company|role` lowercased). `nextLabel()` makes the card pill.
+  history[{on, status, by: email/you/quiet}] (≤30), key (`company|role` lowercased), archived, archived_on, archived_by (quiet/you), kept_on.
+  `nextLabel()` makes the card pill. **Archive:** `archiveQuiet` moves applications with no change for `settings.archiveDays`
+  (default 30, 0 = never) off the board; any new email (`upsertApplication`), a status change or Unarchive (`setArchived`, sets
+  `kept_on`) brings one back. Archived ones count in Total, not Active.
 - **review:** emails that look like an application update but couldn't be matched ("N emails need a look"); `addReview()`.
 - **Job:** id, found_on, posted, score (0–100), fit (score/20), matched[], missing[], company, role, location, pay, why,
   skill_gap, apply_by, link, details, jd (full description, fetched when opened), status (New/Saved/Applied/Skipped/Expired),

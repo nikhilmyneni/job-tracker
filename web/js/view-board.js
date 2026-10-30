@@ -71,7 +71,8 @@ export function editDialog(ctx, a) {
       isHttp(a.email_link) ? h('a', { href: a.email_link, target: '_blank', rel: 'noopener noreferrer', class: 'link-ext' }, icon('mail'), 'Open the latest email') : '',
       isHttp(a.posting_link) ? h('a', { href: a.posting_link, target: '_blank', rel: 'noopener noreferrer', class: 'link-ext' }, icon('external'), 'Open the job posting') : '') : '',
     msg,
-    h('div', { class: 'row-split' }, removeBtn(() => ctx.act.deleteApplication(a).then(() => close())), save));
+    h('div', { class: 'row-split' }, h('div', { class: 'row' }, removeBtn(() => ctx.act.deleteApplication(a).then(() => close())),
+      h('button', { type: 'button', class: 'btn btn-quiet', onclick: (e) => busy(e.currentTarget, '…', () => ctx.act.archiveApplications([a], !a.archived).then(() => close())) }, a.archived ? 'Unarchive' : 'Archive')), save));
   const close = openDialog(a.company, form);
 }
 

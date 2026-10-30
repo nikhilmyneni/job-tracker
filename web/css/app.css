@@ -583,3 +583,12 @@ input.switch:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px
 .ats-checks .ok > span:first-child { color: var(--green); }
 .ats-checks .no { color: var(--night-text); opacity: 0.75; }
 .ats-checks .no > span:first-child { color: var(--orange-text); }
+
+/* ---------- applications: the Archive ---------- */
+.tab-archive { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; }
+.arch-list { list-style: none; margin: 0; padding: 6px 18px; display: grid; }
+.arch-row { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); }
+.arch-row:first-child { border-top: 0; }
+.arch-text { display: grid; gap: 2px; min-width: 0; margin-right: auto; }
+.arch-text b { color: var(--ink); overflow-wrap: anywhere; }
+.arch-text span { color: var(--muted); font-size: 14px; overflow-wrap: anywhere; }
