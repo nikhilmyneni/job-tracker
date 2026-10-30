@@ -5,7 +5,6 @@
  */
 import { h, busy, icon, pageHead, ago, extLink, isHttp, chipInput, openDialog, toast, errText } from './ui.js';
 import { filterJobs, MIN_MATCHES, roleKind, tailorSuggestions, applySuggestions } from './core.js';
-import { renderSheet } from './view-tailor.js';
 
 let show = 'New', selectedId = null;
 // Table or cards on desktop: a display preference, kept on this device.
@@ -149,7 +148,7 @@ function jobsTable(ctx, rows, redraw) {
     const pdf = h('button', { type: 'button', class: 'btn btn-quiet btn-sm', onclick: () => busy(pdf, 'Preparing…', async () => {
       if (!data.cv) throw new Error('Add your CV in Profile and CV first.');
       const { resume, template } = readyResume(ctx, j);
-      await act.printResume(j, renderSheet(resume, template));
+      await act.downloadResume(j, resume, 'pdf', template);
     }) }, h('span', {}, 'Resume PDF'), icon('download'));
     const kind = roleKind(j.role, roles);
     return h('tr', {},

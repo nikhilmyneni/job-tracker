@@ -91,9 +91,8 @@ export function renderTailor(ctx, root, jobId) {
       h('div', { class: 'sheet-box' }, sheet),
       h('div', { class: 'pv-acts' },
         h('button', { type: 'button', class: 'btn btn-primary btn-sm', onclick: (e) => busy(e.currentTarget, 'Preparing…', async () => {
-          status.className = 'status'; status.textContent = 'In the print window, set Destination to “Save as PDF”.';
-          await act.printResume(job, sheet);
-        }, status) }, icon('file'), h('span', {}, 'Download PDF')),
+          await act.downloadResume(job, resume, 'pdf', t.template);
+        }, status) }, icon('download'), h('span', {}, 'Download PDF')),
         h('button', { type: 'button', class: 'btn btn-quiet btn-sm', onclick: (e) => busy(e.currentTarget, 'Preparing…', async () => {
           await act.exportResumeFold(job, resume, t.template);
           status.className = 'status ok';
@@ -152,20 +151,24 @@ function renderPicker(ctx, root) {
 /** The one-page sheet in one of the four layouts. changed marks accepted edits so they stand out. */
 export function renderSheet(r, template, changed = new Set()) {
   const c = r.contact || {};
-  const sec = (title, ...body) => h('section', { class: 'rs-sec' }, h('h3', {}, title), ...body);
-  const bullets = (list) => (list || []).filter(Boolean).length ? h('ul', {}, ...list.filter(Boolean).map(b => h('li', {}, b))) : '';
-  const line = (left, right, chg) => h('p', { class: 'rs-line' + (chg ? ' chg' : '') }, h('b', {}, left), right ? h('span', {}, right) : '');
+  const sec = (title, ...body) => h('section', { class: 'rs-sec' }, h('h3', {}, h('span', {}, title)), ...body);
+  const bullets = (list) => (list || []).filter(Boolean).length ? h('ul', { class: 'rs-bullets' }, ...list.filter(Boolean).map(b => h('li', {}, b))) : '';
+  // One entry's first line: what (bold), where (italic), when (right).
+  const line = (what, where, when) => h('div', { class: 'rs-line' },
+    h('p', { class: 'rs-what' }, h('b', {}, what || ''), where ? h('i', {}, where) : ''), when ? h('span', { class: 'rs-when' }, when) : '');
+  const items = (s) => s.items.flatMap((it, i) => [i ? h('span', { class: 'rs-dot', 'aria-hidden': 'true' }, ' · ') : '', changed.has('skill:' + it.toLowerCase()) ? h('mark', { class: 'chg' }, it) : it]);
   const parts = {
-    summary: r.summary ? sec('Summary', h('p', { class: changed.has('summary') ? 'chg' : '' }, r.summary)) : '',
-    skills: (r.skills || []).length ? sec('Skills', ...r.skills.map(s => h('p', { class: 'rs-skills' + (changed.has('skills') ? ' chg' : '') }, h('b', {}, s.category + ': '),
-      ...s.items.flatMap((it, i) => [i ? ', ' : '', changed.has('skill:' + it.toLowerCase()) ? h('mark', { class: 'chg' }, it) : it])))) : '',
+    summary: r.summary ? sec('Profile', h('p', { class: 'rs-summary' + (changed.has('summary') ? ' chg' : '') }, r.summary)) : '',
+    skills: (r.skills || []).length ? sec('Skills', h('div', { class: 'rs-skills' + (changed.has('skills') ? ' chg' : '') },
+      ...r.skills.flatMap(s => [h('b', {}, s.category), h('p', {}, ...items(s))]))) : '',
     experience: (r.experience || []).length ? sec('Experience', ...r.experience.map(e => h('div', { class: 'rs-entry' + (changed.has('bullets:' + e.id) ? ' chg' : '') },
-      line([e.title, e.company].filter(Boolean).join(', '), dateRange(e)), bullets(e.bullets)))) : '',
+      line(e.title, [e.company, e.location].filter(Boolean).join(', '), dateRange(e)), bullets(e.bullets)))) : '',
     projects: (r.projects || []).length ? sec('Projects', ...r.projects.map(p => h('div', { class: 'rs-entry' + (changed.has('project:' + p.id) || changed.has('bullets:' + p.id) ? ' chg' : '') },
-      line([p.name, p.tech].filter(Boolean).join(' — '), dateRange(p)), bullets(p.bullets)))) : '',
+      line(p.name, p.tech, dateRange(p)), bullets(p.bullets)))) : '',
     education: (r.education || []).length ? sec('Education', ...r.education.map(e => h('div', { class: 'rs-entry' },
-      line([e.degree, e.field, e.school].filter(Boolean).join(', '), dateRange(e)), bullets([e.gpa && `GPA ${e.gpa}`, ...(e.details || [])])))) : '',
-    certifications: (r.certifications || []).length ? sec('Certifications', bullets(r.certifications.map(x => [x.name, x.issuer].filter(Boolean).join(', ')))) : '',
+      line([e.degree, e.field].filter(Boolean).join(', ') || e.school, e.degree || e.field ? e.school : '', dateRange(e)),
+      bullets([e.gpa && `GPA ${e.gpa}`, ...(e.details || [])])))) : '',
+    certifications: (r.certifications || []).length ? sec('Certifications', bullets(r.certifications.map(x => [x.name, x.issuer].filter(Boolean).join(' — ')))) : '',
   };
   const ORDER = {
     standard: ['summary', 'skills', 'experience', 'projects', 'education', 'certifications'],
@@ -173,11 +176,12 @@ export function renderSheet(r, template, changed = new Set()) {
     combination: ['summary', 'experience', 'projects', 'education'],
     senior: ['summary', 'experience', 'skills', 'projects', 'education', 'certifications'],
   }[template] || [];
+  const contact = [c.email, c.phone, c.location, c.linkedin, c.github, c.website].filter(Boolean);
   const head = h('header', { class: 'rs-head' }, h('h2', {}, c.fullName || 'Your name'),
     c.headline ? h('p', { class: 'rs-headline' + (changed.has('headline') ? ' chg' : '') }, c.headline) : '',
-    h('p', { class: 'rs-contact' }, [c.email, c.phone, c.location, c.linkedin, c.github, c.website].filter(Boolean).join('  ·  ')));
+    h('p', { class: 'rs-contact' }, ...contact.flatMap((x, i) => [i ? h('span', { class: 'rs-sep', 'aria-hidden': 'true' }, '|') : '', h('span', {}, x)])));
   const body = template === 'combination'
-    ? h('div', { class: 'rs-cols' }, h('div', { class: 'rs-side' }, parts.skills, parts.certifications), h('div', {}, ...ORDER.map(k => parts[k])))
-    : h('div', {}, ...ORDER.map(k => parts[k]));
+    ? h('div', { class: 'rs-cols' }, h('aside', { class: 'rs-side' }, parts.skills, parts.certifications), h('div', { class: 'rs-main' }, ...ORDER.map(k => parts[k])))
+    : h('div', { class: 'rs-body' }, ...ORDER.map(k => parts[k]));
   return h('article', { class: 'sheet t-' + template, 'aria-label': 'Resume preview' }, head, body);
 }

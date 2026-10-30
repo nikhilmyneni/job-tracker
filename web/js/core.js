@@ -1040,10 +1040,28 @@ const isHeading = (line) => {
 };
 
 /** "karthikreddyanumula" + ["karthik", "anumula"] → "Karthik Reddy Anumula" (the leftovers become words too). */
-function splitByTokens(squashed, tokens) {
+/**
+ * A name written letter by letter ("S A I N I K H I L M Y N E N I", as some CV templates do) put back into words.
+ * hints are your Google account name and email: their words show where one name ends and the next begins
+ * ("Nikhil" → "Sai Nikhil Myneni"). Names that aren't letter-spaced come back as they are.
+ */
+export function tidyName(name, hints = []) {
+  const n = String(name || '').trim();
+  if (!/^(?:\p{L}\s){3,}\p{L}$/u.test(n)) return n;
+  const squashed = n.replace(/\s+/g, '');
+  const nameWords = hints.filter(h => h && !String(h).includes('@')).flatMap(h => String(h).toLowerCase().split(/[^\p{L}]+/u)).filter(w => w.length >= 3);
+  const emailWords = hints.filter(h => String(h).includes('@')).flatMap(h => String(h).split('@')[0].toLowerCase().split(/[^a-z]+/)).filter(w => w.length >= 3);
+  const split = splitByTokens(squashed, [...new Set(nameWords)].sort((a, b) => b.length - a.length).concat(emailWords), true);
+  if (split) return split;
+  return squashed.charAt(0).toUpperCase() + squashed.slice(1).toLowerCase();
+}
+
+function splitByTokens(squashed, tokens, keepOrder = false) {
   const s = squashed.toLowerCase();
   const hits = [];
-  tokens.filter(t => t.length >= 3).sort((a, b) => b.length - a.length).forEach(t => {
+  const list = tokens.filter(t => t.length >= 3);
+  // keepOrder: try the tokens as given (your name's words before email chunks like "nikhilmyneni"), else longest first.
+  (keepOrder ? list : list.sort((a, b) => b.length - a.length)).forEach(t => {
     const i = s.indexOf(t);
     if (i >= 0 && !hits.some(h => i < h[1] && i + t.length > h[0])) hits.push([i, i + t.length]);
   });
@@ -1099,7 +1117,7 @@ export function profileFromCv(text, now = new Date(), { hint } = {}) {
   const github = (t.match(/(?:https?:\/\/)?(?:www\.)?github\.com\/[A-Za-z0-9_-]+/i) || [''])[0];
   const clues = [email.split('@')[0], linkedin.split('/in/')[1] || '', github.split('.com/')[1] || '', hint || '']
     .join(' ').toLowerCase().split(/[^a-z]+/).filter(x => x.length >= 3);
-  const name = nameFromHeader(lines, hint, clues);
+  const name = tidyName(nameFromHeader(lines, hint, clues), [hint, ...clues]); // letter-spaced headers put back into words
 
   // City: the contact lines at the top first, then anywhere.
   const findCity = (s) => {

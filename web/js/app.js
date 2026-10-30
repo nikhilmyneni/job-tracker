@@ -14,6 +14,7 @@ import { renderProfile, renderSettings } from './view-settings.js';
 import { demoData, DEMO_ME, DEMO_FOLD } from './demo.js';
 import { downloadBlob } from './files.js';
 import { resumeDocx } from './docx.js';
+import { resumePdf } from './pdf.js';
 import { askToNotify, notifySync } from './notify.js';
 
 const params = new URLSearchParams(location.search);
@@ -183,8 +184,10 @@ Object.assign(ctx.act, {
   /** The resume tailoring starts from: the CV as the AI read it (if it has, for this CV), else as read by rules. */
   baseResume() {
     const d = ctx.data;
-    if (d.cvFold && d.cvFoldHash === C.textHash(d.cv)) return d.cvFold;
-    return C.resumeFromCv(d.cv, { skills: C.mySkills(d), hint: ctx.me && ctx.me.email });
+    const r = d.cvFold && d.cvFoldHash === C.textHash(d.cv) ? d.cvFold : C.resumeFromCv(d.cv, { skills: C.mySkills(d), hint: ctx.me && ctx.me.name });
+    // The name you confirmed in setup (Profile) wins over the one read from the CV's header.
+    const name = C.tidyName(d.settings.name || r.contact.fullName, [ctx.me && ctx.me.name, ctx.me && ctx.me.email]);
+    return name ? Object.assign({}, r, { contact: Object.assign({}, r.contact, { fullName: name }) }) : r;
   },
   baseIsRough: () => !(ctx.data.cvFold && ctx.data.cvFoldHash === C.textHash(ctx.data.cv)),
   /** The AI reads the CV into proper sections, once per CV (facts copied, never rewritten). */
@@ -229,20 +232,12 @@ Object.assign(ctx.act, {
     job.resumefold_at = new Date().toISOString();
     await persist();
   },
-  async downloadResume(job, resume, kind) {
+  /** The resume as a file, named like Sai_Nikhil_Myneni_Resume_Diffzene_Cyber_Security_Intern.pdf. */
+  async downloadResume(job, resume, kind, template = 'standard') {
     const name = C.resumeFileBase(resume.contact.fullName, job.company, job.role);
-    if (kind === 'docx') downloadBlob(new Blob([resumeDocx(resume)], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }), name + '.docx');
+    if (kind === 'pdf') downloadBlob(new Blob([resumePdf(resume, template)], { type: 'application/pdf' }), name + '.pdf');
+    else if (kind === 'docx') downloadBlob(new Blob([resumeDocx(resume)], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }), name + '.docx');
     else downloadBlob(new Blob([C.resumeLatex(resume)], { type: 'application/x-tex' }), name + '.tex');
-  },
-  /** Prints just the sheet (Save as PDF in the print dialog). The page title becomes the suggested file name. */
-  async printResume(job, sheet) {
-    const box = h('div', { id: 'print-sheet' }, sheet.cloneNode(true));
-    document.body.append(box); document.body.classList.add('printing-resume');
-    const title = document.title;
-    document.title = C.resumeFileBase(sheet.querySelector('.rs-head h2').textContent, job.company, job.role);
-    const done = () => { box.remove(); document.body.classList.remove('printing-resume'); document.title = title; };
-    window.addEventListener('afterprint', done, { once: true });
-    window.print();
   },
   /** The job matches screen: filters and your keywords are saved with your settings. */
   async saveMatchView(view, keywords, minMatch) {
@@ -450,6 +445,9 @@ async function loadAccount() {
   ctx.me = me;
   G.setHint(me.email);
   if (!ctx.data) ctx.data = C.normalizeData(await G.loadData());
+  // A name saved letter by letter from the CV ("S A I …"): put back into words with your Google name's help.
+  const tidy = C.tidyName(ctx.data.settings.name, [me.name, me.email]);
+  if (tidy !== ctx.data.settings.name) { ctx.data.settings.name = tidy; persist().catch(() => {}); }
   return true;
 }
 

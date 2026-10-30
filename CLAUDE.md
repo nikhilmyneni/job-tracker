@@ -92,6 +92,8 @@ and counts toward the 100-user cap. Without Gmail, users add applications by han
   (`resumeFoldPrompt`, `cleanResumeFold`, `resumeFoldFor`), the resume tailor (`TEMPLATES`, `pastedJob` for a pasted description, `resumeFromCv` by rules,
   `tailorSuggestions` / `applySuggestions` / `tailorScore`, `highlightJd`, `honestRewrite` for AI summaries, `resumeLatex`),
   and the dashboard numbers.
+- `js/pdf.js` (+ generated `js/pdf-fonts.js`, Times widths from vendored pdf.js): **pure** resume → real-text PDF (`resumePdf(resume, template)`),
+  downloaded as `Name_Resume_Company_Role.pdf` (`resumeFileBase`); same four layouts and navy accent as the on-screen sheet. No print dialog.
 - `js/sources.js`: fetches job boards and full job descriptions. `js/docx.js`: **pure** ZIP + DOCX → text, and the resume as a .docx (`resumeDocx`).
 - `js/ai.js`: `PROVIDERS`, `askWith()` (shared with the server, so no DOM in this file), `useSharedAi()` / `ask()` for the page, `parseJsonLoose()`.
 - `js/google.js`: sign-in, Gmail, Drive app data (`job-tracker.json`, `cv-original.*`).
@@ -100,7 +102,7 @@ and counts toward the 100-user cap. Without Gmail, users add applications by han
 - `js/app.js`: boot, routing, sync, actions. Screens: `view-applications.js` (+ `view-board.js`: board, timeline, edit dialog), `view-matches.js` (desktop table: fit, match %, Core/Related, why, skill to pick up, status, Apply / Resume PDF (saved tailoring or all safe edits) / Tailor; cards on phones; `jh-matches` display pref),
   `view-tailor.js`, `view-settings.js` (Profile and Settings). `onboarding.js`: the wizard plus the shared
   field blocks. `ui.js`: `h()`, `busy`, `holdButton`, `setLabel`, `icon`, `pageHead`, chips, dialogs. `demo.js`.
-- `tests/`: Node tests: `core`, `match`, `files` (PDF lines), `notify`, `api` (the AI function), `google` (rate-limit retries, paging), `tailor` (suggestions, LaTeX, .docx) `alerts` (the email alerts, with a fake store, Brevo and board) and `store` (RESP against a fake Redis server), with fetch faked. `npm test` and `npm run check` must pass before any push.
+- `tests/`: Node tests: `core`, `match`, `files` (PDF lines), `notify`, `api` (the AI function), `google` (rate-limit retries, paging), `tailor` (suggestions, LaTeX, .docx), `pdf` (the resume PDF), `alerts` (the email alerts, with a fake store, Brevo and board) and `store` (RESP against a fake Redis server), with fetch faked. `npm test` and `npm run check` must pass before any push.
 - `scripts/serve.js` (local server on :5173, with the /app rewrites and /api functions), `scripts/check.js`.
 - `docs/SETUP.md`: users and owner (Google Cloud + Vercel). Keep it in sync with behaviour changes. `docs/ROADMAP.md`: ideas.
 

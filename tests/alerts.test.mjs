@@ -95,7 +95,7 @@ test('before your time: nothing. After it: matching jobs kept for the app and on
   const found = JSON.parse(kv.get(A.K.found('user1')));
   assert.deepEqual(found.map(j => j.role), ['SOC Analyst']); // Sales is on the skip list
   assert.equal(mails[0].to[0].email, 'test.person@example.com');
-  assert.match(mails[0].subject, /1 new job/);
+  assert.match(mails[0].subject, /^New match: SOC Analyst at Kestrel$/);
   assert.match(mails[0].htmlContent, /SOC Analyst/);
   const again = await A.runAlerts({ now: new Date('2026-10-30T05:00:00Z'), origin: 'https://jobs4you.vercel.app' });
   assert.equal(again.due, 0); assert.equal(mails.length, 1);

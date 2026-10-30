@@ -511,3 +511,10 @@ test('removed applications stay removed: older emails about them are ignored, ne
   assert.equal(data.applications.length, 1); // a new email after removing does
   assert.equal(C.normalizeData(JSON.parse(JSON.stringify(data))).removed.length, 2);
 });
+
+test('a letter-spaced name from a CV is put back into words with the Google name', () => {
+  const n = 'S A I N I K H I L M Y N E N I';
+  assert.equal(C.tidyName(n, ['Nikhil Myneni', 'nikhilmyneni.3@example.com']), 'Sai Nikhil Myneni');
+  assert.equal(C.tidyName(n, ['Nikhil', 'nikhilmyneni.3@example.com']), 'Sai Nikhil Myneni');
+  assert.equal(C.tidyName('Test Person', ['Someone Else']), 'Test Person'); // not letter-spaced: unchanged
+});
