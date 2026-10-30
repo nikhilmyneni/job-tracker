@@ -89,7 +89,7 @@ window.addEventListener('popstate', () => render());
 // ---------- scores ----------
 const scoreOf = (job) => {
   const m = C.matchScore(job, C.mySkills(ctx.data), ctx.data.settings.keywords, ctx.data.settings.prefs.roles, ctx.data.settings.prefs.roleRange);
-  return { score: m.score, fit: Math.max(1, Math.round(m.score / 20)), matched: m.matched.slice(0, 12), missing: m.missing.slice(0, 8), skill_gap: m.missing[0] || 'None' };
+  return { score: m.score, fit: Math.max(1, Math.round(m.score / 20)), matched: m.matched.slice(0, 12), missing: m.missing.slice(0, 8), skill_gap: m.missing[0] || 'None', title_only: !!m.titleOnly };
 };
 /** After your skills or keywords change, every match is scored again. */
 function rescore() { ctx.data.jobs.forEach(j => Object.assign(j, scoreOf(j))); }

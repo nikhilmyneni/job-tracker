@@ -73,6 +73,7 @@ export async function runAlerts({ now = new Date(), origin = '', budgetMs = 4000
 
   const appUrl = (origin || 'https://jobs4you.vercel.app') + '/app/matches';
   let emailed = 0, done = 0, candidates = 0, found = 0, mailError = '';
+  const leftOut = { seen: 0, role: 0, senior: 0, internOnly: 0, fullTimeOnly: 0, skipList: 0, location: 0, belowMinMatch: 0 };
   for (const u of due) {
     if (Date.now() - start > budgetMs) break;
     const [seenRaw, foundRaw] = await pipeline([['GET', K.seen(u.sub)], ['GET', K.found(u.sub)]]);
@@ -84,6 +85,9 @@ export async function runAlerts({ now = new Date(), origin = '', budgetMs = 4000
     cands.forEach(l => seen.add(l.id)); // scored once, as in the app
     const jobs = C.pickByScore(cands, data, u.p.settings.jobsPerUpdate, u.day);
     candidates += cands.length; found += jobs.length;
+    // Counts only (never anyone's settings), so a run's log shows which filter leaves jobs out.
+    theirs.forEach(l => { const why = seen.has(l.id) && !cands.includes(l) ? 'seen' : C.rejectReason(l, u.p.settings.prefs); if (why) leftOut[why]++; });
+    leftOut.belowMinMatch += Math.max(0, Math.min(cands.length, u.p.settings.jobsPerUpdate) - jobs.length);
     const waiting = [...jobs, ...parse(foundRaw, [])].slice(0, MAX_FOUND);
     await pipeline([
       ['SET', K.seen(u.sub), JSON.stringify([...seen].slice(-MAX_SEEN))],
@@ -97,5 +101,5 @@ export async function runAlerts({ now = new Date(), origin = '', budgetMs = 4000
     }
     done++;
   }
-  return { users: subs.length, due: due.length, done, boards: boards.size, listings: listings.length, boardErrors: notes.slice(0, 5), candidates, found, emailed, mailError };
+  return { users: subs.length, due: due.length, done, boards: boards.size, listings: listings.length, boardErrors: notes.slice(0, 5), leftOut, candidates, found, emailed, mailError };
 }

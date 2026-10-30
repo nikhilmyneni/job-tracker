@@ -847,22 +847,25 @@ export function roleFits(title, roles, range = 'related') {
 }
 
 /** Whether a board listing is worth scoring, from its title and location alone. */
-export function matchesPrefs(l, prefs) {
+export const matchesPrefs = (l, prefs) => !rejectReason(l, prefs);
+
+/** Why a listing is left out ('' when it's kept): role, senior, internOnly, fullTimeOnly, skipList or location. */
+export function rejectReason(l, prefs) {
   const title = String(l.role || '').toLowerCase();
-  if (!title) return false;
-  if (roleTerms(prefs.roles).length && !roleFits(title, prefs.roles, prefs.roleRange)) return false;
-  if (SENIOR_RE.test(title)) return false;
-  if ((prefs.jobType === 'internship' || prefs.level === 'intern') && !INTERN_RE.test(title)) return false;
-  if (prefs.jobType === 'fulltime' && /\bintern(ship)?\b/i.test(title)) return false;
-  if (prefs.avoid.some(a => a.split(/\s+/).length <= 2 && hasWord(title, a.toLowerCase()))) return false;
+  if (!title) return 'role';
+  if (roleTerms(prefs.roles).length && !roleFits(title, prefs.roles, prefs.roleRange)) return 'role';
+  if (SENIOR_RE.test(title)) return 'senior';
+  if ((prefs.jobType === 'internship' || prefs.level === 'intern') && !INTERN_RE.test(title)) return 'internOnly';
+  if (prefs.jobType === 'fulltime' && /\bintern(ship)?\b/i.test(title)) return 'fullTimeOnly';
+  if (prefs.avoid.some(a => a.split(/\s+/).length <= 2 && hasWord(title, a.toLowerCase()))) return 'skipList';
 
   const loc = String(l.location || '').toLowerCase();
-  if (!loc || /^\d+ locations?$/.test(loc)) return true; // unknown: let the AI decide
+  if (!loc || /^\d+ locations?$/.test(loc)) return ''; // unknown: let the score decide
   const wants = prefs.locations.map(x => x.toLowerCase());
   const anyIndia = !wants.length || prefs.relocate || wants.includes('anywhere in india');
-  if (INDIA_RE.test(loc) && (anyIndia || wants.some(w => (CITY_ALIASES[w] || [w]).some(a => hasWord(loc, a))))) return true;
+  if (INDIA_RE.test(loc) && (anyIndia || wants.some(w => (CITY_ALIASES[w] || [w]).some(a => hasWord(loc, a))))) return '';
   const remote = l.remote || /\b(remote|work from home|wfh|anywhere)\b/.test(loc);
-  return remote && !FOREIGN_RE.test(loc) && (!wants.length || wants.includes('remote') || wants.includes('anywhere in india'));
+  return remote && !FOREIGN_RE.test(loc) && (!wants.length || wants.includes('remote') || wants.includes('anywhere in india')) ? '' : 'location';
 }
 
 /** New board listings worth scoring: matching, not seen before, at most n, taken in turn from each company. */
@@ -1185,7 +1188,8 @@ export function matchScore(job, skills, keywords = [], roles = [], range = 'rela
   const asked = [...new Set([...inTitle, ...inBody])];
   const w = (t) => (inTitle.has(t) ? 2 : 1) * (kw.has(t.toLowerCase()) ? 1.5 : 1);
   const titleFit = roles.length ? (roleFits(job.role, roles, range) ? 1 : 0) : 0.5;
-  if (!asked.length) return { score: Math.round(30 + 25 * titleFit), matched: [], missing: [] };
+  // Nothing to compare (many boards list only a title): a middling score from the title; titleOnly lets a fitting title through.
+  if (!asked.length) return { score: Math.round(30 + 25 * titleFit), matched: [], missing: [], titleOnly: titleFit === 1 };
   const matched = asked.filter(t => have.has(t.toLowerCase())).sort((a, b) => w(b) - w(a));
   const missing = asked.filter(t => !have.has(t.toLowerCase())).sort((a, b) => w(b) - w(a));
   const total = asked.reduce((n, t) => n + w(t), 0), got = matched.reduce((n, t) => n + w(t), 0);
@@ -1200,7 +1204,7 @@ export function filterJobs(jobs, view, apps = []) {
   const loc = String(view.location || '').toLowerCase();
   const aliases = loc ? (CITY_ALIASES[loc] || [loc]) : [];
   return jobs.filter(j => {
-    if ((j.score ?? j.fit * 20) < (view.minMatch || 0)) return false;
+    if ((j.score ?? j.fit * 20) < (view.minMatch || 0) && !j.title_only) return false; // title-only jobs: see pickByScore
     if (view.hideApplied && (j.status === 'Applied' || applied.has(j.key) || applied.has(String(j.company).trim().toLowerCase() + '|'))) return false;
     if (!view.internships && /\b(intern|internship|trainee|apprentice)\b/i.test(j.role)) return false;
     if (view.experience === 'fresher' && SENIOR_RE.test(j.role)) return false;
@@ -1216,15 +1220,15 @@ export function filterJobs(jobs, view, apps = []) {
 export function pickByScore(candidates, data, n, today) {
   const s = data.settings, skills = mySkills(data);
   return candidates.map(c => Object.assign({ c }, matchScore(c, skills, s.keywords, s.prefs.roles, s.prefs.roleRange)))
-    .filter(x => x.score >= s.minMatch)
+    .filter(x => x.score >= s.minMatch || x.titleOnly) // a title that fits your roles, with no description to score, still counts
     .sort((a, b) => b.score - a.score)
     .slice(0, n)
-    .map(({ c, score, matched, missing }) => ({
+    .map(({ c, score, matched, missing, titleOnly }) => ({
       id: newId(), found_on: today, fit: Math.max(1, Math.round(score / 20)), score, matched: matched.slice(0, 12), missing: missing.slice(0, 8),
       company: String(c.company).trim(), role: String(c.role).trim(), location: c.location || '', pay: c.pay || '',
       why: matched.length ? `On your CV: ${matched.slice(0, 4).join(', ')}.` : '', skill_gap: missing[0] || 'None',
       apply_by: '', posted: isYmd(c.posted) ? c.posted : '', link: isHttpUrl(c.link) ? c.link : '',
-      details: clip(c.details, 600), status: 'New', key: c.key, source: c.source || 'Job alert email', ref: c.ref || null,
+      details: clip(c.details, 600), status: 'New', title_only: !!titleOnly, key: c.key, source: c.source || 'Job alert email', ref: c.ref || null,
     }));
 }
 

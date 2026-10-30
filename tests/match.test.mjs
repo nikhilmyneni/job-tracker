@@ -83,3 +83,10 @@ test('built-in company list: short role words are whole words, US remote and CTO
   assert.equal(C.searchCompanies(C.normalizeSettings({ autoCompanies: false })).length, 0);
   C.INDIA_BOARDS.forEach(c => assert.ok(C.normalizeCompany(c), c.name));
 });
+
+test('a job with only a title that fits your roles is kept even above its title-only score', () => {
+  const data = { settings: C.normalizeSettings({ prefs: { roles: ['Security Analyst'] }, minMatch: 70 }), cv: 'Python, SIEM', skillsAdded: [], skillsRemoved: [] };
+  const picked = C.pickByScore([{ id: 'a', role: 'Security Analyst', company: 'Acme', location: 'Hyderabad', details: '' },
+    { id: 'b', role: 'Sales Executive', company: 'Acme', location: 'Hyderabad', details: '' }], data, 5, '2026-10-30');
+  assert.deepEqual(picked.map(j => j.role), ['Security Analyst']);
+});
