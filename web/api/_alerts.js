@@ -45,9 +45,10 @@ export const dropAll = (sub) => pipeline([['SREM', K.subs, sub], ['DEL', K.profi
 /**
  * One hourly run: for everyone whose "New jobs ready by" time has passed today (their time zone), check the companies
  * they follow (each board read once for all of them), keep the new matches for the app, and email them.
- * Stops starting new people after budgetMs; they're picked up next hour.
+ * Stops starting new people after budgetMs; they're picked up next hour. force runs people who already ran today
+ * (for testing from the workflow). The counts say why nothing was sent: no boards, no listings, none matched, or an email error.
  */
-export async function runAlerts({ now = new Date(), origin = '', budgetMs = 40000 } = {}) {
+export async function runAlerts({ now = new Date(), origin = '', budgetMs = 40000, force = false } = {}) {
   const start = Date.now();
   const subs = (await cmd('SMEMBERS', K.subs)) || [];
   if (!subs.length) return { users: 0, due: 0, emailed: 0 };
@@ -56,7 +57,7 @@ export async function runAlerts({ now = new Date(), origin = '', budgetMs = 4000
   subs.forEach((sub, i) => {
     const p = parse(vals[2 * i]);
     if (!p || !p.settings || !p.email) return;
-    const d = C.alertDue(p, vals[2 * i + 1] || '', now);
+    const d = C.alertDue(p, force ? '' : vals[2 * i + 1] || '', now);
     if (d.due) due.push({ sub, p, day: d.day });
   });
   if (!due.length) return { users: subs.length, due: 0, emailed: 0 };
@@ -68,10 +69,10 @@ export async function runAlerts({ now = new Date(), origin = '', budgetMs = 4000
     u.p.settings.prefs.roles.forEach(r => roles.add(r));
   });
   if (origin) useApiOrigin(origin);
-  const { listings } = await fetchBoards([...boards.values()], [...roles].slice(0, 3), () => {});
+  const { listings, notes } = await fetchBoards([...boards.values()], [...roles].slice(0, 3), () => {});
 
   const appUrl = (origin || 'https://jobs4you.vercel.app') + '/app/matches';
-  let emailed = 0, done = 0;
+  let emailed = 0, done = 0, candidates = 0, found = 0, mailError = '';
   for (const u of due) {
     if (Date.now() - start > budgetMs) break;
     const [seenRaw, foundRaw] = await pipeline([['GET', K.seen(u.sub)], ['GET', K.found(u.sub)]]);
@@ -82,17 +83,19 @@ export async function runAlerts({ now = new Date(), origin = '', budgetMs = 4000
     const cands = C.boardCandidates(theirs, u.p.settings.prefs, seen);
     cands.forEach(l => seen.add(l.id)); // scored once, as in the app
     const jobs = C.pickByScore(cands, data, u.p.settings.jobsPerUpdate, u.day);
-    const found = [...jobs, ...parse(foundRaw, [])].slice(0, MAX_FOUND);
+    candidates += cands.length; found += jobs.length;
+    const waiting = [...jobs, ...parse(foundRaw, [])].slice(0, MAX_FOUND);
     await pipeline([
       ['SET', K.seen(u.sub), JSON.stringify([...seen].slice(-MAX_SEEN))],
-      ['SET', K.found(u.sub), JSON.stringify(found)],
+      ['SET', K.found(u.sub), JSON.stringify(waiting)],
       ['SET', K.sent(u.sub), u.day],
     ]);
+    if (jobs.length && !mailReady()) mailError = 'BREVO_API_KEY or ALERTS_FROM is not set';
     if (jobs.length && mailReady()) {
       const unsubUrl = `${origin || 'https://jobs4you.vercel.app'}/api/alerts?unsub=${encodeURIComponent(unsubToken(u.sub))}`;
-      try { await sendMail(Object.assign({ to: u.p.email, unsubUrl }, jobsEmail(jobs, { appUrl, unsubUrl }))); emailed++; } catch (e) { /* tried; the jobs still wait in the app */ }
+      try { await sendMail(Object.assign({ to: u.p.email, unsubUrl }, jobsEmail(jobs, { appUrl, unsubUrl }))); emailed++; } catch (e) { mailError = String(e.message).slice(0, 200); /* the jobs still wait in the app */ }
     }
     done++;
   }
-  return { users: subs.length, due: due.length, done, emailed };
+  return { users: subs.length, due: due.length, done, boards: boards.size, listings: listings.length, boardErrors: notes.slice(0, 5), candidates, found, emailed, mailError };
 }

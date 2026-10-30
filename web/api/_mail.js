@@ -42,5 +42,5 @@ export async function sendMail({ to, subject, html, text, unsubUrl }) {
       headers: unsubUrl ? { 'List-Unsubscribe': `<${unsubUrl}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' } : undefined,
     }),
   });
-  if (!r.ok) throw new Error('email error ' + r.status);
+  if (!r.ok) throw new Error(`email error ${r.status}: ${(await r.text().catch(() => '')).slice(0, 160)}`);
 }

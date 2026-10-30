@@ -152,3 +152,16 @@ test('alertDue follows the profile’s time zone and days', () => {
   assert.equal(C.alertDue(Object.assign({}, p, { tz: 'America/New_York' }), '', new Date('2026-10-30T04:00:00Z')).due, false); // 00:00 there
   assert.equal(A.cleanProfile({ tz: 'Not/AZone' }, 'x@example.com').tz, 'Asia/Kolkata');
 });
+
+test('force runs again today and the result says why nothing was emailed', async () => {
+  await call(alerts, { method: 'PUT', headers: auth, body: { profile: C.alertProfile(settingsFor('kestrel'), 'Asia/Kolkata') } });
+  const now = new Date('2026-11-02T04:00:00Z');
+  const first = await A.runAlerts({ now, origin: 'https://jobs4you.vercel.app' });
+  assert.equal(first.due, 1);
+  assert.equal(first.found, 1); // turning alerts off earlier deleted what was sent, so it's new again
+  assert.equal(first.boards, 1); assert.ok(first.listings >= 2); assert.equal(first.mailError, '');
+  assert.equal((await A.runAlerts({ now, origin: 'https://jobs4you.vercel.app' })).due, 0); // once a day
+  const forced = await A.runAlerts({ now, origin: 'https://jobs4you.vercel.app', force: true }); // unless forced
+  assert.equal(forced.due, 1);
+  assert.equal(forced.candidates, 0); assert.equal(forced.found, 0); assert.equal(forced.emailed, 0); // never sent twice
+});

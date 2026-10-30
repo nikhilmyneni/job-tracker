@@ -1,7 +1,8 @@
 /**
  * Vercel function: the hourly email-alerts search, called by the GitHub Actions workflow
  * (.github/workflows/job-alerts.yml) with "Authorization: Bearer <CRON_SECRET>". See _alerts.js.
- *   POST /api/alerts-run  → { users, due, done, emailed }
+ *   POST /api/alerts-run[?force=1]  → { users, due, done, boards, listings, candidates, found, emailed, mailError }
+ *   force=1 also runs people who already ran today (testing; jobs already sent are still never sent twice).
  */
 import { timingSafeEqual } from 'node:crypto';
 import { storeReady } from './_store.js';
@@ -21,7 +22,8 @@ export default async function handler(req, res) {
   const host = String((req.headers && (req.headers['x-forwarded-host'] || req.headers.host)) || '');
   const origin = /^[a-z0-9.-]+(:\d+)?$/i.test(host) ? `${/^localhost(:|$)/.test(host) ? 'http' : 'https'}://${host}` : '';
   try {
-    res.status(200).json(await runAlerts({ origin }));
+    const q = req.query || {};
+    res.status(200).json(await runAlerts({ origin, force: q.force === '1' }));
   } catch (e) {
     res.status(502).json({ error: 'run failed: ' + String(e && e.message).slice(0, 200) });
   }
