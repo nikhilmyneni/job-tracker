@@ -205,7 +205,10 @@ test('newCandidates skips known and duplicate listings', () => {
 });
 // ---------- resume ----------
 test('resumeFileBase', () => {
-  assert.equal(C.resumeFileBase('Test Person', 'Acme & Co.', 'SOC Analyst (L1)'), 'Test_Person_Resume_Acme_Co_SOC_Analyst_L1');
+  assert.equal(C.resumeFileBase('Test Person', 'Acme & Co.', 'SOC Analyst (L1)'), 'Test_Person_Resume_Acme_SOC_Analyst');
+  assert.equal(C.resumeFileBase('Test Person', 'Diffzene', 'Cyber Security Intern'), 'Test_Person_Resume_Diffzene_Cyber_Security_Intern');
+  assert.equal(C.resumeFileBase('Test Person', '', 'Analyst D365 F&O Functional SCM Bengaluru Emerging ERP Solutions'), 'Test_Person_Resume_Analyst_D365_F_O_Functional');
+  assert.equal(C.resumeFileBase('Test Person', 'Kestrel Systems India Private Limited', 'SOC Analyst - Night Shift, Hyderabad'), 'Test_Person_Resume_Kestrel_Systems_India_SOC_Analyst');
 });
 
 // ---------- dashboard numbers ----------
@@ -312,7 +315,7 @@ test('toYearMonth', () => {
   assert.equal(C.toYearMonth('Mar 2021'), '2021-03');
   assert.equal(C.toYearMonth('March, 2021'), '2021-03');
   assert.equal(C.toYearMonth('03/2021'), '2021-03');
-  assert.equal(C.toYearMonth('2020'), '2020-01');
+  assert.equal(C.toYearMonth('2020'), '2020'); // a year alone stays a year: no made-up January
   assert.equal(C.toYearMonth('Present'), '');
 });
 test('cleanResumeFold: schema-safe ids, dates and strings', () => {
@@ -329,7 +332,7 @@ test('cleanResumeFold: schema-safe ids, dates and strings', () => {
   assert.deepEqual(r.experience[0], { id: 'exp1', title: 'Intern', company: 'Example Labs', location: '', start: '2025-05', end: '', current: true, bullets: ['Did a', '7'] });
   assert.equal(r.skills.length, 1); assert.equal(r.skills[0].id, 'skill1');
   assert.equal(r.projects[0].link, '');
-  assert.deepEqual(r.certifications.map(c => c.date), ['2024-01']);
+  assert.deepEqual(r.certifications.map(c => c.date), ['2024']);
 });
 test('resumeFoldFor fills in the job without touching the CV', () => {
   const base = C.cleanResumeFold({ contact: { fullName: 'Test Person' }, education: [{ school: 'Example University' }] });

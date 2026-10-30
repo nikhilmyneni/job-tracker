@@ -158,7 +158,7 @@ function layout(r, t, k) {
     if (key === 'education' && (r.education || []).length) {
       heading(key);
       r.education.forEach(e => entry(() => {
-        const degree = [[e.degree, e.field].filter(Boolean).join(' in '), e.gpa && `GPA ${e.gpa}`].filter(Boolean).join(', ');
+        const degree = [[e.degree, e.field].filter(Boolean).join(' in '), e.gpa && (/[a-z%]/i.test(e.gpa) ? e.gpa : `GPA ${e.gpa}`)].filter(Boolean).join(', ');
         row([{ text: e.school || degree, f: 'B', color: 'ink' }], dateRange(e));
         if (e.school && degree) row([{ text: degree, f: 'I', color: 'ink' }], e.location || '');
         bullets(e.details);

@@ -107,3 +107,28 @@ test('ATS score: keywords plus format checks; tailoring raises it', () => {
   assert.ok(better.score > base.score, `${better.score} > ${base.score}`);
   assert.ok(better.checks.find(x => /job title/.test(x.text)).ok, 'the headline names the role');
 });
+
+test('reading a CV by rules: dates come out of names, months are kept, brackets hold together, degree lines are degrees', () => {
+  const cv = [
+    'Test Person', 'test.person@example.com | +91 90000 00000 | Hyderabad',
+    'Experience', 'Example Research Laboratory (ERL, DRDO) Dec 2025', 'Internship conducted under DRDO – Ministry of Defence, Govt. of India.', 'Worked on network traffic datasets.',
+    'Example Foundation Feb 2025', 'Built and evaluated models.',
+    'Education', 'Institute Of Example Engineering Nov 2022 – June 2026', 'Computer Science and Engineering (Data Science) CGPA: 7.9',
+    'Projects', 'Intrusion Detection Framework using ML Jan-2025', 'Preprocessed network traffic data.',
+    'Certifications', 'Power BI- Microsoft Jan 2025', 'Data Science With Machine Learning- Corizo May 2024', 'SQL (Intermediate)-HackerRank Feb 2025', 'Cloud Computing - NPTEL 2025',
+  ].join('\n');
+  const r = C.resumeFromCv(cv);
+  assert.equal(r.experience.length, 2, 'the "conducted under" line stays with its internship');
+  assert.equal(r.experience[0].title, 'Example Research Laboratory (ERL, DRDO)');
+  assert.equal(r.experience[0].start, '2025-12');
+  assert.match(r.experience[0].bullets[0], /Internship conducted under DRDO/);
+  assert.equal(r.education[0].school, 'Institute Of Example Engineering');
+  assert.equal(r.education[0].start, '2022-11'); assert.equal(r.education[0].end, '2026-06');
+  assert.match(r.education[0].degree, /^Computer Science and Engineering \(Data Science\)$/);
+  assert.equal(r.education[0].gpa, 'CGPA 7.9');
+  assert.equal(r.projects[0].name, 'Intrusion Detection Framework using ML');
+  assert.equal(r.projects[0].start, '2025-01');
+  assert.deepEqual(r.certifications.map(c => [c.name, c.issuer, c.date]), [
+    ['Power BI', 'Microsoft', '2025-01'], ['Data Science With Machine Learning', 'Corizo', '2024-05'], ['SQL (Intermediate)', 'HackerRank', '2025-02'], ['Cloud Computing', 'NPTEL', '2025']]);
+  assert.equal(C.dateRange({ start: '2025' }), '2025'); // shown as the year only
+});

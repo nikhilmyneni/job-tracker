@@ -122,7 +122,7 @@ export function resumeDocumentXml(r) {
   if ((r.skills || []).length) { heading('Skills'); r.skills.forEach(s => out.push(para(run(s.category + ': ', '<w:b/>') + run(s.items.join(', '))))); }
   if ((r.experience || []).length) { heading('Experience'); r.experience.forEach(e => { line([e.title, e.company].filter(Boolean).join(', '), range(e)); bullets(e.bullets); }); }
   if ((r.projects || []).length) { heading('Projects'); r.projects.forEach(p => { line([p.name, p.tech].filter(Boolean).join(' — '), range(p)); bullets(p.bullets); }); }
-  if ((r.education || []).length) { heading('Education'); r.education.forEach(e => { line([e.degree, e.field, e.school].filter(Boolean).join(', '), range(e)); bullets([e.gpa && `GPA ${e.gpa}`, ...(e.details || [])]); }); }
+  if ((r.education || []).length) { heading('Education'); r.education.forEach(e => { line([e.degree, e.field, e.school].filter(Boolean).join(', '), range(e)); bullets([e.gpa && (/[a-z%]/i.test(e.gpa) ? e.gpa : `GPA ${e.gpa}`), ...(e.details || [])]); }); }
   if ((r.certifications || []).length) { heading('Certifications'); bullets(r.certifications.map(x => [x.name, x.issuer, ym(x.date)].filter(Boolean).join(', '))); }
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document ${W}><w:body>${out.join('')}` +
     '<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="850" w:right="1000" w:bottom="850" w:left="1000" w:header="0" w:footer="0" w:gutter="0"/></w:sectPr></w:body></w:document>';

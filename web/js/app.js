@@ -195,18 +195,18 @@ Object.assign(ctx.act, {
   /** The resume tailoring starts from: the CV as the AI read it (if it has, for this CV), else as read by rules. */
   baseResume() {
     const d = ctx.data;
-    const r = d.cvFold && d.cvFoldHash === C.textHash(d.cv) ? d.cvFold : C.resumeFromCv(d.cv, { skills: C.mySkills(d), hint: ctx.me && ctx.me.name });
+    const r = d.cvFold && d.cvFoldHash === C.foldKey(d.cv) ? d.cvFold : C.resumeFromCv(d.cv, { skills: C.mySkills(d), hint: ctx.me && ctx.me.name });
     // The name you confirmed in setup (Profile) wins over the one read from the CV's header.
     const name = C.tidyName(d.settings.name || r.contact.fullName, [ctx.me && ctx.me.name, ctx.me && ctx.me.email]);
     return name ? Object.assign({}, r, { contact: Object.assign({}, r.contact, { fullName: name }) }) : r;
   },
-  baseIsRough: () => !(ctx.data.cvFold && ctx.data.cvFoldHash === C.textHash(ctx.data.cv)),
+  baseIsRough: () => !(ctx.data.cvFold && ctx.data.cvFoldHash === C.foldKey(ctx.data.cv)),
   /** The AI reads the CV into proper sections, once per CV (facts copied, never rewritten). */
   async readCvWithAi() {
     const d = ctx.data;
-    if (DEMO) { await sleep(700); d.cvFold = DEMO_FOLD; d.cvFoldHash = C.textHash(d.cv); return; }
+    if (DEMO) { await sleep(700); d.cvFold = DEMO_FOLD; d.cvFoldHash = C.foldKey(d.cv); return; }
     if (!hasAi(d.settings)) throw new Error('The AI isn’t available right now. The rules-based version still works.');
-    d.cvFold = await cvForResumeFold(d); d.cvFoldHash = C.textHash(d.cv);
+    d.cvFold = await cvForResumeFold(d); d.cvFoldHash = C.foldKey(d.cv);
     await persist();
   },
   canReword: () => hasAi(ctx.data.settings),

@@ -167,7 +167,7 @@ export function renderSheet(r, template, changed = new Set()) {
     experience: (r.experience || []).length ? sec('experience', ...r.experience.map(e => h('div', { class: 'rs-entry' + (changed.has('bullets:' + e.id) ? ' chg' : '') },
       row(h('b', {}, e.title || ''), dateRange(e)), e.company || e.location ? row(h('i', {}, e.company || ''), e.location || '') : '', bullets(e.bullets)))) : '',
     education: (r.education || []).length ? sec('education', ...r.education.map(e => {
-      const degree = [[e.degree, e.field].filter(Boolean).join(' in '), e.gpa && `GPA ${e.gpa}`].filter(Boolean).join(', ');
+      const degree = [[e.degree, e.field].filter(Boolean).join(' in '), e.gpa && (/[a-z%]/i.test(e.gpa) ? e.gpa : `GPA ${e.gpa}`)].filter(Boolean).join(', ');
       return h('div', { class: 'rs-entry' }, row(h('b', {}, e.school || degree), dateRange(e)), e.school && degree ? row(h('i', {}, degree), e.location || '') : '', bullets(e.details));
     })) : '',
     skills: (r.skills || []).length ? sec('skills', h('div', { class: 'rs-skills' + (changed.has('skills') ? ' chg' : '') },

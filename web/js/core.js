@@ -50,7 +50,18 @@ export const newId = () => Date.now().toString(36) + Math.random().toString(36).
 export const isHttpUrl = (u) => /^https?:\/\//.test(String(u || ''));
 export const isYmd = (s) => /^\d{4}-\d{2}-\d{2}$/.test(String(s || ''));
 export const safeName = (x) => String(x || '').replace(/[^A-Za-z0-9]+/g, '_').replace(/^_|_$/g, '');
-export const resumeFileBase = (name, company, role) => `${safeName(name) || 'Resume'}_Resume_${safeName(company)}_${safeName(role)}`;
+/**
+ * The resume's file name: Name_Resume_Company_Role, short and clean ("Sai_Nikhil_Myneni_Resume_Diffzene_Cyber_Security_Intern").
+ * The role loses brackets, locations and anything after a dash or comma, and keeps 4 words; the company loses "Pvt Ltd"-style
+ * endings and keeps 3. Missing parts are left out (no "__").
+ */
+export function resumeFileBase(name, company, role) {
+  const words = (s, n) => String(s || '').split(/\s+/).filter(Boolean).slice(0, n).join(' ');
+  const r = String(role || '').replace(/\([^)]*\)|\[[^\]]*\]/g, ' ').split(/\s+[-–—|]\s+|,|\s+@\s+|\s+at\s+/i)[0]
+    .replace(new RegExp(INDIA_RE.source + '|\\b(remote|hybrid|on-?site)\\b', 'gi'), ' ');
+  const c = String(company || '').replace(/\b(private|pvt|limited|ltd|llp|inc|incorporated|corp|corporation|co|technologies|solutions)\b\.?/gi, ' ');
+  return [safeName(name) || 'Resume', 'Resume', safeName(words(c, 3)), safeName(words(r, 4))].filter(Boolean).join('_');
+}
 
 // ---------- Settings ----------
 export function defaultSettings() {
@@ -965,7 +976,7 @@ export function boardCandidates(listings, prefs, seen, n = MAX_BOARD_CANDIDATES)
 // ResumeFold (delta-dog.github.io/resumefold, MIT, runs in the browser) does the tailoring. We give it the CV as its
 // Resume JSON (Review → Import JSON) with the job filled in, so its keyword match works against that job.
 export const RESUMEFOLD_URL = 'https://delta-dog.github.io/resumefold/build/';
-const YM_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
+const YM_RE = /^\d{4}(-(0[1-9]|1[0-2]))?$/; // YYYY-MM, or YYYY when only the year is known
 const MONTHS = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };
 
 /** Any date-ish text → "YYYY-MM" (or "" when it can't tell). "Present" → "". */
@@ -976,16 +987,16 @@ export function toYearMonth(s) {
   if (m && +m[2] >= 1 && +m[2] <= 12) return `${m[1]}-${pad2(+m[2])}`;
   m = /^(\d{1,2})[-/.](\d{4})$/.exec(t);
   if (m && +m[1] >= 1 && +m[1] <= 12) return `${m[2]}-${pad2(+m[1])}`;
-  m = /([a-z]{3})[a-z]*[.,]?\s*'?(\d{4})/.exec(t);
+  m = /([a-z]{3})[a-z]*[.,'-]?\s*'?(\d{4})/.exec(t); // "Mar 2021", "March, 2021", "Jan-2025"
   if (m && MONTHS[m[1]]) return `${m[2]}-${pad2(MONTHS[m[1]])}`;
   m = /\b(19|20)\d{2}\b/.exec(t);
-  return m ? `${m[0]}-01` : '';
+  return m ? m[0] : ''; // a year alone stays a year (never a made-up January)
 }
 
 export function resumeFoldPrompt(cv) {
   return 'Convert this CV into JSON for a resume builder. Do NOT tailor, rewrite or improve anything: copy the facts as written. ' +
     'Never add experience, employers, dates, numbers, skills, tools or certifications that are not in the CV. Leave out date of birth, nationality and photos.\n' +
-    'Dates are "YYYY-MM" (use "-01" when only the year is known, "" when unknown); set current=true for ongoing roles.\n' +
+    'Dates are "YYYY-MM", or "YYYY" when the CV gives only the year ("" when unknown; never guess a month); set current=true for ongoing roles.\n' +
     'Return JSON: {"contact":{"fullName":"","headline":"","email":"","phone":"","location":"","website":"","linkedin":"","github":""},"summary":"",' +
     '"experience":[{"title":"","company":"","location":"","start":"","end":"","current":false,"bullets":[""]}],' +
     '"education":[{"school":"","degree":"","field":"","location":"","start":"","end":"","gpa":"","details":[""]}],' +
@@ -993,7 +1004,13 @@ export function resumeFoldPrompt(cv) {
     '"certifications":[{"name":"","issuer":"","date":"","link":""}]}\n\nCV:\n' + clip(cv, 12000);
 }
 
-/** Makes AI output safe for ResumeFold's schema: strings only, ids added, dates as YYYY-MM. */
+/**
+ * Which CV (and which version of the reading instructions) an AI-read resume belongs to. Bumped when the instructions
+ * change in a way that matters (v2: no made-up January for year-only dates), so older reads are offered again.
+ */
+export const foldKey = (cv) => 'v2:' + textHash(cv);
+
+/** Makes AI output safe for ResumeFold's schema: strings only, ids added, dates as YYYY-MM (or YYYY when only the year is known). */
 export function cleanResumeFold(raw) {
   const r = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : null;
   if (!r) return null;
@@ -1424,26 +1441,61 @@ export function cvSections(text) {
 
 export const TEMPLATES = { standard: 'Standard', student: 'Student', combination: 'Combination', senior: 'Senior' };
 const YEAR_RE = /\b(19|20)\d{2}\b/;
-const isEntryHead = (l) => l.length <= 140 && (YEAR_RE.test(l) || /\s[|–—]\s|\s-\s|:\s*$/.test(l) || /\b(present|current)\b/i.test(l));
+// One date as CVs write it: "Nov 2022", "June 2026", "Jan-2025", "05/2024", "2024-05", "2024".
+const ONE_DATE = String.raw`(?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?[\s,'-]*(?:19|20)\d{2}|\d{1,2}[/-](?:19|20)\d{2}|(?:19|20)\d{2}[/-]\d{1,2}|(?:19|20)\d{2})`;
+const DATE_RANGE_RE = new RegExp(String.raw`[(\[]?\s*${ONE_DATE}(?:\s*(?:–|—|-|to|till)\s*(?:${ONE_DATE}|present|current|now|date|ongoing))?\s*[)\]]?`, 'i');
+/** Takes the dates out of a line: {rest, dates} ("Institute X Nov 2022 – June 2026" → "Institute X", "Nov 2022 – June 2026"). */
+function takeDates(l) {
+  const m = DATE_RANGE_RE.exec(l);
+  if (!m) return { rest: l.trim(), dates: /\b(present|current)\b/i.test(l) ? 'present' : '' };
+  const rest = (l.slice(0, m.index) + ' ' + l.slice(m.index + m[0].length)).replace(/\s*[|–—,:-]\s*$/, '').replace(/^\s*[|–—,:-]\s*/, '').replace(/\s{2,}/g, ' ').trim();
+  return { rest, dates: m[0].replace(/[()[\]]/g, '').trim() };
+}
+const hasDate = (l) => DATE_RANGE_RE.test(l) || /\b(present|current)\b/i.test(l);
+const isEntryHead = (l) => l.length <= 140 && (hasDate(l) || /\s[|–—]\s|\s-\s|:\s*$/.test(l));
 const splitHead = (l) => {
-  const parts = l.split(/\s*(?:[|–—]|\s-\s|,|:)\s*/).map(x => x.trim()).filter(Boolean);
-  const dates = parts.filter(p => YEAR_RE.test(p) || /present|current/i.test(p));
-  const words = parts.filter(p => !dates.includes(p));
-  return { a: words[0] || l, b: words.slice(1).join(', '), dates: dates.join(' – ') };
+  const { rest, dates } = takeDates(l);
+  // Split on " | ", " – ", " - ", ",", ": " but never inside brackets: "Advanced Systems Laboratory (ASL, DRDO)" stays whole.
+  const guarded = rest.replace(/\(([^)]*)\)/g, (x) => x.replace(/,/g, '\u0001').replace(/\s[-–—|]\s/g, (y) => y.replace(/[-–—|]/, '\u0002')));
+  const parts = guarded.split(/\s*(?:\s[|–—]\s|\s-\s|,|:\s)\s*/).map(x => x.replace(/\u0001/g, ',').replace(/\u0002/g, '-').trim()).filter(Boolean);
+  return { a: parts[0] || rest, b: parts.slice(1).join(', '), dates };
 };
 const datesOf = (s) => {
-  const ys = String(s || '').split(/\s*(?:–|—|-|to)\s*/i);
-  const current = /present|current|now/i.test(s);
+  const ys = String(s || '').split(/\s+(?:–|—|-|to|till)\s+|\s*[–—]\s*/i);
+  const current = /present|current|now|ongoing/i.test(s);
   return { start: toYearMonth(ys[0]), end: current ? '' : toYearMonth(ys[1] || ''), current };
 };
-/** Lines under a heading → entries: a line that looks like a title (dates, "|", " – ") starts one; the rest are its bullets. */
+/**
+ * Lines under a heading → entries. A line with a date starts one. A line with only a separator ("|", " – ") starts one too,
+ * unless it comes straight after a head with nothing under it yet: then it describes that entry ("Internship under DRDO –
+ * Ministry of Defence") and stays with it. Everything else is the entry's bullets.
+ */
 function entries(lines) {
   const out = [];
   lines.forEach(l => {
-    if (!out.length || isEntryHead(l)) out.push({ head: l, bullets: [] });
-    else out[out.length - 1].bullets.push(l);
+    const cur = out[out.length - 1];
+    const startsNew = !out.length || hasDate(l) || (isEntryHead(l) && cur.bullets.length > 0);
+    if (startsNew) out.push({ head: l, bullets: [] });
+    else cur.bullets.push(l);
   });
   return out;
+}
+// The degree line under a school ("Computer Science and Engineering (Data Science) CGPA: 7.9") and its grade.
+const DEGREE_RE = /\b(b\.?\s?tech|b\.?\s?e\b|bachelor|master|m\.?\s?tech|mba|bca|mca|b\.?\s?sc|m\.?\s?sc|b\.?\s?com|diploma|intermediate|ssc|s\.\s?s\.\s?c|hsc|cbse|icse|class\s+(x|xii|10|12)|computer science|engineering|information technology)\b/i;
+const GRADE_RE = /\b(c?gpa|cpi|sgpa|grade|percentage|marks|score)\b\s*[:\-]?\s*([\d.]+\s*(?:\/\s*\d+|%)?)/i;
+const gradeText = (g) => `${/^c?gpa$/i.test(g[1]) ? g[1].toUpperCase() : g[1].charAt(0).toUpperCase() + g[1].slice(1).toLowerCase()} ${g[2].trim()}`;
+function degreeOf(lines) {
+  const i = lines.findIndex(l => DEGREE_RE.test(l) || GRADE_RE.test(l));
+  if (i < 0) return { degree: '', gpa: '', details: lines };
+  const g = GRADE_RE.exec(lines[i]);
+  const degree = lines[i].replace(GRADE_RE, '').replace(/[\s,|:–-]+$/, '').trim();
+  return { degree, gpa: g ? gradeText(g) : '', details: lines.filter((_, k) => k !== i) };
+}
+/** A certification line → {name, issuer, date}: "Power BI- Microsoft Jan 2025" → Power BI / Microsoft / 2025-01. */
+function certOf(l) {
+  const { rest, dates } = takeDates(l);
+  const m = /^(.*?\S)\s*(?:\s[-–—]\s*|\s*[-–—]\s|,\s*|\s*[-–—](?=[A-Z][\w&.]*$))\s*([^-–—,]+)$/.exec(rest);
+  return { name: (m ? m[1] : rest).trim().slice(0, 200), issuer: m ? m[2].trim().slice(0, 120) : '', date: toYearMonth(dates.split(/\s+(?:–|—|-|to)\s+/)[0]) };
 }
 
 /** The CV as a structured resume, by rules (no AI). Used when the AI hasn't read the CV yet, or isn't available. */
@@ -1455,12 +1507,14 @@ export function resumeFromCv(cv, opts = {}) {
     summary: sec.summary.join(' ').slice(0, 1200),
     experience: entries(sec.experience).map((e, i) => { const h = splitHead(e.head), d = datesOf(h.dates);
       return { id: 'exp' + (i + 1), title: h.a, company: h.b, location: '', start: d.start, end: d.end, current: d.current, bullets: e.bullets }; }),
-    education: entries(sec.education).map((e, i) => { const h = splitHead(e.head), d = datesOf(h.dates);
-      return { id: 'edu' + (i + 1), school: h.b || h.a, degree: h.b ? h.a : '', field: '', location: '', start: d.start, end: d.end, gpa: '', details: e.bullets }; }),
+    education: entries(sec.education).map((e, i) => {
+      const h = splitHead(e.head), d = datesOf(h.dates), deg = h.b ? { degree: h.a, gpa: '', details: e.bullets } : degreeOf(e.bullets);
+      return { id: 'edu' + (i + 1), school: h.b || h.a, degree: deg.degree, field: '', location: '', start: d.start, end: d.end, gpa: deg.gpa, details: deg.details };
+    }),
     skills: skills.length ? [{ id: 'skill1', category: 'Skills', items: skills.slice(0, 40) }] : [],
     projects: entries(sec.projects).map((e, i) => { const h = splitHead(e.head), d = datesOf(h.dates);
       return { id: 'proj' + (i + 1), name: h.a, link: '', tech: h.b, start: d.start, end: d.end, bullets: e.bullets }; }),
-    certifications: sec.certifications.map((l, i) => ({ id: 'cert' + (i + 1), name: l.slice(0, 200), issuer: '', date: toYearMonth((l.match(YEAR_RE) || [''])[0]), link: '' })),
+    certifications: sec.certifications.map((l, i) => Object.assign({ id: 'cert' + (i + 1), link: '' }, certOf(l))),
   };
   return cleanResumeFold(r) || r;
 }
@@ -1643,7 +1697,7 @@ export function resumeLatex(r) {
   if ((r.skills || []).length) L.push('\\section{Skills}', ...r.skills.map(s => `\\textbf{${texEsc(s.category)}:} ${texEsc(s.items.join(', '))}\\\\`));
   if ((r.experience || []).length) { L.push('\\section{Experience}'); r.experience.forEach(e => L.push(head([e.title, e.company].filter(Boolean).join(', '), dateRange(e)), ...items(e.bullets))); }
   if ((r.projects || []).length) { L.push('\\section{Projects}'); r.projects.forEach(p => L.push(head([p.name, p.tech].filter(Boolean).join(' — '), dateRange(p)), ...items(p.bullets))); }
-  if ((r.education || []).length) { L.push('\\section{Education}'); r.education.forEach(e => L.push(head([e.degree, e.field, e.school].filter(Boolean).join(', '), dateRange(e)), ...items([e.gpa && `GPA ${e.gpa}`, ...(e.details || [])].filter(Boolean)))); }
+  if ((r.education || []).length) { L.push('\\section{Education}'); r.education.forEach(e => L.push(head([e.degree, e.field, e.school].filter(Boolean).join(', '), dateRange(e)), ...items([e.gpa && (/[a-z%]/i.test(e.gpa) ? e.gpa : `GPA ${e.gpa}`), ...(e.details || [])].filter(Boolean)))); }
   if ((r.certifications || []).length) L.push('\\section{Certifications}', ...items(r.certifications.map(c2 => [c2.name, c2.issuer, ym(c2.date)].filter(Boolean).join(', '))));
   L.push('\\end{document}', '');
   return L.join('\n');
