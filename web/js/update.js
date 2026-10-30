@@ -20,11 +20,13 @@ export async function runUpdate(data, me, report, refresh = () => {}, { gmail = 
   const seen = new Set(data.seen);
   const now = new Date();
   // Gmail is read from where it was last read, so connecting it later still looks back sinceDays.
-  const after = data.gmailRunAt ? new Date(new Date(data.gmailRunAt).getTime() - 2 * 864e5) : new Date(now.getTime() - s.sinceDays * 864e5);
+  // Data from before gmailScan 2 looks back the full sinceDays once, to pick up emails the old sync skipped.
+  const after = data.gmailRunAt && data.gmailScan === 2 ? new Date(new Date(data.gmailRunAt).getTime() - 2 * 864e5) : new Date(now.getTime() - s.sinceDays * 864e5);
   const afterStr = C.gmailDate(after);
   const note = (t) => { result.notes.push(t); };
 
-  if (gmail) await syncApplications(data, me, afterStr, seen, result, report, note, refresh);
+  // Emails left for next time (over this sync's limit): Gmail keeps being read from the same point until they're done.
+  const left = gmail ? await syncApplications(data, me, afterStr, seen, result, report, note, refresh) : 0;
   C.markGhosted(data.applications, now, result);
   refresh();
 
@@ -37,32 +39,36 @@ export async function runUpdate(data, me, report, refresh = () => {}, { gmail = 
 
   data.seen = [...seen];
   data.lastRunAt = now.toISOString();
-  if (gmail) data.gmailRunAt = data.lastRunAt;
+  if (gmail && !left) { data.gmailRunAt = data.lastRunAt; data.gmailScan = 2; }
   const text = C.summaryText(result);
   C.addLog(data, 'Update: ' + text.replace(/\n/g, ' | '), now);
   C.trimData(data);
   return { result, text };
 }
 
-/** New messages from the threads matching q, oldest first, skipping ones already seen and ones the user sent. */
-async function newMessages(q, max, me, seen, idPrefix, bodyLen, onThread) {
-  const ids = await G.searchThreads(q, max);
+/**
+ * Messages matching q that haven't been read yet, skipping ones the user sent, sorted oldest first.
+ * At most max are read: the oldest ones (so a backlog is worked through in order), or with newest, the latest ones.
+ * Returns {emails, left}: left is how many unread matches are waiting for the next sync.
+ */
+async function newMessages(q, max, me, seen, idPrefix, bodyLen, onRead, newest = false) {
+  const found = (await G.searchMessages(q, C.MAX_LISTED)).filter(m => !seen.has(idPrefix + m.id)); // newest first
+  const todo = newest ? found.slice(0, max) : found.slice(-max);
   let got = 0;
   // 4 at a time: Gmail limits reads per user per minute, and google.js slows down further when it says so.
-  const threads = await G.pool(ids, 4, async (id) => { const t = await G.getThread(id); onThread(++got, ids.length); return t; });
+  const msgs = await G.pool(todo, 4, async (r) => { const m = await G.getMessage(r.id); onRead(++got, todo.length); return m; });
   const out = [];
   const mine = String(me || '').toLowerCase();
-  threads.forEach(t => (t.messages || []).forEach(m => {
+  msgs.forEach(m => {
     const id = idPrefix + m.id;
-    if (seen.has(id)) return;
     const from = C.headerValue(m.payload, 'From');
     if (mine && from.toLowerCase().indexOf(mine) >= 0) { seen.add(id); return; }
     out.push({
       id, from, subject: C.headerValue(m.payload, 'Subject'), date: new Date(Number(m.internalDate) || Date.now()),
-      body: C.clip(C.bodyFromPayload(m.payload) || m.snippet || '', bodyLen), link: G.threadLink(t.id, me),
+      body: C.clip(C.bodyFromPayload(m.payload) || m.snippet || '', bodyLen), link: G.threadLink(m.threadId, me),
     });
-  }));
-  return out.sort((a, b) => a.date - b.date);
+  });
+  return { emails: out.sort((a, b) => a.date - b.date), left: found.length - todo.length };
 }
 
 /**
@@ -88,9 +94,10 @@ async function classifyBatch(s, batch, note) {
 
 async function syncApplications(data, me, afterStr, seen, result, report, note, refresh) {
   report('Reading your application emails…', 0.02);
-  const emails = await newMessages(C.appSearch(afterStr), C.MAX_THREADS, me, seen, '', 1000,
+  const { emails, left } = await newMessages(C.appSearch(afterStr), C.MAX_EMAILS, me, seen, '', 1000,
     (n, total) => report(`Reading your application emails… ${n} of ${total}`, 0.02 + 0.28 * n / total));
-  if (!emails.length) return;
+  if (left) note(`${left} older emails are still to read. The next sync carries on with them.`);
+  if (!emails.length) return left;
   const s = data.settings;
   const batches = [];
   for (let i = 0; i < emails.length; i += SORT_BATCH) batches.push(emails.slice(i, i + SORT_BATCH));
@@ -112,6 +119,7 @@ async function syncApplications(data, me, afterStr, seen, result, report, note, 
     group.flat().forEach(e => seen.add(e.id));
     refresh();
   }
+  return left;
 }
 
 async function findJobs(data, me, afterStr, seen, result, report, note, gmail) {
@@ -121,7 +129,7 @@ async function findJobs(data, me, afterStr, seen, result, report, note, gmail) {
   // Job-alert emails need the AI to pull the openings out of them; company boards don't.
   const readAlerts = gmail && hasAi(s);
   if (readAlerts) report('Reading job-alert emails…', 0.82);
-  const alerts = readAlerts ? await newMessages(C.alertSearch(afterStr), C.MAX_ALERT_THREADS, me, seen, 'alert:', 7000, () => {}) : [];
+  const alerts = readAlerts ? (await newMessages(C.alertSearch(afterStr), C.MAX_ALERT_EMAILS, me, seen, 'alert:', 7000, () => {}, true)).emails : [];
   for (let i = 0; i < alerts.length; i += 4) {
     const batch = alerts.slice(i, i + 4);
     report(`Finding openings in job alerts ${i + 1}–${i + batch.length} of ${alerts.length}…`, 0.84);

@@ -145,13 +145,20 @@ export async function profile() {
 // ---------- Gmail (read-only) ----------
 const GMAIL = 'https://gmail.googleapis.com/gmail/v1/users/me';
 
-export async function searchThreads(q, max) {
+/** Every message matching q (newest first, up to max) as {id, threadId}. Listing is cheap; reading each one isn't. */
+export async function searchMessages(q, max) {
   if (!gmail) throw new GmailNotConnected('Connect Gmail to read your job emails.');
-  const j = await gjson(`${GMAIL}/threads?maxResults=${max}&q=${encodeURIComponent(q)}`);
-  return (j.threads || []).map(t => t.id);
+  const out = [];
+  let page = '';
+  do {
+    const j = await gjson(`${GMAIL}/messages?maxResults=${Math.min(500, max - out.length)}&q=${encodeURIComponent(q)}${page ? '&pageToken=' + encodeURIComponent(page) : ''}`);
+    (j.messages || []).forEach(m => out.push({ id: m.id, threadId: m.threadId }));
+    page = j.nextPageToken || '';
+  } while (page && out.length < max);
+  return out;
 }
 
-export const getThread = (id) => gjson(`${GMAIL}/threads/${id}?format=full`);
+export const getMessage = (id) => gjson(`${GMAIL}/messages/${id}?format=full`);
 
 /** Runs fn over items, n at a time. */
 export async function pool(items, n, fn) {

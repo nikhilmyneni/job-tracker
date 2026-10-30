@@ -14,13 +14,16 @@ export const MIN_MATCHES = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90];
 export const LEVELS = { fresher: 'Fresher (0–1 year)', intern: 'Internship', both: 'Fresher jobs or internships' };
 export const JOB_TYPES = { fulltime: 'Full-time', internship: 'Internship', both: 'Full-time or internship' };
 export const GHOST_DAYS = 21;
-export const MAX_THREADS = 80, MAX_ALERT_THREADS = 25;
+// Emails read per sync (the rest are read on the next one, oldest first), job-alert emails, and how far a search lists.
+export const MAX_EMAILS = 300, MAX_ALERT_EMAILS = 25, MAX_LISTED = 2000;
 export const MAX_SEEN = 5000, MAX_LOG = 300, MAX_JOBS = 1000, MAX_CV = 20000;
 
-export const APP_QUERY = '("thank you for applying" OR "thanks for applying" OR "application received" OR "received your application" OR "your application" OR "application status" OR interview OR shortlisted OR assessment OR "online test" OR "coding test" OR unfortunately OR "not moving forward" OR "regret to inform" OR "not been selected" OR "offer letter" OR "pleased to offer" OR withdrawn) -category:promotions -category:social';
+export const APP_QUERY = '("thank you for applying" OR "thanks for applying" OR "application received" OR "received your application" OR "your application" OR "application for" OR "applied for" OR "application was sent" OR "application has been" OR "application status" OR "update on your application" OR "thank you for your interest" OR "your candidacy" OR "next steps" OR "next round" OR interview OR shortlisted OR assessment OR "online test" OR "coding test" OR "aptitude test" OR "technical round" OR "hr round" OR hackerrank OR hackerearth OR codility OR mettl OR unfortunately OR "not moving forward" OR "regret to inform" OR "not been selected" OR "not selected" OR "offer letter" OR "pleased to offer" OR "joining date" OR withdrawn) -category:promotions -category:social';
 export const ALERT_SENDERS = 'from:linkedin.com OR from:naukri.com OR from:naukri.in OR from:internshala.com OR from:indeed.com OR from:foundit.in OR from:instahyre.com OR from:wellfound.com OR from:glassdoor.com OR from:apna.co OR from:unstop.com OR from:cutshort.io OR from:hirist.tech OR from:shine.com OR from:timesjobs.com OR from:monsterindia.com';
 
-export const appSearch = (afterStr) => `after:${afterStr} ${APP_QUERY} -{${ALERT_SENDERS.replace(/ OR /g, ' ')}}`;
+// Job sites' own application emails ("Your application was sent to…") count, so only their alert-only senders are left out.
+export const ALERT_ONLY = 'jobalerts-noreply@linkedin.com jobs-listings@linkedin.com';
+export const appSearch = (afterStr) => `after:${afterStr} ${APP_QUERY} -{${ALERT_ONLY.split(' ').map(a => 'from:' + a).join(' ')}}`;
 export const alertSearch = (afterStr) => `after:${afterStr} (${ALERT_SENDERS}) (job OR jobs OR hiring OR internship OR opening OR recommended OR matches)`;
 
 // ---------- Small helpers ----------
@@ -123,7 +126,7 @@ export function prefsText(s) {
 
 // ---------- Data file ----------
 export function emptyData() {
-  return { version: 2, settings: defaultSettings(), applications: [], jobs: [], seen: [], log: [], cv: '', cvFile: null, cvFold: null, cvFoldHash: '', review: [], reviewDone: [], skillsAdded: [], skillsRemoved: [], lastRunAt: '', gmailRunAt: '' };
+  return { version: 2, settings: defaultSettings(), applications: [], jobs: [], seen: [], log: [], cv: '', cvFile: null, cvFold: null, cvFoldHash: '', review: [], reviewDone: [], skillsAdded: [], skillsRemoved: [], lastRunAt: '', gmailRunAt: '', gmailScan: 2 };
 }
 
 export function normalizeData(raw) {
@@ -146,6 +149,8 @@ export function normalizeData(raw) {
     skillsAdded: strList(r.skillsAdded, 40, 40),
     skillsRemoved: strList(r.skillsRemoved, 80, 40),
     lastRunAt: typeof r.lastRunAt === 'string' ? r.lastRunAt : '',
+    // 2: Gmail is read by message, every match (older syncs read at most 80 threads and could skip some).
+    gmailScan: r.gmailScan === 2 ? 2 : 1,
     // When Gmail was last read. Older files read Gmail on every run, so their lastRunAt counts.
     gmailRunAt: typeof r.gmailRunAt === 'string' ? r.gmailRunAt : (typeof r.lastRunAt === 'string' && !('gmailRunAt' in r) ? r.lastRunAt : ''),
   };

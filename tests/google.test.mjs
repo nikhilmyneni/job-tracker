@@ -15,15 +15,22 @@ G.resumeSession();
 test('rate-limited twice, then it answers: the waits are reported and the result comes through', async () => {
   const waits = [];
   G.whenSlowedDown((s) => waits.push(s));
-  replies = [limited, res(429, {}, { 'Retry-After': '0.01' }), res(200, { threads: [{ id: 'a' }, { id: 'b' }] })];
-  assert.deepEqual(await G.searchThreads('q', 10), ['a', 'b']);
+  replies = [limited, res(429, {}, { 'Retry-After': '0.01' }), res(200, { messages: [{ id: 'a', threadId: 't' }, { id: 'b', threadId: 't' }] })];
+  assert.deepEqual((await G.searchMessages('q', 10)).map(m => m.id), ['a', 'b']);
   assert.deepEqual(waits, [0.01, 0.01]);
 });
 test('still limited after every retry: a plain message, not a raw quota error', async () => {
   replies = Array(5).fill(limited);
-  await assert.rejects(G.searchThreads('q', 10), /Gmail is limiting how fast emails can be read/);
+  await assert.rejects(G.searchMessages('q', 10), /Gmail is limiting how fast emails can be read/);
 });
 test('other errors are not retried', async () => {
   replies = [res(404, { error: { message: 'Not found' } })];
-  await assert.rejects(G.searchThreads('q', 10), /Google error 404: Not found/);
+  await assert.rejects(G.searchMessages('q', 10), /Google error 404: Not found/);
+});
+
+test('search follows every page of results, up to the limit', async () => {
+  replies = [res(200, { messages: [{ id: 'a', threadId: 't1' }], nextPageToken: 'p2' }), res(200, { messages: [{ id: 'b', threadId: 't2' }], nextPageToken: 'p3' }), res(200, { messages: [{ id: 'c', threadId: 't3' }] })];
+  assert.deepEqual((await G.searchMessages('q', 10)).map(m => m.id), ['a', 'b', 'c']);
+  replies = [res(200, { messages: [{ id: 'a', threadId: 't1' }, { id: 'b', threadId: 't1' }], nextPageToken: 'p2' })];
+  assert.equal((await G.searchMessages('q', 2)).length, 2);
 });
