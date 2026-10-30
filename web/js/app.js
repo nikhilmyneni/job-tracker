@@ -15,6 +15,7 @@ import { demoData, DEMO_ME, DEMO_FOLD } from './demo.js';
 import { downloadBlob } from './files.js';
 import { resumeDocx } from './docx.js';
 import { resumePdf } from './pdf.js';
+import { readTtf } from './ttf.js';
 import { askToNotify, notifySync } from './notify.js';
 
 const params = new URLSearchParams(location.search);
@@ -108,6 +109,16 @@ async function sharedAi(task, prompt, json) {
   if (res.status === 401) { showReconnect(true); throw new G.NeedSignIn(j.error || 'Sign in again.'); }
   if (!res.ok) throw new AiError(j.error || `Built-in AI error ${res.status}`, res.status >= 500);
   return j.result;
+}
+
+// ResumeFold's resume font (Source Sans 3), loaded once for PDFs; if it can't load, the PDF falls back to Helvetica.
+let fontsLoading = null;
+function resumeFonts() {
+  if (!fontsLoading) {
+    const one = (f) => fetch(`/vendor/fonts/source-sans-3-${f}.ttf`).then(r => { if (!r.ok) throw new Error('font'); return r.arrayBuffer(); }).then(readTtf);
+    fontsLoading = Promise.all(['regular', 'bold', 'italic'].map(one)).then(([R, B, I]) => ({ R, B, I })).catch(() => { fontsLoading = null; return null; });
+  }
+  return fontsLoading;
 }
 
 // ---------- email alerts (opt-in; the server is api/alerts.js) ----------
@@ -235,7 +246,7 @@ Object.assign(ctx.act, {
   /** The resume as a file, named like Sai_Nikhil_Myneni_Resume_Diffzene_Cyber_Security_Intern.pdf. */
   async downloadResume(job, resume, kind, template = 'standard') {
     const name = C.resumeFileBase(resume.contact.fullName, job.company, job.role);
-    if (kind === 'pdf') downloadBlob(new Blob([resumePdf(resume, template)], { type: 'application/pdf' }), name + '.pdf');
+    if (kind === 'pdf') downloadBlob(new Blob([resumePdf(resume, template, await resumeFonts())], { type: 'application/pdf' }), name + '.pdf');
     else if (kind === 'docx') downloadBlob(new Blob([resumeDocx(resume)], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }), name + '.docx');
     else downloadBlob(new Blob([C.resumeLatex(resume)], { type: 'application/x-tex' }), name + '.tex');
   },

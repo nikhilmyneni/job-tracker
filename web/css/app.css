@@ -143,11 +143,15 @@ th[aria-sort="descending"] .th-sort::after { content: " ↓"; }
 .pv-acts { display: flex; flex-wrap: wrap; gap: 8px; }
 .sheet-box { container-type: inline-size; background: var(--track); border-radius: 12px; padding: 12px; }
 
+/* ResumeFold's resume font, from the same files it uses (vendor/fonts, SIL OFL). */
+@font-face { font-family: "Source Sans 3"; src: url("/vendor/fonts/source-sans-3-regular.ttf") format("truetype"); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: "Source Sans 3"; src: url("/vendor/fonts/source-sans-3-bold.ttf") format("truetype"); font-weight: 700; font-style: normal; font-display: swap; }
+@font-face { font-family: "Source Sans 3"; src: url("/vendor/fonts/source-sans-3-italic.ttf") format("truetype"); font-weight: 400; font-style: italic; font-display: swap; }
 /* The resume sheet: ResumeFold's layouts on A4, drawn at the column's width (1cqw = 1% of the page width, so 10.5pt
-   on a 595pt page is 1.765cqw). Matches the PDF download (js/pdf.js): Helvetica, ink #111, ResumeFold's spacing. */
+   on a 595pt page is 1.765cqw). Matches the PDF download (js/pdf.js): Source Sans 3, ink #111, ResumeFold's spacing. */
 .sheet { --r-ink: #111111; --r-muted: #3b3934; --pt: calc(100cqw / 595.28);
   aspect-ratio: 210 / 297; min-height: max-content; background: #fff; color: var(--r-ink); box-shadow: var(--shadow-lift);
-  font: 400 calc(10.5 * var(--pt)) / 1.32 Helvetica, Arial, sans-serif; padding: calc(36 * var(--pt)) calc(44.64 * var(--pt));
+  font: 400 calc(10.5 * var(--pt)) / 1.32 "Source Sans 3", Helvetica, Arial, sans-serif; padding: calc(36 * var(--pt)) calc(44.64 * var(--pt));
   overflow: hidden; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 .sheet h2, .sheet h3, .sheet p, .sheet ul { margin: 0; }
 .rs-head { text-align: center; margin-bottom: calc(9 * var(--pt)); }

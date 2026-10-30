@@ -1,9 +1,11 @@
 /**
  * The tailored resume as a real PDF, made in the browser with no library, in ResumeFold's layouts (Standard, Student,
  * Combination, Senior), following ResumeFold's own PDF export: its section names and order, the title / dates and
- * company / location rows, "•" bullets, rules and spacing. Text is set in Helvetica (a PDF core font, the closest to
- * ResumeFold's default Source Sans), so it's selectable and reads cleanly for applicant tracking systems.
- * Type and spacing scale a little to fill one page without blank space. Pure, no DOM: resumePdf(resume, template).
+ * company / location rows, "•" bullets, rules and spacing. Text is set in ResumeFold's font, Source Sans 3, embedded from
+ * the same font files ResumeFold uses (vendor/fonts, read with js/ttf.js), so it's selectable and reads cleanly for
+ * applicant tracking systems. Without the font files (e.g. in tests) it falls back to Helvetica, a PDF core font.
+ * Type and spacing scale a little to fill one page without blank space. Pure, no DOM:
+ * resumePdf(resume, template, fonts?) where fonts = {R, B, I} from readTtf().
  */
 import { CODES, HELVETICA, HELVETICA_BOLD, HELVETICA_OBLIQUE } from './pdf-fonts.js';
 import { dateRange } from './core.js';
@@ -11,8 +13,15 @@ import { dateRange } from './core.js';
 const PAGE_W = 595.28, PAGE_H = 841.89;
 const MARGIN_Y = 36, MARGIN_X = 44.64; // ResumeFold "normal" margins (0.5in / 0.62in)
 const FONT = { R: 'F1', B: 'F2', I: 'F3' };
-const WIDTHS = {};
-[['R', HELVETICA], ['B', HELVETICA_BOLD], ['I', HELVETICA_OBLIQUE]].forEach(([f, list]) => { WIDTHS[f] = new Map(CODES.map((c, i) => [c, list[i]])); });
+const CORE_WIDTHS = {};
+[['R', HELVETICA], ['B', HELVETICA_BOLD], ['I', HELVETICA_OBLIQUE]].forEach(([f, list]) => { CORE_WIDTHS[f] = new Map(CODES.map((c, i) => [c, list[i]])); });
+let WIDTHS = CORE_WIDTHS;
+/** Measures with the embedded fonts' widths (codes 32–255 the font has), or the core Helvetica ones. */
+function useFonts(fonts) {
+  if (!fonts) { WIDTHS = CORE_WIDTHS; return; }
+  WIDTHS = {};
+  ['R', 'B', 'I'].forEach(f => { WIDTHS[f] = new Map(fonts[f].widths.map((w, i) => [32 + i, w]).filter(([c]) => c <= 126 || fonts[f].has.has(c))); });
+}
 const COLOR = { ink: [0.067, 0.067, 0.067], muted: [0.23, 0.22, 0.2] }; // ResumeFold: ink #111111 (accent "none"), muted
 // ResumeFold's section names; Standard and Combination set them in capitals.
 export const HEADINGS = { summary: 'Summary', experience: 'Work Experience', education: 'Education', skills: 'Skills', projects: 'Projects', certifications: 'Certifications' };
@@ -176,21 +185,36 @@ function layout(r, t, k) {
 }
 
 /** The PDF file's bytes. Picks the largest scale (up to about 12pt) that keeps one page; if even 9.7pt doesn't fit, it runs on. */
-export function resumePdf(r, template = 'standard') {
+export function resumePdf(r, template = 'standard', fonts = null) {
   const t = STYLE[template] ? template : 'standard';
+  useFonts(fonts);
   const usable = PAGE_H - 2 * MARGIN_Y;
   const fits = (k) => { const d = layout(r, t, k); return d.pages.length === 1 && d.used <= usable; };
   let lo = 0.92, hi = 1.15;
   if (fits(hi)) lo = hi;
   else if (fits(lo)) { for (let i = 0; i < 12; i++) { const mid = (lo + hi) / 2; if (fits(mid)) lo = mid; else hi = mid; } }
-  return assemble(layout(r, t, lo).pages, r.contact && r.contact.fullName);
+  const pages = layout(r, t, lo).pages;
+  const out = assemble(pages, r.contact && r.contact.fullName, fonts);
+  useFonts(null);
+  return out;
 }
 
-function assemble(pages, author) {
+const latin1 = (bytes) => { let s = ''; for (let i = 0; i < bytes.length; i += 8192) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 8192)); return s; };
+
+function assemble(pages, author, embedded) {
   const objs = [];
   const add = (s) => { objs.push(s); return objs.length; };
   const catalog = add(''), tree = add('');
-  const fonts = ['Helvetica', 'Helvetica-Bold', 'Helvetica-Oblique'].map(b => add(`<< /Type /Font /Subtype /Type1 /BaseFont /${b} /Encoding /WinAnsiEncoding >>`));
+  const fonts = embedded
+    // ResumeFold's Source Sans 3, embedded whole (each file is a small Latin subset), as TrueType with WinAnsi widths.
+    ? [['R', 'SourceSans3-Regular'], ['B', 'SourceSans3-Bold'], ['I', 'SourceSans3-Italic']].map(([f, name]) => {
+      const t = embedded[f], data = latin1(t.bytes);
+      const file = add(`<< /Length ${data.length} /Length1 ${data.length} >>\nstream\n${data}\nendstream`);
+      const desc = add(`<< /Type /FontDescriptor /FontName /${name} /Flags ${32 + (t.italic ? 64 : 0)} /FontBBox [${t.bbox.join(' ')}] /ItalicAngle ${n2(t.italicAngle)} ` +
+        `/Ascent ${t.ascent} /Descent ${t.descent} /CapHeight ${t.capHeight} /StemV ${t.weight >= 600 ? 140 : 80} /FontFile2 ${file} 0 R >>`);
+      return add(`<< /Type /Font /Subtype /TrueType /BaseFont /${name} /FirstChar 32 /LastChar 255 /Widths [${t.widths.join(' ')}] /Encoding /WinAnsiEncoding /FontDescriptor ${desc} 0 R >>`);
+    })
+    : ['Helvetica', 'Helvetica-Bold', 'Helvetica-Oblique'].map(b => add(`<< /Type /Font /Subtype /Type1 /BaseFont /${b} /Encoding /WinAnsiEncoding >>`));
   const kids = pages.map(ops => {
     const body = ops.join('\n');
     const content = add(`<< /Length ${body.length} >>\nstream\n${body}\nendstream`);

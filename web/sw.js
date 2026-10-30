@@ -1,9 +1,9 @@
 // Caches only this site's own files so the app opens fast and offline. Never caches Google, AI, job-board or /api responses.
-const CACHE = 'job-hunter-v31';
+const CACHE = 'job-hunter-v32';
 const SHELL = ['/', '/app', '/privacy.html', '/config.js', '/icon.svg', '/manifest.webmanifest',
   '/css/tokens.css', '/css/app.css', '/css/landing.css',
   '/vendor/fonts/bricolage.woff2', '/vendor/fonts/instrument-sans.woff2', '/vendor/fonts/jetbrains-mono.woff2',
-  '/js/ai.js', '/js/app.js', '/js/core.js', '/js/demo.js', '/js/docx.js', '/js/pdf.js', '/js/pdf-fonts.js', '/js/files.js', '/js/google.js', '/js/landing.js', '/js/notify.js', '/js/onboarding.js', '/js/sources.js', '/js/ui.js', '/js/update.js', '/js/view-applications.js', '/js/view-board.js', '/js/view-matches.js', '/js/view-settings.js', '/js/view-tailor.js'];
+  '/js/ai.js', '/js/app.js', '/js/core.js', '/js/demo.js', '/js/docx.js', '/js/pdf.js', '/js/pdf-fonts.js', '/js/ttf.js', '/js/files.js', '/js/google.js', '/js/landing.js', '/js/notify.js', '/js/onboarding.js', '/js/sources.js', '/js/ui.js', '/js/update.js', '/js/view-applications.js', '/js/view-board.js', '/js/view-matches.js', '/js/view-settings.js', '/js/view-tailor.js'];
 
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', (e) => {

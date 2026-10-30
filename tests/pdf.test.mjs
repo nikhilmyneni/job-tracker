@@ -54,3 +54,15 @@ test('a short resume is set larger to fill the page; a long one smaller to keep 
   assert.ok(s.includes('/Count 1'), 'still one page');
   assert.ok(size(short) > size(long), `${size(short)} > ${size(long)}`);
 });
+
+test('with ResumeFold’s font files, the PDF embeds Source Sans 3', async () => {
+  const fs = await import('node:fs');
+  const { readTtf } = await import('../web/js/ttf.js');
+  const V = new URL('../web/vendor/fonts/', import.meta.url);
+  const fonts = Object.fromEntries([['R', 'regular'], ['B', 'bold'], ['I', 'italic']].map(([k, f]) => [k, readTtf(fs.readFileSync(new URL(`source-sans-3-${f}.ttf`, V)))]));
+  assert.ok(fonts.R.has.has(149) && fonts.R.has.has(151), 'bullet and em dash are in the font');
+  const s = latin(resumePdf(DEMO_FOLD, 'standard', fonts));
+  assert.ok(s.includes('/BaseFont /SourceSans3-Bold'));
+  assert.ok(s.includes('/FontFile2'));
+  checkXref(s);
+});
