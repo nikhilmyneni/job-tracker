@@ -12,9 +12,10 @@ const SORT_BATCH = 20, SORT_PARALLEL = 2;
 /**
  * report(text, fraction) shows progress on the page (fraction 0–1, or undefined when unknown).
  * refresh() redraws the dashboard, so applications appear while the rest is still being sorted.
- * gmail: false when Gmail isn't connected; then only the company job boards are checked.
+ * gmail: read application emails (false when Gmail isn't connected, or only the job search is due).
+ * jobs: look for new openings (company boards, plus job-alert emails when alerts is true, i.e. Gmail is connected).
  */
-export async function runUpdate(data, me, report, refresh = () => {}, { gmail = true } = {}) {
+export async function runUpdate(data, me, report, refresh = () => {}, { gmail = true, jobs = true, alerts = gmail } = {}) {
   const s = data.settings;
   const result = C.newResult();
   const seen = new Set(data.seen);
@@ -30,9 +31,9 @@ export async function runUpdate(data, me, report, refresh = () => {}, { gmail = 
   C.markGhosted(data.applications, now, result);
   refresh();
 
-  if (s.jobsPerUpdate > 0) {
+  if (jobs && s.jobsPerUpdate > 0) {
     if (!data.cv) result.notes.push('Add your CV in Profile and CV, so openings can be scored against your skills.');
-    await findJobs(data, me, afterStr, seen, result, report, note, gmail);
+    await findJobs(data, me, afterStr, seen, result, report, note, alerts);
   }
   C.expireJobs(data.jobs, data.applications, C.ymd(now));
   C.collectDue(data.applications, result);
@@ -40,6 +41,7 @@ export async function runUpdate(data, me, report, refresh = () => {}, { gmail = 
   data.seen = [...seen];
   data.lastRunAt = now.toISOString();
   if (gmail && !left) { data.gmailRunAt = data.lastRunAt; data.gmailScan = 2; }
+  if (jobs) data.jobsRunAt = data.lastRunAt;
   const text = C.summaryText(result);
   C.addLog(data, 'Update: ' + text.replace(/\n/g, ' | '), now);
   C.trimData(data);

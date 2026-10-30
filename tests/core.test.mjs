@@ -45,20 +45,23 @@ test('settings: defaults', () => {
   const s = C.normalizeSettings(undefined);
   assert.equal(s.onboarded, false);
   assert.equal(s.jobsPerUpdate, 5);
-  assert.equal(s.autoUpdateHours, 12);
+  assert.deepEqual(s.schedule, { on: true, days: [0, 1, 2, 3, 4, 5, 6], gmailAt: '07:00', jobsAt: '09:00' });
+  assert.equal(s.prefs.roleRange, 'related');
   assert.equal(s.prefs.paidOnly, true);
   assert.equal(s.ai, undefined);
 });
 test('settings: valid kept, invalid replaced, lists cleaned', () => {
   const s = C.normalizeSettings({
-    onboarded: true, name: ' Test ', jobsPerUpdate: 10, autoUpdateHours: 7, sinceDays: 60,
-    prefs: { roles: ['SOC Analyst', 'soc analyst', '', 5, 'Pentester'], level: 'boss', jobType: 'internship', paidOnly: false, locations: [] },
+    onboarded: true, name: ' Test ', jobsPerUpdate: 10, sinceDays: 60,
+    schedule: { on: true, days: [1, 1, 5, 9, 'x'], gmailAt: '25:00', jobsAt: '18:30' },
+    prefs: { roles: ['SOC Analyst', 'soc analyst', '', 5, 'Pentester'], level: 'boss', jobType: 'internship', paidOnly: false, locations: [], roleRange: 'core' },
     ai: [{ provider: 'groq', key: 'old-key' }],
   });
   assert.equal(s.onboarded, true);
   assert.equal(s.name, 'Test');
   assert.equal(s.jobsPerUpdate, 10);
-  assert.equal(s.autoUpdateHours, 12);
+  assert.deepEqual(s.schedule, { on: true, days: [1, 5], gmailAt: '07:00', jobsAt: '18:30' });
+  assert.equal(s.prefs.roleRange, 'core');
   assert.equal(s.sinceDays, 60);
   assert.deepEqual(s.prefs.roles, ['SOC Analyst', 'Pentester']);
   assert.equal(s.prefs.level, 'fresher');
@@ -75,21 +78,38 @@ test('prefsText lists what the scorer needs', () => {
   assert.match(t, /Currently based in: Hyderabad/);
   assert.match(t, /Avoid: Sales/);
 });
-test('autoUpdateDue: on sign-in unless minutes ago; while open every N hours', () => {
+test('settings: older files keep "only when I click" as the schedule switched off', () => {
+  assert.equal(C.normalizeSettings({ autoUpdateHours: 0 }).schedule.on, false);
+  assert.equal(C.normalizeSettings({ autoUpdateHours: 12 }).schedule.on, true);
+});
+test('scheduleDue: each part runs once after its time on a chosen day, and catches up on the next open', () => {
   const d = C.emptyData();
-  const now = new Date('2026-10-29T12:00:00Z');
-  assert.equal(C.autoUpdateDue(d, now, true), false); // not onboarded
+  const at = (day, hh, mm = 0) => new Date(2026, 9, day, hh, mm); // local time; 26 Oct 2026 is a Monday
+  assert.deepEqual(C.scheduleDue(d, at(29, 12)), { gmail: false, jobs: false }); // not set up yet
   d.settings.onboarded = true;
-  assert.equal(C.autoUpdateDue(d, now, true), true); // never ran
-  d.lastRunAt = '2026-10-29T11:55:00Z';
-  assert.equal(C.autoUpdateDue(d, now, true), false); // 5 min ago
-  d.lastRunAt = '2026-10-29T06:00:00Z';
-  assert.equal(C.autoUpdateDue(d, now, true), true); // signing in: sync
-  assert.equal(C.autoUpdateDue(d, now, false), false); // open page: 6h < 12h
-  d.lastRunAt = '2026-10-28T20:00:00Z';
-  assert.equal(C.autoUpdateDue(d, now, false), true);
-  d.settings.autoUpdateHours = 0;
-  assert.equal(C.autoUpdateDue(d, now, true), false);
+  assert.deepEqual(C.scheduleDue(d, at(29, 12)), { gmail: true, jobs: true }); // never ran
+  d.settings.schedule = { on: true, days: [1, 2, 3, 4, 5], gmailAt: '07:00', jobsAt: '18:00' };
+  d.gmailRunAt = at(29, 7, 5).toISOString(); d.jobsRunAt = at(28, 18, 30).toISOString();
+  assert.deepEqual(C.scheduleDue(d, at(29, 12)), { gmail: false, jobs: false }); // Thu noon: both done since their times
+  assert.deepEqual(C.scheduleDue(d, at(29, 18, 1)), { gmail: false, jobs: true }); // Thu 18:01
+  assert.deepEqual(C.scheduleDue(d, at(30, 6, 59)), { gmail: false, jobs: true }); // Fri before 07:00: jobs still owed from Thu
+  d.jobsRunAt = at(29, 19).toISOString();
+  assert.deepEqual(C.scheduleDue(d, at(31, 10)), { gmail: true, jobs: true }); // Sat: Friday's runs were missed
+  d.gmailRunAt = at(30, 8).toISOString(); d.jobsRunAt = at(30, 19).toISOString();
+  assert.deepEqual(C.scheduleDue(d, at(31, 10)), { gmail: false, jobs: false }); // Sat isn't a chosen day
+  d.settings.schedule.on = false;
+  assert.deepEqual(C.scheduleDue(d, at(2 + 31, 10)), { gmail: false, jobs: false }); // off: only Sync now
+  d.settings.schedule.on = true; d.settings.jobsPerUpdate = 0;
+  assert.equal(C.scheduleDue(d, at(33, 20)).jobs, false); // no new jobs wanted
+});
+test('role range: core needs every specific word of a role; related takes any, with synonyms', () => {
+  const roles = ['Cloud Security'];
+  assert.equal(C.roleFits('Cloud Security Intern', roles, 'core'), true);
+  assert.equal(C.roleFits('Security Analyst', roles, 'core'), false);
+  assert.equal(C.roleFits('Security Analyst', roles, 'related'), true);
+  const prefs = C.normalizeSettings({ prefs: { roles, roleRange: 'core', locations: [] } }).prefs;
+  assert.equal(C.matchesPrefs({ role: 'Network Security Engineer', location: 'Remote' }, prefs), false);
+  assert.equal(C.matchesPrefs({ role: 'Network Security Engineer', location: 'Remote' }, Object.assign({}, prefs, { roleRange: 'related' })), true);
 });
 test('normalizeData keeps shape', () => {
   const d = C.normalizeData({ applications: [{ a: 1 }, null], seen: [1, 'x'], cvFile: { name: 'x' } });

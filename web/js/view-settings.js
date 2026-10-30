@@ -14,7 +14,7 @@ function saveBar(label, collect, ctx) {
     collect(d);
     if (!d.prefs.roles.length) throw new Error('Add at least one role you want.');
     await ctx.act.saveSettings(d);
-    status.className = 'status ok'; status.textContent = 'Saved';
+    toast('Saved'); // the screen redraws with the new settings, so a status line here would vanish
   }, status) }, label);
   return h('div', { class: 'save-bar' }, btn, status);
 }
@@ -52,7 +52,7 @@ export function renderSettings(ctx, root) {
   root.replaceChildren(pageHead('Settings', ''),
     h('div', { class: 'cols' },
       h('div', { class: 'stack-lg' },
-        panel('Routine', '', routine.el, saveBar('Save routine', (d) => routine.collect(d), ctx)),
+        panel('Routine', 'When your Gmail sync and job search run on their own, and what they bring.', routine.el, saveBar('Save routine', (d) => routine.collect(d), ctx)),
         panel('Companies to follow', 'Their open jobs are checked on every sync, alongside your job-alert emails.', companies.el, saveBar('Save companies', (d) => companies.collect(d), ctx))),
       h('div', { class: 'stack-lg' },
         notifyPanel(ctx),

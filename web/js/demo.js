@@ -55,7 +55,7 @@ export function demoData(fresh) {
   d.jobs[0].status = 'Saved';
   d.cv = 'Test Person\ntest.person@jobs4you.vercel.app · +91 90000 00000 · Hyderabad\n\nEDUCATION\nB.Tech CSE (Cyber Security), Deccan Institute of Technology, 2022–2026\n\nPROJECTS\nHome SOC lab, Zero Trust cloud storage, Phishing URL checker\n\nSKILLS\nSIEM (Splunk, Wazuh), incident response, log analysis, Nmap, Wireshark, Burp Suite, Metasploit, OWASP Top 10, AWS IAM basics, Python, Bash, SQL, Linux\n\nCERTIFICATIONS\nCEH, Google Cybersecurity Certificate';
   const skills = mySkills(d);
-  d.jobs.forEach(j => { const m = matchScore(j, skills, d.settings.keywords, d.settings.prefs.roles); Object.assign(j, { score: m.score, fit: Math.max(1, Math.round(m.score / 20)), matched: m.matched, missing: m.missing, skill_gap: m.missing[0] || 'None', why: m.matched.length ? `On your CV: ${m.matched.slice(0, 4).join(', ')}.` : '' }); });
+  d.jobs.forEach(j => { const m = matchScore(j, skills, d.settings.keywords, d.settings.prefs.roles, d.settings.prefs.roleRange); Object.assign(j, { score: m.score, fit: Math.max(1, Math.round(m.score / 20)), matched: m.matched, missing: m.missing, skill_gap: m.missing[0] || 'None', why: m.matched.length ? `On your CV: ${m.matched.slice(0, 4).join(', ')}.` : '' }); });
   d.log = [{ at: '2026-10-28T15:00:00Z', msg: 'Update: 2 application updates, 3 new jobs' }];
   d.lastRunAt = '2026-10-28T15:00:00Z';
   return d;

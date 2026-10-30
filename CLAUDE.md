@@ -52,8 +52,10 @@ and counts toward the 100-user cap. Without Gmail, users add applications by han
 - Google Identity Services token client: tokens last about 1 hour. `G.resumeSession()` picks the
   token back up after a reload. When it expires, `NeedSignIn` shows a *Continue* banner; re-auth
   needs a click, because popups need a user gesture. `G.preload()` loads GIS early for the same reason.
-- Syncs only happen while the page is open: on sign-in (unless the last one was under 10 minutes
-  ago), every `autoUpdateHours` while open, or **Sync now**. `navigator.locks` keeps it to one tab.
+- Syncs only happen while the page is open (there's no server holding Gmail access, by design). The routine
+  (`settings.schedule`: on, days, `gmailAt`, `jobsAt`, on the device's clock) says when: `scheduleDue()` runs each part
+  once after its latest time on a chosen day, so a time missed while the page was closed runs on the next open. Checked on
+  open and every minute; a failed automatic try waits `MIN_UPDATE_GAP_MIN`. **Sync now** runs both. `navigator.locks` keeps it to one tab.
 - Gmail API: `messages.list` (every page, up to `MAX_LISTED`) + `messages.get` (`format=full`) for unread ones only, 4 at a time. Up to `MAX_EMAILS` per sync, oldest first; the rest wait for the next sync (`gmailRunAt` only moves once none are left). Gmail limits reads per user per minute:
   on a 429 or a 403 rate/quota error, `gfetch` waits (Retry-After, else 8/15/30/60 s) and retries, and the sync bar says so. Keep per-run work bounded
   (`MAX_EMAILS`, `MAX_ALERT_EMAILS`, `MAX_BOARD_CANDIDATES`; AI batches of 20, two at a time,
@@ -89,10 +91,10 @@ and counts toward the 100-user cap. Without Gmail, users add applications by han
 - `docs/SETUP.md`: users and owner (Google Cloud + Vercel). Keep it in sync with behaviour changes. `docs/ROADMAP.md`: ideas.
 
 ## Data (one Drive app-data file per user, `job-tracker.json`)
-`{version: 2, settings, applications[], jobs[], seen[] (≤5000), log[] (newest first, ≤300), cv, cvFile, cvFold, cvFoldHash, review[] (≤50), reviewDone[], lastRunAt, gmailRunAt, gmailScan}`.
+`{version: 2, settings, applications[], jobs[], seen[] (≤5000), log[] (newest first, ≤300), cv, cvFile, cvFold, cvFoldHash, review[] (≤50), reviewDone[], lastRunAt, gmailRunAt, gmailScan, jobsRunAt}`.
 `gmailRunAt` is when Gmail was last read (so connecting it later still looks back `sinceDays`); it only moves once every matching email is read. `gmailScan` 2 marks data read the per-message way (older data looks back `sinceDays` once).
 - `settings`: onboarded, name, city, prefs {roles[], level, jobType, paidOnly, minPay,
-  locations[], relocate, avoid[]}, jobsPerUpdate, autoUpdateHours, sinceDays, notify, keywords[], minMatch (0–90),
+  locations[], relocate, roleRange (core/related: `roleFits`), avoid[]}, schedule {on, days[] (0 = Sun), gmailAt, jobsAt}, jobsPerUpdate (per day), sinceDays, notify, keywords[], minMatch (0–90),
   matchView {location, experience, internships, hideApplied}, companies[{ats, slug, name, host?, site?}].
   To add a setting, update `defaultSettings` + `normalizeSettings`
   (+ `prefsText` if the scorer should use it), the block in `onboarding.js`, and the docs.

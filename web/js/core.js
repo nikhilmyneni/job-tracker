@@ -8,7 +8,9 @@ export const STAGES = ['Applied', 'Screening', 'Interview', 'Offer'];
 export const STATUSES = ['Applied', 'Screening', 'Interview', 'Offer', 'Rejected', 'Withdrawn', 'Ghosted'];
 export const JOB_STATUSES = ['New', 'Applied', 'Skipped', 'Expired'];
 export const JOBS_PER_UPDATE = [0, 3, 5, 10, 15];
-export const AUTO_UPDATE_HOURS = [0, 6, 12, 24]; // 0 = only when I click Update now
+export const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']; // Date.getDay() order
+export const ROLE_RANGES = { core: 'Just my roles', related: 'My roles + related ones I’d fit' };
+const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 export const SINCE_DAYS = [30, 60, 120];
 export const MIN_MATCHES = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90];
 export const LEVELS = { fresher: 'Fresher (0–1 year)', intern: 'Internship', both: 'Fresher jobs or internships' };
@@ -59,10 +61,12 @@ export function defaultSettings() {
       minPay: '',
       locations: ['Hyderabad', 'Remote', 'Anywhere in India'],
       relocate: true,
+      roleRange: 'related',
       avoid: ['Sales', 'Telecalling', 'Unpaid internships', 'Training institutes that charge fees'],
     },
     jobsPerUpdate: 5,
-    autoUpdateHours: 12,
+    // When syncs run on their own (this device's clock). The page does the work, so a time missed while it's closed runs on the next open.
+    schedule: { on: true, days: [0, 1, 2, 3, 4, 5, 6], gmailAt: '07:00', jobsAt: '09:00' },
     sinceDays: 120,
     notify: false, // browser notifications after a sync
     keywords: [], // your own words to look for in job posts (they count as skills you have, and weigh more)
@@ -77,6 +81,12 @@ const strList = (v, max, len) => (Array.isArray(v) ? v : [])
   .filter((x, i, a) => a.findIndex(y => y.toLowerCase() === x.toLowerCase()) === i).slice(0, max);
 
 /** Fills gaps with defaults and drops anything invalid. */
+function normalizeSchedule(v, oldHours, d) {
+  if (!v || typeof v !== 'object') return Object.assign({}, d, { on: oldHours !== 0 }); // older files: "only when I click" = off
+  const days = Array.isArray(v.days) ? [...new Set(v.days.map(Number).filter(n => n >= 0 && n <= 6))].sort() : d.days;
+  return { on: v.on !== false, days, gmailAt: TIME_RE.test(v.gmailAt) ? v.gmailAt : d.gmailAt, jobsAt: TIME_RE.test(v.jobsAt) ? v.jobsAt : d.jobsAt };
+}
+
 export function normalizeSettings(raw) {
   const d = defaultSettings();
   const r = raw && typeof raw === 'object' ? raw : {};
@@ -95,10 +105,11 @@ export function normalizeSettings(raw) {
       minPay: str(p.minPay, 40, d.prefs.minPay),
       locations: Array.isArray(p.locations) ? strList(p.locations, 10, 60) : d.prefs.locations,
       relocate: typeof p.relocate === 'boolean' ? p.relocate : d.prefs.relocate,
+      roleRange: p.roleRange in ROLE_RANGES ? p.roleRange : d.prefs.roleRange,
       avoid: Array.isArray(p.avoid) ? strList(p.avoid, 15, 80) : d.prefs.avoid,
     },
     jobsPerUpdate: pick(r.jobsPerUpdate, JOBS_PER_UPDATE, d.jobsPerUpdate),
-    autoUpdateHours: pick(r.autoUpdateHours, AUTO_UPDATE_HOURS, d.autoUpdateHours),
+    schedule: normalizeSchedule(r.schedule, r.autoUpdateHours, d.schedule),
     sinceDays: pick(r.sinceDays, SINCE_DAYS, d.sinceDays),
     notify: r.notify === true,
     keywords: Array.isArray(r.keywords) ? strList(r.keywords, 20, 40) : d.keywords,
@@ -126,7 +137,7 @@ export function prefsText(s) {
 
 // ---------- Data file ----------
 export function emptyData() {
-  return { version: 2, settings: defaultSettings(), applications: [], jobs: [], seen: [], log: [], cv: '', cvFile: null, cvFold: null, cvFoldHash: '', review: [], reviewDone: [], skillsAdded: [], skillsRemoved: [], lastRunAt: '', gmailRunAt: '', gmailScan: 2 };
+  return { version: 2, settings: defaultSettings(), applications: [], jobs: [], seen: [], log: [], cv: '', cvFile: null, cvFold: null, cvFoldHash: '', review: [], reviewDone: [], skillsAdded: [], skillsRemoved: [], lastRunAt: '', gmailRunAt: '', gmailScan: 2, jobsRunAt: '' };
 }
 
 export function normalizeData(raw) {
@@ -149,6 +160,8 @@ export function normalizeData(raw) {
     skillsAdded: strList(r.skillsAdded, 40, 40),
     skillsRemoved: strList(r.skillsRemoved, 80, 40),
     lastRunAt: typeof r.lastRunAt === 'string' ? r.lastRunAt : '',
+    // When job boards were last checked (older files did it on every run).
+    jobsRunAt: typeof r.jobsRunAt === 'string' ? r.jobsRunAt : (typeof r.lastRunAt === 'string' ? r.lastRunAt : ''),
     // 2: Gmail is read by message, every match (older syncs read at most 80 threads and could skip some).
     gmailScan: r.gmailScan === 2 ? 2 : 1,
     // When Gmail was last read. Older files read Gmail on every run, so their lastRunAt counts.
@@ -168,17 +181,32 @@ export function addLog(data, msg, now) {
   data.log.unshift({ at: (now || new Date()).toISOString(), msg: String(msg) });
 }
 
-export const MIN_UPDATE_GAP_MIN = 10;
+export const MIN_UPDATE_GAP_MIN = 10; // automatic syncs that fail aren't retried sooner than this
+
+/** The latest scheduled time at or before now (on a chosen day), or null. at is "HH:MM" on this device's clock. */
+export function lastSlot(days, at, now) {
+  const [hh, mm] = at.split(':').map(Number);
+  for (let k = 0; k < 8; k++) {
+    const d = new Date(now.getTime()); d.setDate(d.getDate() - k); d.setHours(hh, mm, 0, 0);
+    if (d <= now && days.includes(d.getDay())) return d;
+  }
+  return null;
+}
+
 /**
- * Whether to start an update by itself. On sign-in (onOpen) it runs unless the last one was minutes ago;
- * while the page stays open it runs again every autoUpdateHours. 0 = only when you click.
+ * Which parts of a sync are due now: {gmail, jobs}. Each is due when it hasn't run since its latest scheduled time,
+ * so a time missed while the page was closed runs on the next open. The very first run is always due.
  */
-export function autoUpdateDue(data, now, onOpen) {
-  const h = data.settings.autoUpdateHours;
-  if (!h || !data.settings.onboarded) return false;
-  if (!data.lastRunAt) return true;
-  const age = now.getTime() - new Date(data.lastRunAt).getTime();
-  return age >= (onOpen ? MIN_UPDATE_GAP_MIN * 60e3 : h * 3600e3);
+export function scheduleDue(data, now) {
+  const s = data.settings, sc = s.schedule;
+  if (!s.onboarded) return { gmail: false, jobs: false };
+  const due = (last, at) => {
+    if (!last) return true;
+    if (!sc.on) return false;
+    const slot = lastSlot(sc.days, at, now);
+    return !!slot && new Date(last) < slot;
+  };
+  return { gmail: due(data.gmailRunAt, sc.gmailAt), jobs: s.jobsPerUpdate > 0 && due(data.jobsRunAt, sc.jobsAt) };
 }
 
 // ---------- Gmail message bodies ----------
@@ -663,12 +691,25 @@ export function roleTerms(roles) {
   }).filter(t => t.length);
 }
 
+/**
+ * Whether a job title fits your roles. 'core': every specific word of one of your roles is in the title
+ * ("Cloud Security Intern" fits "Cloud Security"). 'related': any of them or a close synonym is.
+ */
+export function roleFits(title, roles, range = 'related') {
+  const t = String(title || '').toLowerCase();
+  if (range === 'core') return roles.some(r => {
+    const words = String(r).toLowerCase().split(/[^a-z0-9+#]+/).filter(Boolean);
+    const specific = words.filter(w => !GENERIC_WORDS.has(w));
+    return (specific.length ? specific : words).every(w => hasWord(t, w));
+  });
+  return roleTerms(roles).some(ts => ts.some(w => hasWord(t, w)));
+}
+
 /** Whether a board listing is worth scoring, from its title and location alone. */
 export function matchesPrefs(l, prefs) {
   const title = String(l.role || '').toLowerCase();
   if (!title) return false;
-  const terms = roleTerms(prefs.roles);
-  if (terms.length && !terms.some(ts => ts.some(t => hasWord(title, t)))) return false;
+  if (roleTerms(prefs.roles).length && !roleFits(title, prefs.roles, prefs.roleRange)) return false;
   if (SENIOR_RE.test(title)) return false;
   if ((prefs.jobType === 'internship' || prefs.level === 'intern') && !INTERN_RE.test(title)) return false;
   if (prefs.jobType === 'fulltime' && /\bintern(ship)?\b/i.test(title)) return false;
@@ -995,14 +1036,14 @@ export function mySkills(data) {
  * keywords count 1.5×. Returns {score 0–100, matched[], missing[]}: matched are asked for and on your CV (or in
  * your keywords), missing are asked for and not. A job that names no skills gets a middling score from its title.
  */
-export function matchScore(job, skills, keywords = [], roles = []) {
+export function matchScore(job, skills, keywords = [], roles = [], range = 'related') {
   const have = new Set([...skills, ...keywords].map(s => String(s).toLowerCase()));
   const kw = new Set(keywords.map(s => String(s).toLowerCase()));
   const extra = [...skills, ...keywords];
   const inTitle = termsIn(job.role, extra), inBody = termsIn([job.details, job.jd].filter(Boolean).join('\n'), extra);
   const asked = [...new Set([...inTitle, ...inBody])];
   const w = (t) => (inTitle.has(t) ? 2 : 1) * (kw.has(t.toLowerCase()) ? 1.5 : 1);
-  const titleFit = roles.length ? (roleTerms(roles).some(ts => ts.some(r => new RegExp('\\b' + esc(r)).test(String(job.role || '').toLowerCase()))) ? 1 : 0) : 0.5;
+  const titleFit = roles.length ? (roleFits(job.role, roles, range) ? 1 : 0) : 0.5;
   if (!asked.length) return { score: Math.round(30 + 25 * titleFit), matched: [], missing: [] };
   const matched = asked.filter(t => have.has(t.toLowerCase())).sort((a, b) => w(b) - w(a));
   const missing = asked.filter(t => !have.has(t.toLowerCase())).sort((a, b) => w(b) - w(a));
@@ -1033,7 +1074,7 @@ export function filterJobs(jobs, view, apps = []) {
 /** Best new openings by score: at least minMatch, at most n, as job rows. */
 export function pickByScore(candidates, data, n, today) {
   const s = data.settings, skills = mySkills(data);
-  return candidates.map(c => Object.assign({ c }, matchScore(c, skills, s.keywords, s.prefs.roles)))
+  return candidates.map(c => Object.assign({ c }, matchScore(c, skills, s.keywords, s.prefs.roles, s.prefs.roleRange)))
     .filter(x => x.score >= s.minMatch)
     .sort((a, b) => b.score - a.score)
     .slice(0, n)

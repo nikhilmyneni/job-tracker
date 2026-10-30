@@ -2,14 +2,21 @@
  * First-run setup: one question per step. The same field blocks make up the Preferences part of Settings.
  */
 import { h, chipInput, segmented, busy, errText, extLink, icon } from './ui.js';
-import { LEVELS, JOB_TYPES, JOBS_PER_UPDATE, AUTO_UPDATE_HOURS, SINCE_DAYS, ATS, COMPANY_SUGGESTIONS, companyKey, normalizeCompany, parseCareerUrl, placeMatches, profileFromCv, applyCvProfile } from './core.js';
+import { LEVELS, JOB_TYPES, JOBS_PER_UPDATE, DAYS, ROLE_RANGES, SINCE_DAYS, ATS, COMPANY_SUGGESTIONS, companyKey, normalizeCompany, parseCareerUrl, placeMatches, profileFromCv, applyCvProfile } from './core.js';
 import { fetchBoard } from './sources.js';
 import { readCvFile, CV_ACCEPT } from './files.js';
 
 const ROLE_SUGGESTIONS = ['SOC Analyst', 'Security Analyst', 'Penetration Tester', 'Cloud Security', 'Security Engineer', 'GRC Analyst', 'Network Engineer', 'Software Developer'];
 const PLACE_SUGGESTIONS = ['Hyderabad', 'Bengaluru', 'Pune', 'Chennai', 'Mumbai', 'Delhi NCR', 'Remote', 'Anywhere in India'];
 const AVOID_SUGGESTIONS = ['Sales', 'Telecalling', 'Unpaid internships', 'Training institutes that charge fees', 'Night shifts', 'Bond / service agreement'];
-const autoLabel = (n) => (n ? `On sign-in, then every ${n}h` : 'Only when I click');
+const WEEK = [1, 2, 3, 4, 5, 6, 0]; // Mon first
+/** "Every day at 07:00", "Mon–Fri at 07:00"… for the summary. */
+export function scheduleLabel(sc) {
+  if (!sc.on || !sc.days.length) return 'Only when I click Sync now';
+  const days = sc.days.length === 7 ? 'Every day' : sc.days.join() === '1,2,3,4,5' ? 'Weekdays' : WEEK.filter(n => sc.days.includes(n)).map(n => DAYS[n]).join(', ');
+  return `${days}: Gmail at ${sc.gmailAt}, new jobs by ${sc.jobsAt}`;
+}
+const group = (label, control, hint) => h('div', { class: 'field', role: 'group', 'aria-label': label }, h('span', { class: 'field-lbl' }, label), control, hint ? h('span', { class: 'hint' }, hint) : '');
 
 const field = (label, control, hint) => h('label', { class: 'field' }, h('span', { class: 'field-lbl' }, label), control, hint ? h('span', { class: 'hint' }, hint) : '');
 const check = (checked, text) => { const i = h('input', { type: 'checkbox', checked }); return { el: h('label', { class: 'inline' }, i, ' ', text), get: () => i.checked }; };
@@ -55,15 +62,37 @@ export function avoidBlock(s) {
 }
 
 export function routineBlock(s) {
-  const jobs = segmented(Object.fromEntries(JOBS_PER_UPDATE.map(n => [n, n ? String(n) : 'Off'])), s.jobsPerUpdate, 'New jobs per update');
-  const auto = segmented(Object.fromEntries(AUTO_UPDATE_HOURS.map(n => [n, autoLabel(n)])), s.autoUpdateHours, 'Auto update');
+  const sc = s.schedule;
+  const on = h('input', { type: 'checkbox', class: 'switch', role: 'switch', checked: sc.on, 'aria-label': 'Daily updates' });
+  const onText = h('span', {}, sc.on ? 'On' : 'Off');
+  const days = WEEK.map(n => h('button', { type: 'button', class: 'day', 'aria-pressed': String(sc.days.includes(n)), 'data-day': n,
+    onclick: (e) => e.currentTarget.setAttribute('aria-pressed', String(e.currentTarget.getAttribute('aria-pressed') !== 'true')) }, DAYS[n]));
+  const gmailAt = h('input', { type: 'time', value: sc.gmailAt, step: 300, 'aria-label': 'Gmail sync at' });
+  const jobsAt = h('input', { type: 'time', value: sc.jobsAt, step: 300, 'aria-label': 'New jobs ready by' });
+  const timed = h('div', { class: 'stack' },
+    group('Days', h('div', { class: 'days' }, ...days)),
+    h('div', { class: 'two' },
+      field('Gmail sync at', gmailAt),
+      field('New jobs ready by', jobsAt)),
+    h('p', { class: 'hint' }, 'On this device’s clock. Job Hunter works inside this page, so if it’s closed at that time, it catches up as soon as you open it.'));
+  const showTimed = () => { onText.textContent = on.checked ? 'On' : 'Off'; timed.hidden = !on.checked; };
+  on.addEventListener('change', showTimed); showTimed();
+  const range = segmented(ROLE_RANGES, s.prefs.roleRange, 'Role range');
+  const jobs = segmented(Object.fromEntries(JOBS_PER_UPDATE.map(n => [n, n ? String(n) : 'Off'])), s.jobsPerUpdate, 'New jobs per day');
   const since = segmented(Object.fromEntries(SINCE_DAYS.map(n => [n, `${n} days`])), s.sinceDays, 'First search');
   return {
     el: h('div', { class: 'stack' },
-      field('New job matches per update', jobs.el),
-      field('Sync with Gmail', auto.el, 'Syncs as soon as you sign in, then again while the page stays open.'),
-      field('First time, look back through Gmail for', since.el)),
-    collect: (d) => { d.jobsPerUpdate = Number(jobs.get()); d.autoUpdateHours = Number(auto.get()); d.sinceDays = Number(since.get()); },
+      h('label', { class: 'switch-row' }, h('span', { class: 'field-lbl' }, 'Daily updates'), on, onText),
+      timed,
+      group('Role range', range.el, 'Which job titles count as a match for the roles you picked.'),
+      group('New jobs per day', jobs.el),
+      group('First time, look back through Gmail for', since.el)),
+    collect: (d) => {
+      const picked = days.filter(b => b.getAttribute('aria-pressed') === 'true').map(b => Number(b.dataset.day));
+      d.schedule = { on: on.checked && picked.length > 0, days: picked.length ? picked : sc.days, gmailAt: gmailAt.value || sc.gmailAt, jobsAt: jobsAt.value || sc.jobsAt };
+      d.prefs = Object.assign({}, d.prefs, { roleRange: range.get() });
+      d.jobsPerUpdate = Number(jobs.get()); d.sinceDays = Number(since.get());
+    },
   };
 }
 
@@ -253,7 +282,7 @@ export function runWizard(root, ctx) {
           row('Skip', p.avoid.join(', ')), row('CV', d.cv ? `${d.cv.length.toLocaleString()} characters${d.cvUpload ? ' · ' + d.cvUpload.name : ''}` : 'Not added yet'),
           row('Gmail', ctx.gmailOn && ctx.gmailOn() ? 'Connected (read-only)' : 'Not connected. You can connect it any time'),
           row('Companies', (d.companies || []).map(c => c.name).join(', ') || 'None yet'),
-                    row('Updates', `${autoLabel(d.autoUpdateHours)} · ${d.jobsPerUpdate || 'no'} new jobs each time`)),
+                    row('Updates', `${scheduleLabel(d.schedule)} · ${d.jobsPerUpdate || 'no'} new jobs a day · ${ROLE_RANGES[d.prefs.roleRange]}`)),
         h('p', { class: 'hint' }, ctx.gmailOn && ctx.gmailOn() ? 'Start reads your Gmail (read-only) from the last ' + d.sinceDays + ' days. Applications appear as they’re sorted.' : 'Start checks the companies you follow for openings.')];
       next = h('button', { type: 'button', class: 'btn btn-primary', onclick: () => busy(next, 'Saving…', () => ctx.finish(d), status) }, 'Start');
     }

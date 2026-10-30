@@ -88,7 +88,7 @@ window.addEventListener('popstate', () => render());
 
 // ---------- scores ----------
 const scoreOf = (job) => {
-  const m = C.matchScore(job, C.mySkills(ctx.data), ctx.data.settings.keywords, ctx.data.settings.prefs.roles);
+  const m = C.matchScore(job, C.mySkills(ctx.data), ctx.data.settings.keywords, ctx.data.settings.prefs.roles, ctx.data.settings.prefs.roleRange);
   return { score: m.score, fit: Math.max(1, Math.round(m.score / 20)), matched: m.matched.slice(0, 12), missing: m.missing.slice(0, 8), skill_gap: m.missing[0] || 'None' };
 };
 /** After your skills or keywords change, every match is scored again. */
@@ -129,6 +129,7 @@ const today = () => C.ymd(new Date());
 Object.assign(ctx.act, {
   async saveSettings(d) {
     ctx.data.settings = C.normalizeSettings(Object.assign({}, d, { onboarded: true }));
+    rescore(); // the role range and your keywords change scores
     await persist(); render(true);
   },
   async saveCv(text, file) {
@@ -317,16 +318,18 @@ function syncBanner(on, title, detail, frac) {
 }
 
 /** Sync now (also used for the automatic sync). One tab at a time. */
-async function updateNow() {
+/** Sync now runs everything; the schedule passes only the parts that are due ({gmail, jobs}). */
+async function updateNow(parts = { gmail: true, jobs: true }) {
   const btn = () => $('sync-now');
   const work = async () => {
     if (btn()) { btn().disabled = true; setLabel(btn().lastChild, 'Syncing…'); }
     const first = !ctx.data.lastRunAt;
-    syncBanner(true, !gmailOn() ? 'Checking company job boards' : !ctx.data.gmailRunAt ? 'Loading your applications' : 'Syncing with Gmail', 'Starting…', 0.03);
+    const gmail = parts.gmail && G.gmailConnected();
+    syncBanner(true, !gmail ? 'Looking for new jobs' : !ctx.data.gmailRunAt ? 'Loading your applications' : 'Syncing with Gmail', 'Starting…', 0.03);
     try {
       if (DEMO) { for (const [t, f] of [['Reading your application emails…', 0.3], ['Sorting emails 1–20 of 20…', 0.7], ['Checking company job boards…', 0.9]]) { syncBanner(true, null, t, f); await sleep(600); } toast('Demo sync done. Sign in to run it on your own Gmail.'); return; }
       const before = new Set(ctx.data.jobs.map(j => j.id));
-      const out = await guarded(() => runUpdate(ctx.data, ctx.me.email, (t, f) => syncBanner(true, null, t, f), () => render(true), { gmail: G.gmailConnected() }));
+      const out = await guarded(() => runUpdate(ctx.data, ctx.me.email, (t, f) => syncBanner(true, null, t, f), () => render(true), { gmail, jobs: parts.jobs, alerts: G.gmailConnected() }));
       await persist();
       render(true);
       if (!first) notifySync(ctx.data.settings, out.result, ctx.data.jobs.filter(j => !before.has(j.id)));
@@ -348,8 +351,17 @@ async function updateNow() {
   } else await work();
 }
 
-// While the page stays open, sync again every autoUpdateHours.
-setInterval(() => { if (!DEMO && ctx.data && G.signedIn() && C.autoUpdateDue(ctx.data, new Date(), false)) updateNow(); }, 5 * 60e3);
+// The schedule: on open, and every minute while the page is open, run whatever part is due (a failed try waits 10 min).
+let lastAutoTry = 0;
+function runScheduled() {
+  if (DEMO || !ctx.data || !G.signedIn() || Date.now() - lastAutoTry < C.MIN_UPDATE_GAP_MIN * 60e3) return;
+  const due = C.scheduleDue(ctx.data, new Date());
+  const gmail = due.gmail && G.gmailConnected();
+  if (!gmail && !due.jobs) return;
+  lastAutoTry = Date.now();
+  updateNow({ gmail, jobs: due.jobs });
+}
+setInterval(runScheduled, 60e3);
 
 // ---------- start ----------
 async function enter() {
@@ -359,7 +371,7 @@ async function enter() {
     return;
   }
   show('app'); render();
-  if (!DEMO && C.autoUpdateDue(ctx.data, new Date(), true)) updateNow();
+  runScheduled();
 }
 
 async function finishWizard(d) {
