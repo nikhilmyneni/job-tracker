@@ -90,3 +90,11 @@ test('a job with only a title that fits your roles is kept even above its title-
     { id: 'b', role: 'Sales Executive', company: 'Acme', location: 'Hyderabad', details: '' }], data, 5, '2026-10-30');
   assert.deepEqual(picked.map(j => j.role), ['Security Analyst']);
 });
+
+test('role names match how job boards write titles', () => {
+  assert.equal(C.roleFits('Cyber Security Analyst', ['Cybersecurity Analyst'], 'core'), true);
+  assert.equal(C.roleFits('Security Operations Center Analyst', ['SOC Analyst'], 'core'), true);
+  assert.equal(C.roleFits('VAPT Engineer', ['Penetration Tester'], 'core'), true);
+  assert.equal(C.roleFits('Security Analyst', ['Cloud Security'], 'core'), false);
+  assert.equal(C.roleFits('Security Engineer', ['Cybersecurity Analyst'], 'related'), true);
+});

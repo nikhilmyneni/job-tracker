@@ -253,6 +253,9 @@ const STEPS = [
 export function runWizard(root, ctx) {
   const d = JSON.parse(JSON.stringify(ctx.data.settings));
   d.cv = ctx.data.cv; d.cvFile = ctx.data.cvFile; d.cvUpload = null;
+  // A new user gets the whole routine set up here: the daily schedule, the built-in company list and email alerts
+  // (shown, with what's kept, on the routine step; untick to skip). All of it can be changed later in Settings.
+  if (!ctx.data.settings.onboarded) Object.assign(d, { emailAlerts: !ctx.demo, autoCompanies: true });
   // The CV fills in later answers once, and only the ones still at their defaults.
   const w = { fromCv: false, profile: { roles: [], found: {} } };
   const hint = ctx.me && !ctx.demo ? ctx.me.name : '';

@@ -796,7 +796,7 @@ export function listingsFromBoard(c, json) {
 }
 
 // Pre-filter before the AI scores anything, so big boards (hundreds of jobs) stay cheap.
-const GENERIC_WORDS = new Set(['analyst', 'engineer', 'developer', 'intern', 'internship', 'associate', 'specialist', 'trainee', 'executive',
+const GENERIC_WORDS = new Set(['analyst', 'engineer', 'developer', 'tester', 'consultant', 'intern', 'internship', 'associate', 'specialist', 'trainee', 'executive',
   'junior', 'graduate', 'fresher', 'entry', 'level', 'and', 'of', 'the', 'for', 'in', 'a', 'an', 'role', 'jobs', 'job']);
 const ROLE_SYNONYMS = {
   penetration: ['penetration', 'pentest', 'vapt', 'offensive', 'red team', 'ethical hack'],
@@ -806,6 +806,18 @@ const ROLE_SYNONYMS = {
   cloud: ['cloud', 'aws', 'azure', 'gcp', 'devsecops'],
   security: ['security', 'cyber', 'infosec', 'soc', 'appsec'],
   cyber: ['cyber', 'security', 'infosec'],
+  cybersecurity: ['cybersecurity', 'cyber', 'security', 'infosec'],
+  infosec: ['infosec', 'information security', 'security', 'cyber'],
+  appsec: ['appsec', 'application security', 'product security', 'security'],
+  devsecops: ['devsecops', 'security', 'devops'],
+  vapt: ['vapt', 'penetration', 'pentest', 'vulnerability', 'offensive'],
+  ethical: ['ethical hack', 'penetration', 'pentest', 'offensive'],
+  hacker: ['hack', 'penetration', 'pentest', 'offensive'],
+  threat: ['threat', 'detection', 'soc', 'incident'],
+  incident: ['incident', 'soc', 'detection', 'response'],
+  forensics: ['forensic', 'dfir', 'incident'],
+  vulnerability: ['vulnerability', 'vapt', 'security'],
+  information: ['information', 'infosec', 'security'],
   software: ['software', 'sde', 'developer', 'backend', 'frontend', 'full stack', 'fullstack'],
   network: ['network', 'noc'],
   data: ['data', 'analytics'],
@@ -838,10 +850,12 @@ export function roleTerms(roles) {
  */
 export function roleFits(title, roles, range = 'related') {
   const t = String(title || '').toLowerCase();
+  // core: every specific word of a role is there, as itself or a close synonym ("Cybersecurity Analyst" fits
+  // "Cyber Security Analyst"; "SOC Analyst" fits "Security Operations Analyst").
   if (range === 'core') return roles.some(r => {
     const words = String(r).toLowerCase().split(/[^a-z0-9+#]+/).filter(Boolean);
     const specific = words.filter(w => !GENERIC_WORDS.has(w));
-    return (specific.length ? specific : words).every(w => hasWord(t, w));
+    return (specific.length ? specific : words).every(w => (ROLE_SYNONYMS[w] || [w]).some(x => hasWord(t, x)));
   });
   return roleTerms(roles).some(ts => ts.some(w => hasWord(t, w)));
 }

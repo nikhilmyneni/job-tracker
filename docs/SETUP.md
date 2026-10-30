@@ -16,7 +16,8 @@ data stays in a hidden app folder in your own Google Drive.
    verified this app" screen here: click **Advanced → Go to Job Hunter**, tick the box to read your email, and
    click **Continue**. Skip it and you can connect later, or paste application emails yourself.
 4. Job Hunter already searches about 40 companies hiring in India (start-ups and MNCs like Accenture, Cisco, Adobe,
-   Salesforce, Citi and Visa). Follow any others you like, then click **Start**. With Gmail connected, the first sync reads the last
+   Salesforce, Citi and Visa). Follow any others you like. The last step sets your routine: daily times, how many jobs a day,
+   and email alerts (on unless you untick it). Then click **Start**. All of it can be changed later in Settings. With Gmail connected, the first sync reads the last
    30–120 days and applications appear as they're sorted.
 
 There's nothing else to set up: the AI is built in and free.
