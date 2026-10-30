@@ -41,6 +41,10 @@ and counts toward the 100-user cap. Without Gmail, users add applications by han
 - **Resume honesty.** Resumes use only facts from the user's CV text. Never invent experience,
   employers, numbers, skills, tools or certifications. The CV → ResumeFold conversion copies facts
   without rewriting, and goes through `cleanResumeFold`.
+- **A job search** (sync or email alert): `searchCompanies` boards, Workday searched with `searchWords` (first role + two that rotate
+  daily) → `boardCandidates` (`rejectReason`: role / senior / internOnly / fullTimeOnly / skipList / location; Stretch range skips the role
+  check) → `vetPostings` (reads the 3×n best postings; `postingProblem` drops 2+ years, unpaid, fees, "Dear Candidate" invites) →
+  `pickByScore` on the real descriptions: at least half Core when there are good Core jobs (`roleKind`), Stretch only with ≤1 skill missing.
 - **Rules first, AI second.** Matching never needs the AI: `matchScore` is a weighted keyword overlap (title ×2,
   your keywords ×1.5, a fifth from the title's fit with your roles) over `SKILL_VOCAB` + aliases, your skills
   (`mySkills`: CV skills + added − removed) and your keywords. If the AI is down, over today's allowance or not set

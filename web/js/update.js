@@ -5,7 +5,7 @@
 import * as C from './core.js';
 import * as G from './google.js';
 import { ask, hasAi } from './ai.js';
-import { fetchBoards } from './sources.js';
+import { fetchBoards, vetPostings } from './sources.js';
 
 const SORT_BATCH = 20, SORT_PARALLEL = 2;
 
@@ -156,7 +156,7 @@ async function findJobs(data, me, afterStr, seen, result, report, note, gmail) {
   const companies = C.searchCompanies(s);
   if (companies.length) {
     report('Checking company job boards…', 0.88);
-    const boards = await fetchBoards(companies, s.prefs.roles, (t) => report(t, 0.9));
+    const boards = await fetchBoards(companies, C.searchWords(s.prefs.roles, Date.now() / 864e5), (t) => report(t, 0.9));
     boards.notes.forEach(note);
     const fromBoards = C.boardCandidates(boards.listings, s.prefs, seen);
     fromBoards.forEach(l => seen.add(l.id)); // scored once; not offered again unless it's picked
@@ -169,11 +169,14 @@ async function findJobs(data, me, afterStr, seen, result, report, note, gmail) {
 
   const candidates = C.newCandidates(listings, data.jobs, data.applications, 120);
   if (!candidates.length) return;
-  report(`Scoring ${candidates.length} openings against your CV…`, 0.96);
-  C.pickByScore(candidates, data, s.jobsPerUpdate, C.ymd(new Date())).forEach(job => {
+  report(`Checking the best of ${candidates.length} openings…`, 0.96);
+  const dropped = {};
+  (await vetPostings(candidates, data, s.jobsPerUpdate, C.ymd(new Date()), (why) => { dropped[why] = (dropped[why] || 0) + 1; })).forEach(job => {
     data.jobs.push(job);
     result.jobsNew.push(`${job.company} – ${job.role} (${job.score}%)`);
   });
+  const left = Object.entries(dropped).map(([k, v]) => `${v} ${C.PROBLEM_TEXT[k]}`);
+  if (left.length) note(`Left out after reading the postings: ${left.join(', ')}.`);
 }
 
 /** The CV as ResumeFold's Resume JSON (not tailored: ResumeFold does that). Made once per CV and kept. */

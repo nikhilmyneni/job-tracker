@@ -5,7 +5,7 @@
  */
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import * as C from '../js/core.js';
-import { fetchBoards, useApiOrigin } from '../js/sources.js';
+import { fetchBoards, useApiOrigin, vetPostings } from '../js/sources.js';
 import { pipeline, cmd, parse } from './_store.js';
 import { mailReady, jobsEmail, sendMail } from './_mail.js';
 
@@ -69,11 +69,11 @@ export async function runAlerts({ now = new Date(), origin = '', budgetMs = 4000
     u.p.settings.prefs.roles.forEach(r => roles.add(r));
   });
   if (origin) useApiOrigin(origin);
-  const { listings, notes } = await fetchBoards([...boards.values()], [...roles].slice(0, 3), () => {});
+  const { listings, notes } = await fetchBoards([...boards.values()], C.searchWords([...roles], now.getTime() / 864e5), () => {});
 
   const appUrl = (origin || 'https://jobs4you.vercel.app') + '/app/matches';
   let emailed = 0, done = 0, candidates = 0, found = 0, mailError = '';
-  const leftOut = { seen: 0, role: 0, senior: 0, internOnly: 0, fullTimeOnly: 0, skipList: 0, location: 0, belowMinMatch: 0 };
+  const leftOut = { seen: 0, role: 0, senior: 0, internOnly: 0, fullTimeOnly: 0, skipList: 0, location: 0, belowMinMatch: 0, experience: 0, unpaid: 0, fee: 0, bulkInvite: 0 };
   for (const u of due) {
     if (Date.now() - start > budgetMs) break;
     const [seenRaw, foundRaw] = await pipeline([['GET', K.seen(u.sub)], ['GET', K.found(u.sub)]]);
@@ -83,7 +83,7 @@ export async function runAlerts({ now = new Date(), origin = '', budgetMs = 4000
     const data = { settings: u.p.settings, cv: '', skillsAdded: u.p.skills, skillsRemoved: [] };
     const cands = C.boardCandidates(theirs, u.p.settings.prefs, seen);
     cands.forEach(l => seen.add(l.id)); // scored once, as in the app
-    const jobs = C.pickByScore(cands, data, u.p.settings.jobsPerUpdate, u.day);
+    const jobs = await vetPostings(cands, data, u.p.settings.jobsPerUpdate, u.day, (why) => { leftOut[why]++; });
     candidates += cands.length; found += jobs.length;
     // Counts only (never anyone's settings), so a run's log shows which filter leaves jobs out.
     theirs.forEach(l => { const why = seen.has(l.id) && !cands.includes(l) ? 'seen' : C.rejectReason(l, u.p.settings.prefs); if (why) leftOut[why]++; });

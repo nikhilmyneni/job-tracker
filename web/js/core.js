@@ -9,7 +9,7 @@ export const STATUSES = ['Applied', 'Screening', 'Interview', 'Offer', 'Rejected
 export const JOB_STATUSES = ['New', 'Applied', 'Skipped', 'Expired'];
 export const JOBS_PER_UPDATE = [0, 3, 5, 10, 15];
 export const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']; // Date.getDay() order
-export const ROLE_RANGES = { core: 'Just my roles', related: 'My roles + related ones I’d fit' };
+export const ROLE_RANGES = { core: 'Just my roles', related: 'My roles + related ones I’d fit', stretch: 'Also stretch roles (one skill away)' };
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 export const SINCE_DAYS = [30, 60, 120];
 export const MIN_MATCHES = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90];
@@ -860,6 +860,22 @@ export function roleFits(title, roles, range = 'related') {
   return roleTerms(roles).some(ts => ts.some(w => hasWord(t, w)));
 }
 
+/** Core (your roles), Related (their close relatives) or Stretch (anything else) for a job title. */
+export function roleKind(title, roles) {
+  if (!roles.length) return 'Related';
+  return roleFits(title, roles, 'core') ? 'Core' : roleFits(title, roles, 'related') ? 'Related' : 'Stretch';
+}
+
+/**
+ * The words Workday boards are searched with today: your first role, plus two that change each day from your other
+ * roles and their synonyms, so the results don't repeat. day is any whole number that goes up by one a day.
+ */
+export function searchWords(roles, day) {
+  const pool = [...new Set([...roles.slice(1), ...roleTerms(roles).flat().filter(w => w.length > 3)].map(String))].filter(w => w.toLowerCase() !== String(roles[0] || '').toLowerCase());
+  const k = pool.length ? Math.abs(Math.floor(day)) % pool.length : 0;
+  return [roles[0], pool[k], pool[(k + 1) % pool.length]].filter((w, i, a) => w && a.indexOf(w) === i).slice(0, 3);
+}
+
 /** Whether a board listing is worth scoring, from its title and location alone. */
 export const matchesPrefs = (l, prefs) => !rejectReason(l, prefs);
 
@@ -867,7 +883,7 @@ export const matchesPrefs = (l, prefs) => !rejectReason(l, prefs);
 export function rejectReason(l, prefs) {
   const title = String(l.role || '').toLowerCase();
   if (!title) return 'role';
-  if (roleTerms(prefs.roles).length && !roleFits(title, prefs.roles, prefs.roleRange)) return 'role';
+  if (prefs.roleRange !== 'stretch' && roleTerms(prefs.roles).length && !roleFits(title, prefs.roles, prefs.roleRange)) return 'role';
   if (SENIOR_RE.test(title)) return 'senior';
   if ((prefs.jobType === 'internship' || prefs.level === 'intern') && !INTERN_RE.test(title)) return 'internOnly';
   if (prefs.jobType === 'fulltime' && /\bintern(ship)?\b/i.test(title)) return 'fullTimeOnly';
@@ -1232,11 +1248,15 @@ export function filterJobs(jobs, view, apps = []) {
 
 /** Best new openings by score: at least minMatch, at most n, as job rows. */
 export function pickByScore(candidates, data, n, today) {
-  const s = data.settings, skills = mySkills(data);
-  return candidates.map(c => Object.assign({ c }, matchScore(c, skills, s.keywords, s.prefs.roles, s.prefs.roleRange)))
+  const s = data.settings, skills = mySkills(data), roles = s.prefs.roles;
+  const scored = candidates.map(c => Object.assign({ c, kind: roleKind(c.role, roles) }, matchScore(c, skills, s.keywords, roles, s.prefs.roleRange)))
     .filter(x => x.score >= s.minMatch || x.titleOnly) // a title that fits your roles, with no description to score, still counts
-    .sort((a, b) => b.score - a.score)
-    .slice(0, n)
+    .filter(x => x.kind !== 'Stretch' || (x.matched.length >= 2 && x.missing.length <= 1)) // Stretch: only one skill to learn
+    .sort((a, b) => b.score - a.score);
+  // At least half the picks are Core whenever there are good Core jobs; the rest go by score.
+  const take = scored.filter(x => x.kind === 'Core').slice(0, Math.ceil(n / 2));
+  scored.forEach(x => { if (take.length < n && !take.includes(x)) take.push(x); });
+  return take.sort((a, b) => b.score - a.score)
     .map(({ c, score, matched, missing, titleOnly }) => ({
       id: newId(), found_on: today, fit: Math.max(1, Math.round(score / 20)), score, matched: matched.slice(0, 12), missing: missing.slice(0, 8),
       company: String(c.company).trim(), role: String(c.role).trim(), location: c.location || '', pay: c.pay || '',
@@ -1261,6 +1281,38 @@ export function pastedJob({ role = '', company = '', jd = '', link = '' }, today
     link: isHttpUrl(link) ? link : '', details: clip(text, 600), jd: clip(text, 8000), status: 'Saved',
     key: `${c}|${r}`.toLowerCase(), source: 'Pasted', ref: null,
   };
+}
+
+// ---------- Checking a posting (its full description) ----------
+const EXP_RE = /(\d{1,2})\s*(?:\+|plus)?\s*(?:(?:-|–|to)\s*\d{1,2}\s*)?\+?\s*years?['’]?\s*(?:of\s+)?(?:relevant\s+|professional\s+|work\s+|industry\s+|hands-on\s+|prior\s+)?(?:experience|exp\b)/gi;
+/** The fewest years of experience a description asks for (the most lenient mention), or null when it doesn't say. */
+export function minYears(text) {
+  let min = null;
+  for (const m of String(text || '').matchAll(EXP_RE)) { const y = Number(m[1]); if (y <= 30 && (min === null || y < min)) min = y; }
+  return min;
+}
+/**
+ * Why a posting isn't for a fresher looking for paid work ('' when it's fine), from its full description:
+ * experience (2+ years), unpaid (when you want paid work), fee (asks you to pay), bulkInvite ("Dear Candidate" mass mails).
+ */
+export function postingProblem(text, prefs = {}) {
+  const t = String(text || '');
+  if (/\bdear candidates?\b/i.test(t)) return 'bulkInvite';
+  if (/\b(?:registration|training|joining|processing|security|onboarding)\s+(?:fees?|charges?|deposit)\b|\bpay\s+(?:a|the|an)\s+(?:\w+\s+)?fee\b|\brefundable\s+deposit\b/i.test(t)) return 'fee';
+  if (prefs.paidOnly !== false && /\bunpaid\b|\bno\s+stipend\b|\bwithout\s+(?:any\s+)?stipend\b|\bstipend\s*[:\-]?\s*(?:nil|none|not\s+provided)\b/i.test(t)) return 'unpaid';
+  const y = minYears(t);
+  if (y !== null && y >= 2) return 'experience';
+  return '';
+}
+export const PROBLEM_TEXT = { experience: 'needs 2+ years', unpaid: 'unpaid', fee: 'asks for a fee', bulkInvite: 'a bulk “Dear Candidate” invite' };
+
+/** HTML entities to text, without a browser (job boards send descriptions with their HTML escaped). */
+export function decodeEntities(s) {
+  const named = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', ndash: '–', mdash: '—', rsquo: '’', lsquo: '‘', rdquo: '”', ldquo: '“', hellip: '…', bull: '•' };
+  return String(s || '').replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e) => {
+    if (e[0] === '#') { const n = e[1].toLowerCase() === 'x' ? parseInt(e.slice(2), 16) : Number(e.slice(1)); return n > 0 && n < 0x110000 ? String.fromCodePoint(n) : m; }
+    return named[e.toLowerCase()] ?? m;
+  });
 }
 
 // ---------- The CV in sections ----------

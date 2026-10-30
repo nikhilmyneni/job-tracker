@@ -28,7 +28,9 @@ There's nothing else to set up: the AI is built in and free.
 - **Syncing:** set your routine in setup or **Settings → Routine**: the days, when Gmail is read, and when new jobs
   should be ready (on your device's clock), plus the role range and how many new jobs a day. There's no background
   server, so Job Hunter syncs while it's open: if it was closed at those times, it catches up as soon as you open it.
-  **Sync now** runs everything straight away. On the day you sign up, Job Hunter also looks for jobs every two hours
+  **Sync now** runs everything straight away. Each job search reads the best postings in full and leaves out ones that
+  need 2+ years, are unpaid, ask for a fee, or are bulk "Dear Candidate" invites; at least half your picks are your core
+  roles when there are good ones. **Role range** can also be *Stretch*: other roles where you'd only need one more skill. On the day you sign up, Job Hunter also looks for jobs every two hours
   while it's open, until you have that day's matches.
 - **Email alerts (optional):** turn on *Email me when new jobs are ready* in setup or **Settings → Routine**. At your
   "New jobs ready by" time, Job Hunter looks through the companies you follow even while it's closed and emails you the

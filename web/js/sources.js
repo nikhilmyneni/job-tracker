@@ -51,7 +51,7 @@ export async function fetchBoards(companies, roles, report) {
 
 /** A safe HTML → text: DOMParser never runs scripts or loads anything. */
 const htmlText = (html) => C.htmlToText(String(html || ''));
-const decodeEntities = (s) => new DOMParser().parseFromString(String(s || ''), 'text/html').documentElement.textContent;
+const decodeEntities = C.decodeEntities; // no DOMParser: this also runs on the server (email alerts)
 
 /** The full job description, fetched when you ask for it (for ResumeFold). Falls back to what we already have. */
 export async function jobDescription(job) {
@@ -82,4 +82,25 @@ export async function jobDescription(job) {
     }
   } catch (e) { /* use what we have */ }
   return fallback;
+}
+
+/**
+ * Step 4 of a job search: read the best candidates' full postings, drop the ones that aren't for you (2+ years, unpaid,
+ * a fee, a bulk invite), then pick the n best by their real descriptions. onDrop(reason, job) is told about each drop.
+ */
+export async function vetPostings(candidates, data, n, today, onDrop = () => {}) {
+  const pre = C.pickByScore(candidates, data, n * 3, today);
+  const kept = [];
+  let i = 0;
+  await Promise.all([0, 1, 2, 3].map(async () => {
+    while (i < pre.length) {
+      const j = pre[i++];
+      const text = await jobDescription(j);
+      const why = C.postingProblem(text, data.settings.prefs);
+      if (why) onDrop(why, j); else kept.push(Object.assign({}, j, { details: text }));
+    }
+  }));
+  const picked = C.pickByScore(kept, data, n, today);
+  picked.forEach(p => { const k = kept.find(x => x.key === p.key && x.link === p.link); if (k) p.jd = C.clip(k.details, 8000); });
+  return picked;
 }

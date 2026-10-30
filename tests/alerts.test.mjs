@@ -33,6 +33,9 @@ globalThis.fetch = async (url, opts = {}) => {
   }
   if (u === 'https://store.test/pipeline') return json(200, JSON.parse(opts.body).map(cmd => ({ result: redis(cmd) })));
   if (u === 'https://api.brevo.com/v3/smtp/email') { mails.push(JSON.parse(opts.body)); return json(201, { messageId: 'x' }); }
+  if (/^https:\/\/boards-api\.greenhouse\.io\/v1\/boards\/[^/]+\/jobs\/\d+$/.test(u)) { // one posting's full description
+    return json(200, { content: '&lt;p&gt;Monitor SIEM alerts in Splunk. 0-1 years of experience. Stipend paid.&lt;/p&gt;' });
+  }
   if (u.startsWith('https://boards-api.greenhouse.io/v1/boards/')) {
     boardCalls.push(u);
     return json(200, { jobs: [

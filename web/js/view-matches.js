@@ -4,7 +4,7 @@
  * tailored resume) or the list with the selected job's details beside it (a dialog on phones).
  */
 import { h, busy, icon, pageHead, ago, extLink, isHttp, chipInput, openDialog, toast, errText } from './ui.js';
-import { filterJobs, MIN_MATCHES, roleFits, tailorSuggestions, applySuggestions } from './core.js';
+import { filterJobs, MIN_MATCHES, roleKind, tailorSuggestions, applySuggestions } from './core.js';
 import { renderSheet } from './view-tailor.js';
 
 let show = 'New', selectedId = null;
@@ -151,11 +151,11 @@ function jobsTable(ctx, rows, redraw) {
       const { resume, template } = readyResume(ctx, j);
       await act.printResume(j, renderSheet(resume, template));
     }) }, h('span', {}, 'Resume PDF'), icon('download'));
-    const core = roles.length && roleFits(j.role, roles, 'core');
+    const kind = roleKind(j.role, roles);
     return h('tr', {},
       h('td', { class: 'num' }, h('span', { class: 'fit fit-' + fit, title: `Fit ${fit} of 5` }, fit)),
       h('td', { class: 'num' }, h('span', { class: 'score score-sm' + (sc >= 80 ? ' score-hi' : ''), 'aria-label': `${sc}% match` }, sc + '%')),
-      h('td', {}, h('span', { class: 'pill ' + (core ? 'pill-blue' : '') }, core ? 'Core' : 'Related')),
+      h('td', {}, h('span', { class: 'pill ' + (kind === 'Core' ? 'pill-blue' : kind === 'Stretch' ? 'pill-orange' : '') }, kind)),
       h('td', {}, h('b', {}, j.company)),
       h('td', { class: 'col-role' }, isHttp(j.link) ? h('a', { href: j.link, target: '_blank', rel: 'noopener noreferrer' }, j.role) : j.role),
       h('td', {}, j.location || '—'),

@@ -98,3 +98,31 @@ test('role names match how job boards write titles', () => {
   assert.equal(C.roleFits('Security Analyst', ['Cloud Security'], 'core'), false);
   assert.equal(C.roleFits('Security Engineer', ['Cybersecurity Analyst'], 'related'), true);
 });
+
+test('reading a posting: 2+ years, unpaid, fees and bulk invites are caught', () => {
+  assert.equal(C.minYears('We need 3+ years of experience in SOC. 0-1 years of experience is fine for interns.'), 0);
+  assert.equal(C.minYears('Requires 2-4 years of relevant experience.'), 2);
+  assert.equal(C.minYears('Freshers welcome.'), null);
+  assert.equal(C.postingProblem('Requires 3+ years of experience with Splunk.'), 'experience');
+  assert.equal(C.postingProblem('Unpaid internship, certificate provided.', { paidOnly: true }), 'unpaid');
+  assert.equal(C.postingProblem('Unpaid internship, certificate provided.', { paidOnly: false }), '');
+  assert.equal(C.postingProblem('Pay a registration fee of Rs 999 to confirm your seat.'), 'fee');
+  assert.equal(C.postingProblem('Dear Candidate, you have been shortlisted for our training program.'), 'bulkInvite');
+  assert.equal(C.postingProblem('Monitor SIEM alerts. 0-1 years. Stipend ₹20k/month.'), '');
+  assert.equal(C.decodeEntities('&lt;p&gt;R&amp;D &#8377;20k&lt;/p&gt;'), '<p>R&D ₹20k</p>');
+});
+
+test('Core first: at least half the picks are Core when good Core jobs exist; Stretch only one skill away', () => {
+  const data = { settings: C.normalizeSettings({ prefs: { roles: ['SOC Analyst'], roleRange: 'stretch' }, minMatch: 0 }), cv: 'SIEM, Splunk, Python, Linux', skillsAdded: [], skillsRemoved: [] };
+  const L = (id, role, details) => ({ id, role, company: 'Acme' + id, location: 'Hyderabad', details, key: id });
+  const picked = C.pickByScore([
+    L('1', 'SOC Analyst', 'SIEM, Splunk'), L('2', 'Security Engineer', 'Python, Linux, SIEM, Splunk'), L('3', 'Backend Developer', 'Python, Linux, Splunk'),
+    L('4', 'Data Engineer', 'Spark, Kafka, Scala, Python'), L('5', 'Security Analyst', 'Python, Linux, SIEM'),
+  ], data, 2, '2026-10-30');
+  assert.ok(picked.some(j => j.role === 'SOC Analyst')); // Core kept even though others score higher
+  assert.equal(C.roleKind('Backend Developer', ['SOC Analyst']), 'Stretch');
+  const all = C.pickByScore([L('3', 'Backend Developer', 'Python, Linux, Splunk'), L('4', 'Data Engineer', 'Spark, Kafka, Scala, Python')], data, 5, '2026-10-30');
+  assert.deepEqual(all.map(j => j.role), ['Backend Developer']); // Data Engineer is more than one skill away
+  const w1 = C.searchWords(['SOC Analyst', 'Penetration Tester'], 100), w2 = C.searchWords(['SOC Analyst', 'Penetration Tester'], 101);
+  assert.equal(w1[0], 'SOC Analyst'); assert.equal(w2[0], 'SOC Analyst'); assert.notDeepEqual(w1, w2);
+});
