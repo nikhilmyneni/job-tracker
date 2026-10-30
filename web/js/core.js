@@ -1519,6 +1519,9 @@ export function resumeFromCv(cv, opts = {}) {
   return cleanResumeFold(r) || r;
 }
 
+/** A skills group's label, or '' when it would only repeat the section heading ("Skills: Skills: …"). */
+export const skillLabel = (g) => (g && g.category && !/^\s*(technical\s+)?skills?\s*$/i.test(g.category) ? g.category : '');
+
 /** Everything a resume says, as plain text (for scoring and checks). */
 export function resumeText(r) {
   const x = [r.contact && r.contact.headline, r.summary];
@@ -1694,7 +1697,7 @@ export function resumeLatex(r) {
   const items = (list) => (list && list.length ? ['\\begin{itemize}', ...list.map(b => `\\item ${texEsc(b)}`), '\\end{itemize}'] : []);
   const head = (left, right) => `\\textbf{${texEsc(left)}}${right ? ` \\hfill ${texEsc(right)}` : ''}\\\\`;
   if (r.summary) L.push('\\section{Summary}', texEsc(r.summary));
-  if ((r.skills || []).length) L.push('\\section{Skills}', ...r.skills.map(s => `\\textbf{${texEsc(s.category)}:} ${texEsc(s.items.join(', '))}\\\\`));
+  if ((r.skills || []).length) L.push('\\section{Skills}', ...r.skills.map(s => `${skillLabel(s) ? `\\textbf{${texEsc(skillLabel(s))}:} ` : ''}${texEsc(s.items.join(', '))}\\\\`));
   if ((r.experience || []).length) { L.push('\\section{Experience}'); r.experience.forEach(e => L.push(head([e.title, e.company].filter(Boolean).join(', '), dateRange(e)), ...items(e.bullets))); }
   if ((r.projects || []).length) { L.push('\\section{Projects}'); r.projects.forEach(p => L.push(head([p.name, p.tech].filter(Boolean).join(' — '), dateRange(p)), ...items(p.bullets))); }
   if ((r.education || []).length) { L.push('\\section{Education}'); r.education.forEach(e => L.push(head([e.degree, e.field, e.school].filter(Boolean).join(', '), dateRange(e)), ...items([e.gpa && (/[a-z%]/i.test(e.gpa) ? e.gpa : `GPA ${e.gpa}`), ...(e.details || [])].filter(Boolean)))); }

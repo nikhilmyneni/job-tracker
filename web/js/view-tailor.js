@@ -5,7 +5,7 @@
  */
 import { h, busy, icon, pageHead, extLink, isHttp, toast, errText } from './ui.js';
 import { HEADINGS, ORDER } from './pdf.js';
-import { TEMPLATES, matchLabel, atsScore, tailorSuggestions, applySuggestions, tailorScore, highlightJd, termsIn, dateRange, RESUMEFOLD_URL } from './core.js';
+import { TEMPLATES, skillLabel, matchLabel, atsScore, tailorSuggestions, applySuggestions, tailorScore, highlightJd, termsIn, dateRange, RESUMEFOLD_URL } from './core.js';
 
 export function renderTailor(ctx, root, jobId) {
   const { data, act } = ctx;
@@ -171,7 +171,7 @@ export function renderSheet(r, template, changed = new Set()) {
       return h('div', { class: 'rs-entry' }, row(h('b', {}, e.school || degree), dateRange(e)), e.school && degree ? row(h('i', {}, degree), e.location || '') : '', bullets(e.details));
     })) : '',
     skills: (r.skills || []).length ? sec('skills', h('div', { class: 'rs-skills' + (changed.has('skills') ? ' chg' : '') },
-      ...r.skills.map(s => h('p', {}, `${s.category}: `, ...items(s))))) : '',
+      ...r.skills.map(s => h('p', {}, skillLabel(s) ? `${skillLabel(s)}: ` : '', ...items(s))))) : '',
     projects: (r.projects || []).length ? sec('projects', ...r.projects.map(p => h('div', { class: 'rs-entry' + (changed.has('project:' + p.id) || changed.has('bullets:' + p.id) ? ' chg' : '') },
       row(h('b', {}, [p.name, p.tech].filter(Boolean).join(' | ')), dateRange(p)), bullets(p.bullets)))) : '',
     certifications: (r.certifications || []).length ? sec('certifications', ...r.certifications.map(x => row(h('b', {}, [x.name, x.issuer].filter(Boolean).join(', ')), dateRange(x), 'rs-cert'))) : '',

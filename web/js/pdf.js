@@ -8,7 +8,7 @@
  * resumePdf(resume, template, fonts?) where fonts = {R, B, I} from readTtf().
  */
 import { CODES, HELVETICA, HELVETICA_BOLD, HELVETICA_OBLIQUE } from './pdf-fonts.js';
-import { dateRange } from './core.js';
+import { dateRange, skillLabel } from './core.js';
 
 const PAGE_W = 595.28, PAGE_H = 841.89;
 const MARGIN_Y = 36, MARGIN_X = 44.64; // ResumeFold "normal" margins (0.5in / 0.62in)
@@ -166,7 +166,7 @@ function layout(r, t, k) {
     }
     if (key === 'skills' && (r.skills || []).length) {
       heading(key);
-      r.skills.forEach(g => { para([{ text: `${g.category}: `, f: 'R', color: 'ink' }, { text: (g.items || []).join(', '), f: 'R', color: 'ink' }], size); doc.y -= gap(1.8); });
+      r.skills.forEach(g => { para([skillLabel(g) ? { text: `${skillLabel(g)}: `, f: 'R', color: 'ink' } : null, { text: (g.items || []).join(', '), f: 'R', color: 'ink' }].filter(Boolean), size); doc.y -= gap(1.8); });
     }
     if (key === 'projects' && (r.projects || []).length) {
       heading(key);

@@ -3,6 +3,7 @@
  * A .docx is a ZIP of XML files: we read word/document.xml and turn its paragraphs into lines.
  * zipStore writes a ZIP (used by the tests to build sample files).
  */
+import { skillLabel } from './core.js';
 // ---------- ZIP ----------
 const CRC_TABLE = (() => {
   const t = new Uint32Array(256);
@@ -119,7 +120,7 @@ export function resumeDocumentXml(r) {
   if (c.headline) out.push(para(run(c.headline, '<w:color w:val="39425C"/>')));
   out.push(para(run([c.email, c.phone, c.location, c.linkedin, c.github, c.website].filter(Boolean).join(' | '), '<w:sz w:val="18"/>'), '<w:spacing w:after="80"/>'));
   if (r.summary) { heading('Summary'); out.push(para(run(r.summary))); }
-  if ((r.skills || []).length) { heading('Skills'); r.skills.forEach(s => out.push(para(run(s.category + ': ', '<w:b/>') + run(s.items.join(', '))))); }
+  if ((r.skills || []).length) { heading('Skills'); r.skills.forEach(s => out.push(para((skillLabel(s) ? run(skillLabel(s) + ': ', '<w:b/>') : '') + run(s.items.join(', '))))); }
   if ((r.experience || []).length) { heading('Experience'); r.experience.forEach(e => { line([e.title, e.company].filter(Boolean).join(', '), range(e)); bullets(e.bullets); }); }
   if ((r.projects || []).length) { heading('Projects'); r.projects.forEach(p => { line([p.name, p.tech].filter(Boolean).join(' — '), range(p)); bullets(p.bullets); }); }
   if ((r.education || []).length) { heading('Education'); r.education.forEach(e => { line([e.degree, e.field, e.school].filter(Boolean).join(', '), range(e)); bullets([e.gpa && (/[a-z%]/i.test(e.gpa) ? e.gpa : `GPA ${e.gpa}`), ...(e.details || [])]); }); }
