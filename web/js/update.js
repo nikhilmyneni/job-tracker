@@ -21,8 +21,14 @@ export async function runUpdate(data, me, report, refresh = () => {}, { gmail = 
   const seen = new Set(data.seen);
   const now = new Date();
   // Gmail is read from where it was last read, so connecting it later still looks back sinceDays.
-  // Data from before gmailScan 2 looks back the full sinceDays once, to pick up emails the old sync skipped.
-  const after = data.gmailRunAt && data.gmailScan === 2 ? new Date(new Date(data.gmailRunAt).getTime() - 2 * 864e5) : new Date(now.getTime() - s.sinceDays * 864e5);
+  // Data read the older way looks back the full sinceDays once, and reads its application emails again
+  // (job-alert ids and job ids stay seen), to pick up what the older search and rules missed.
+  const rescan = gmail && data.gmailScan !== C.GMAIL_SCAN;
+  if (rescan && !data.gmailRescan) { // once: a re-read longer than one sync carries on from where it got to
+    [...seen].forEach(id => { if (/^[0-9a-f]{12,20}$/.test(id)) seen.delete(id); });
+    data.gmailRescan = true;
+  }
+  const after = data.gmailRunAt && !rescan ? new Date(new Date(data.gmailRunAt).getTime() - 2 * 864e5) : new Date(now.getTime() - s.sinceDays * 864e5);
   const afterStr = C.gmailDate(after);
   const note = (t) => { result.notes.push(t); };
 
@@ -40,7 +46,7 @@ export async function runUpdate(data, me, report, refresh = () => {}, { gmail = 
 
   data.seen = [...seen];
   data.lastRunAt = now.toISOString();
-  if (gmail && !left) { data.gmailRunAt = data.lastRunAt; data.gmailScan = 2; }
+  if (gmail && !left) { data.gmailRunAt = data.lastRunAt; data.gmailScan = C.GMAIL_SCAN; data.gmailRescan = false; }
   if (jobs) data.jobsRunAt = data.lastRunAt;
   const text = C.summaryText(result);
   C.addLog(data, 'Update: ' + text.replace(/\n/g, ' | '), now);
@@ -83,6 +89,9 @@ async function classifyBatch(s, batch, note) {
     try {
       const out = await ask(s, C.classifyPrompt(batch), true, () => {}, 'classify');
       all = (Array.isArray(out) ? out : []).map(u => Object.assign({ email: batch[Number(u.n)] }, u)).filter(u => u.email);
+      // The AI sometimes leaves an email out of its answer: those are sorted by the rules instead of being lost.
+      const answered = new Set(all.map(u => u.email));
+      batch.filter(e => !answered.has(e)).forEach(e => all.push(Object.assign({ email: e }, C.ruleClassify(e))));
     } catch (e) {
       note(`AI couldn't sort some emails (${e.message}). Used keyword rules for those.`);
     }

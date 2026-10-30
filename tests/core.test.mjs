@@ -450,3 +450,34 @@ test('gmailRunAt: kept separately; older files count their last run', () => {
   assert.equal(C.normalizeData({ lastRunAt: '2026-10-01T00:00:00Z', gmailRunAt: '' }).gmailRunAt, '');
   assert.equal(C.emptyData().gmailRunAt, '');
 });
+
+test('job-site emails are filed under the employer they name, never the job site', () => {
+  const li = C.ruleClassify({ from: 'LinkedIn <jobs-noreply@linkedin.com>', subject: 'Test, your application was sent to Acme Robotics', body: 'Your application was sent to Acme Robotics.' });
+  assert.equal(li.company, 'Acme Robotics'); assert.equal(li.is_application_update, true);
+  const nk = C.ruleClassify({ from: 'Naukri <info@naukri.com>', subject: 'You have successfully applied to SOC Analyst at Orion Labs', body: '' });
+  assert.equal(nk.company, 'Orion Labs'); assert.equal(nk.role, 'SOC Analyst'); assert.equal(nk.stage, 'Applied');
+  assert.equal(C.jobSiteParts('Your application was sent to Kestrel Systems Pvt Ltd.').company, 'Kestrel Systems');
+  assert.equal(C.jobSiteParts('Your application to Pragati Infotech was viewed').company, 'Pragati Infotech');
+  const unnamed = C.ruleClassify({ from: 'Indeed <indeedapply@indeed.com>', subject: 'Indeed Application: Cloud Intern', body: 'Your application has been submitted.' });
+  assert.equal(unnamed.company, ''); assert.equal(unnamed.needs_review, true); // a look, not an "Indeed" card
+});
+
+test('the application search covers Promotions only for job sites and application systems', () => {
+  const q = C.appSearch('2026/07/01');
+  assert.match(q, /-category:social/);
+  assert.match(q, /\(-category:promotions OR \{from:linkedin\.com [^}]*from:myworkday\.com[^}]*\}\)/);
+  assert.match(q, /"successfully applied"/);
+});
+
+test('an older email, or one from before your own change, never moves an application back', () => {
+  const apps = [], r = C.newResult();
+  C.upsertApplication(apps, { company: 'Acme', role: 'SOC Analyst', stage: 'Interview', date: '2026-10-20' }, r);
+  C.upsertApplication(apps, { company: 'Acme', role: 'SOC Analyst', stage: 'Applied', date: '2026-10-01', link: 'https://mail.google.com/x' }, r);
+  assert.equal(apps[0].status, 'Interview');
+  assert.equal(apps[0].history.length, 1);
+  C.setApplicationStatus(apps[0], 'Rejected', '2026-10-25');
+  C.upsertApplication(apps, { company: 'Acme', role: 'SOC Analyst', stage: 'Interview', date: '2026-10-24' }, r);
+  assert.equal(apps[0].status, 'Rejected');
+  C.upsertApplication(apps, { company: 'Acme', role: 'SOC Analyst', stage: 'Offer', date: '2026-10-28' }, r);
+  assert.equal(apps[0].status, 'Offer');
+});

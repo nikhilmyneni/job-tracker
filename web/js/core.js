@@ -17,10 +17,14 @@ export const LEVELS = { fresher: 'Fresher (0–1 year)', intern: 'Internship', b
 export const JOB_TYPES = { fulltime: 'Full-time', internship: 'Internship', both: 'Full-time or internship' };
 export const GHOST_DAYS = 21;
 // Emails read per sync (the rest are read on the next one, oldest first), job-alert emails, and how far a search lists.
+// 3: per message, every match, job sites' employers, Promotions for job sites (2 lacked the last two; 1 read 80 threads).
+export const GMAIL_SCAN = 3;
 export const MAX_EMAILS = 300, MAX_ALERT_EMAILS = 25, MAX_LISTED = 2000;
 export const MAX_SEEN = 5000, MAX_LOG = 300, MAX_JOBS = 1000, MAX_CV = 20000;
 
-export const APP_QUERY = '("thank you for applying" OR "thanks for applying" OR "application received" OR "received your application" OR "your application" OR "application for" OR "applied for" OR "application was sent" OR "application has been" OR "application status" OR "update on your application" OR "thank you for your interest" OR "your candidacy" OR "next steps" OR "next round" OR interview OR shortlisted OR assessment OR "online test" OR "coding test" OR "aptitude test" OR "technical round" OR "hr round" OR hackerrank OR hackerearth OR codility OR mettl OR unfortunately OR "not moving forward" OR "regret to inform" OR "not been selected" OR "not selected" OR "offer letter" OR "pleased to offer" OR "joining date" OR withdrawn) -category:promotions -category:social';
+// Job sites and application systems: their confirmations often land in Promotions, so that tab is searched for them only.
+const APPLY_SENDERS = 'from:linkedin.com from:naukri.com from:internshala.com from:indeed.com from:foundit.in from:instahyre.com from:wellfound.com from:unstop.com from:cutshort.io from:hirist.tech from:apna.co from:shine.com from:myworkday.com from:greenhouse.io from:lever.co from:ashbyhq.com from:smartrecruiters.com from:workablemail.com from:icims.com from:successfactors.com from:taleo.net from:hirepro.in from:superset.com';
+export const APP_QUERY = `("thank you for applying" OR "thanks for applying" OR "application received" OR "received your application" OR "your application" OR "application for" OR "applied for" OR "application was sent" OR "application has been" OR "application status" OR "update on your application" OR "thank you for your interest" OR "your candidacy" OR "next steps" OR "next round" OR interview OR shortlisted OR assessment OR "online test" OR "coding test" OR "aptitude test" OR "technical round" OR "hr round" OR hackerrank OR hackerearth OR codility OR mettl OR unfortunately OR "not moving forward" OR "regret to inform" OR "not been selected" OR "not selected" OR "offer letter" OR "pleased to offer" OR "joining date" OR withdrawn OR "successfully applied" OR "applied successfully" OR "application submitted" OR "under review" OR "we have received" OR "you applied" OR "applied to" OR candidature) -category:social (-category:promotions OR {${APPLY_SENDERS}})`;
 export const ALERT_SENDERS = 'from:linkedin.com OR from:naukri.com OR from:naukri.in OR from:internshala.com OR from:indeed.com OR from:foundit.in OR from:instahyre.com OR from:wellfound.com OR from:glassdoor.com OR from:apna.co OR from:unstop.com OR from:cutshort.io OR from:hirist.tech OR from:shine.com OR from:timesjobs.com OR from:monsterindia.com';
 
 // Job sites' own application emails ("Your application was sent to…") count, so only their alert-only senders are left out.
@@ -137,7 +141,7 @@ export function prefsText(s) {
 
 // ---------- Data file ----------
 export function emptyData() {
-  return { version: 2, settings: defaultSettings(), applications: [], jobs: [], seen: [], log: [], cv: '', cvFile: null, cvFold: null, cvFoldHash: '', review: [], reviewDone: [], skillsAdded: [], skillsRemoved: [], lastRunAt: '', gmailRunAt: '', gmailScan: 2, jobsRunAt: '' };
+  return { version: 2, settings: defaultSettings(), applications: [], jobs: [], seen: [], log: [], cv: '', cvFile: null, cvFold: null, cvFoldHash: '', review: [], reviewDone: [], skillsAdded: [], skillsRemoved: [], lastRunAt: '', gmailRunAt: '', gmailScan: GMAIL_SCAN, gmailRescan: false, jobsRunAt: '' };
 }
 
 export function normalizeData(raw) {
@@ -162,8 +166,9 @@ export function normalizeData(raw) {
     lastRunAt: typeof r.lastRunAt === 'string' ? r.lastRunAt : '',
     // When job boards were last checked (older files did it on every run).
     jobsRunAt: typeof r.jobsRunAt === 'string' ? r.jobsRunAt : (typeof r.lastRunAt === 'string' ? r.lastRunAt : ''),
-    // 2: Gmail is read by message, every match (older syncs read at most 80 threads and could skip some).
-    gmailScan: r.gmailScan === 2 ? 2 : 1,
+    // GMAIL_SCAN: how Gmail is read now. Older data reads its application emails again once, with the better search and rules.
+    gmailScan: r.gmailScan === GMAIL_SCAN ? GMAIL_SCAN : 1,
+    gmailRescan: r.gmailRescan === true, // a re-read is under way (its seen ids were cleared once)
     // When Gmail was last read. Older files read Gmail on every run, so their lastRunAt counts.
     gmailRunAt: typeof r.gmailRunAt === 'string' ? r.gmailRunAt : (typeof r.lastRunAt === 'string' && !('gmailRunAt' in r) ? r.lastRunAt : ''),
   };
@@ -258,6 +263,34 @@ export function classifyPrompt(batch) {
     batch.map((e, i) => `### Email ${i}\nFrom: ${e.from}\nDate: ${e.date.toISOString().slice(0, 10)}\nSubject: ${e.subject}\n${e.body}`).join('\n\n');
 }
 
+// Job sites that send confirmations on the employer's behalf; their sender name is never the company.
+const JOB_SITE_RE = /linkedin|naukri|internshala|indeed|foundit|instahyre|wellfound|glassdoor|apna\.co|unstop|cutshort|hirist|shine\.com|timesjobs|monsterindia|superset/i;
+const NAME = "([A-Z0-9][\\w&.,'()\\- ]{1,60}?)";
+const COMPANY_RES = [
+  new RegExp('(?:application|resume|profile|candidature)\\s+(?:was|has been|is)?\\s*(?:sent|submitted|shared|forwarded)\\s+to\\s+' + NAME + '(?=\\s*(?:[.!,\\n]|$| for | has | is ))'),
+  new RegExp('(?:applied|applying)\\s+(?:to|at|with)\\s+' + NAME + '(?=\\s*(?:[.!,\\n]|$| for | has | is ))'),
+  new RegExp('\\b(?:at|to)\\s+' + NAME + '\\s+(?:has been|was|is)\\s+(?:sent|submitted|received|viewed)'),
+  new RegExp('(?:role|position|job|internship|opening)\\s+at\\s+' + NAME + '(?=\\s*(?:[.!,\\n]|$| has | is | was ))'),
+  new RegExp('^' + NAME + '\\s+(?:has\\s+)?(?:received|viewed|reviewed|shortlisted)\\s+your\\s+application', 'm'),
+];
+/**
+ * The employer (and role, when it says) named in a job site's email: "Your application was sent to Acme",
+ * "You applied to SOC Analyst at Acme". Returns {company, role}; company is '' when none is named.
+ */
+export function jobSiteParts(text) {
+  const t = String(text || '').replace(/\r/g, '');
+  for (const re of COMPANY_RES) {
+    const m = t.match(re);
+    if (!m) continue;
+    let c = m[1], role = '';
+    const at = c.lastIndexOf(' at ');
+    if (at > 0) { role = c.slice(0, at).trim(); c = c.slice(at + 4); }
+    c = c.replace(/[\s,.-]+$/, '').replace(/(?:\s+(?:Pvt|Private|Ltd|Limited|Inc|LLP)\.?)+$/i, '').replace(/[\s,.-]+$/, '').trim();
+    if (c.length >= 2 && !JOB_SITE_RE.test(c) && !/^(the|a|an|this|your|our|you)$/i.test(c)) return { company: c, role: role.slice(0, 80) };
+  }
+  return { company: '', role: '' };
+}
+
 export function ruleClassify(e) {
   const t = (e.subject + ' ' + e.body).toLowerCase();
   let stage = null;
@@ -266,12 +299,14 @@ export function ruleClassify(e) {
   else if (/interview/.test(t)) stage = 'Interview';
   else if (/assessment|online test|coding test|shortlisted/.test(t)) stage = 'Screening';
   else if (/withdrawn/.test(t)) stage = 'Withdrawn';
-  else if (/thank(s| you) for applying|application (has been )?received|received your application|your application/.test(t)) stage = 'Applied';
+  else if (/thank(s| you) for applying|application (has been )?received|received your application|your application|successfully applied|applied successfully|application (was |has been )?(sent|submitted)|you applied|applied to/.test(t)) stage = 'Applied';
   const looksRelated = /\b(application|applied|interview|assessment|shortlist(ed)?|offer|candidature)\b/i.test(e.subject);
   if (!stage) return { is_application_update: false, needs_review: looksRelated };
-  const company = companyFromSender(e.from);
-  const rm = e.subject.match(/(?:for|–|-)\s+(?:the\s+)?(.+?)\s+(?:position|role|job|opening|internship)/i) || e.subject.match(/application for\s+(.+)$/i);
-  return { is_application_update: !!company, needs_review: !company, company, role: rm ? rm[1].trim() : '', stage, next_step: stage === 'Screening' ? 'Complete the assessment' : stage === 'Interview' ? 'Prepare for / schedule the interview' : '' };
+  // A job site's email names the employer in its text; its sender is the job site.
+  const parts = JOB_SITE_RE.test(e.from) ? jobSiteParts(e.subject + '\n' + e.body) : { company: companyFromSender(e.from), role: '' };
+  const company = parts.company;
+  const rm = e.subject.match(/(?:for|–|-)\s+(?:the\s+)?(.+?)\s+(?:position|role|job|opening|internship)(?:\s+at\b|$|\s)/i) || e.subject.match(/application for\s+(.+?)(?:\s+at\s+.+)?$/i);
+  return { is_application_update: !!company, needs_review: !company, company, role: parts.role || (rm ? rm[1].trim() : ''), stage, next_step: stage === 'Screening' ? 'Complete the assessment' : stage === 'Interview' ? 'Prepare for / schedule the interview' : '' };
 }
 
 export function companyFromSender(from) {
@@ -321,9 +356,16 @@ export function upsertApplication(apps, u, result) {
     result.changes.push({ company, role, from: '', to: stage });
     return app;
   }
+  if (role && !cur.role) { cur.role = role; cur.key = key; }
+  // An email older than what's already recorded, or from before your own last change, doesn't move the status
+  // (Gmail can be read again from further back; your corrections win).
+  const mine = (Array.isArray(cur.history) ? cur.history : []).filter(x => x.by === 'you').pop();
+  if ((cur.last_update && u.date < cur.last_update) || (mine && u.date <= mine.on)) {
+    if (u.link && !cur.email_link) cur.email_link = u.link;
+    return cur;
+  }
   const prev = cur.status;
   if (STAGES.indexOf(stage) > STAGES.indexOf(cur.furthest)) cur.furthest = stage;
-  if (role && !cur.role) { cur.role = role; cur.key = key; }
   cur.status = stage;
   cur.last_update = u.date;
   cur.next_step = u.next_step || (['Rejected', 'Withdrawn', 'Offer'].indexOf(stage) >= 0 ? '' : cur.next_step);
@@ -459,7 +501,7 @@ export function timeline(apps) {
 }
 
 /** Emails that look like an application update but couldn't be matched; shown under "N emails need a look". */
-export const MAX_REVIEW = 50;
+export const MAX_REVIEW = 200;
 export function addReview(data, e, guess) {
   if (data.review.some(r => r.id === e.id) || (data.reviewDone || []).indexOf(e.id) >= 0) return false;
   data.review.unshift({ id: e.id, from: String(e.from || '').slice(0, 200), subject: String(e.subject || '').slice(0, 200), date: ymd(e.date), link: e.link || '',
