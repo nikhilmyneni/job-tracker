@@ -123,7 +123,10 @@ export function resumeDocumentXml(r, rels = []) {
     if (!uri) return run(text, props);
     const id = 'rIdL' + (rels.length + 1);
     rels.push({ id, uri });
-    return `<w:hyperlink r:id="${id}" w:history="1">${run(text, props + '<w:color w:val="111111"/><w:u w:val="none"/>')}</w:hyperlink>`;
+    // Plain dark text like the rest of the line (as ResumeFold's resumes): no blue, no underline. In Word's schema order:
+    // colour, then size, then underline, or Word falls back to its blue underlined link look.
+    const size = (props.match(/<w:sz [^>]*\/>/) || [''])[0];
+    return `<w:hyperlink r:id="${id}" w:history="1">${run(text, '<w:color w:val="111111"/>' + size + '<w:u w:val="none"/>')}</w:hyperlink>`;
   };
   const heading = (key) => out.push(para(run(HEADINGS[key].toUpperCase(), '<w:b/><w:sz w:val="21"/>'),
     '<w:spacing w:before="200" w:after="100"/><w:pBdr><w:bottom w:val="single" w:sz="5" w:space="2" w:color="111111"/></w:pBdr>'));
