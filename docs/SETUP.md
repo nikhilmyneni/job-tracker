@@ -99,8 +99,8 @@ npm run check          # syntax check
 
 ### 5. Email alerts (optional, free)
 Without these, the *Email me when new jobs are ready* switch says alerts aren't set up, and everything else works.
-1. **Storage:** Vercel → your project → **Storage → Create → Upstash (Redis)**, free plan, connected to the project.
-   That adds `KV_REST_API_URL` and `KV_REST_API_TOKEN`.
+1. **Storage:** Vercel → your project → **Storage → Create**, a free **Redis** (adds `REDIS_URL`) or **Upstash**
+   (adds `KV_REST_API_URL` and `KV_REST_API_TOKEN`), connected to the project for Production. Either works.
 2. **Email:** sign up at brevo.com (free: 300 emails a day). **Senders, domains & IPs → Senders → Add a sender** and
    verify the address the alerts will come from. Then **SMTP & API → API keys → Generate**.
    In Vercel add `BREVO_API_KEY` and `ALERTS_FROM` (that verified address), and optionally `ALERTS_FROM_NAME`.

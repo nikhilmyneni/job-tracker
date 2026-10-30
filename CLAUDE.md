@@ -30,7 +30,7 @@ and counts toward the 100-user cap. Without Gmail, users add applications by han
 - **Gmail is read-only** (`gmail.readonly`). Never send, delete, label or modify mail. The only outgoing mail is the opt-in job alerts, sent by the server through Brevo, never through the user's Gmail.
 - **Narrow scopes:** sign-in `drive.appdata`, `openid`, `email`, `profile`; plus `gmail.readonly` only when the user connects Gmail. No full Drive, no Docs.
 - **No user data is stored anywhere but the user's browser and Drive**, except the **opt-in email-alerts profile** (`api/alerts.js`,
-  Upstash): email, time zone, schedule, prefs, keywords, skill *names*, followed companies, job ids; never CV text, Gmail or
+  Vercel's Redis or Upstash): email, time zone, schedule, prefs, keywords, skill *names*, followed companies, job ids; never CV text, Gmail or
   applications; deleted when alerts are turned off, via the email's unsubscribe, or by *Delete all my data*. Otherwise it goes to Google (Gmail, the
   Drive app folder) and, for AI tasks, through `api/ai.js` to Groq/Gemini. That function passes text straight
   through: no storage, no logs. Job boards and `api/workday.js` only ever get a company's board name and a role. No analytics, no telemetry, no CDNs: fonts and pdf.js are vendored in
@@ -74,8 +74,8 @@ and counts toward the 100-user cap. Without Gmail, users add applications by han
   `package.json` (`type: module` for the functions), `robots.txt`, `sitemap.xml`.
 - `api/alerts.js` (your switch: GET/PUT/POST ack/DELETE, `?unsub=` confirm page) and `api/alerts-run.js` (hourly, `CRON_SECRET`, called by
   `.github/workflows/job-alerts.yml`): email alerts. `_alerts.js` (`cleanProfile`, `runAlerts`: each board once per run, `boardCandidates` +
-  `pickByScore` with skill names, one Brevo email, jobs kept in `alerts:new:<sub>` for the app), `_store.js` (Upstash REST), `_mail.js` (Brevo,
-  escaped HTML). Env: `KV_REST_API_URL`/`KV_REST_API_TOKEN`, `BREVO_API_KEY`, `ALERTS_FROM`, `CRON_SECRET`, `ALERTS_SECRET`. The app sends
+  `pickByScore` with skill names, one Brevo email, jobs kept in `alerts:new:<sub>` for the app), `_store.js` (`REDIS_URL` over RESP with node:net/tls, or Upstash REST), `_mail.js` (Brevo,
+  escaped HTML). Env: `REDIS_URL` (or `KV_REST_API_URL`/`KV_REST_API_TOKEN`), `BREVO_API_KEY`, `ALERTS_FROM`, `CRON_SECRET`, `ALERTS_SECRET`. The app sends
   `alertProfile()` on save, picks up waiting jobs on open (`mergeAlertJobs`), and `alertDue()` says when (the user's time zone).
 - `api/ai.js`: the built-in AI (see the constraints). `api/_auth.js`: shared token check and allowance. `api/workday.js`: reads a company's public Workday board
   (Workday has no CORS). Host, site and path are validated.
@@ -94,7 +94,7 @@ and counts toward the 100-user cap. Without Gmail, users add applications by han
 - `js/app.js`: boot, routing, sync, actions. Screens: `view-applications.js` (+ `view-board.js`: board, timeline, edit dialog), `view-matches.js`,
   `view-tailor.js`, `view-settings.js` (Profile and Settings). `onboarding.js`: the wizard plus the shared
   field blocks. `ui.js`: `h()`, `busy`, `holdButton`, `setLabel`, `icon`, `pageHead`, chips, dialogs. `demo.js`.
-- `tests/`: Node tests: `core`, `match`, `files` (PDF lines), `notify`, `api` (the AI function), `google` (rate-limit retries, paging), `tailor` (suggestions, LaTeX, .docx) and `alerts` (the email alerts, with a fake store, Brevo and board), with fetch faked. `npm test` and `npm run check` must pass before any push.
+- `tests/`: Node tests: `core`, `match`, `files` (PDF lines), `notify`, `api` (the AI function), `google` (rate-limit retries, paging), `tailor` (suggestions, LaTeX, .docx) `alerts` (the email alerts, with a fake store, Brevo and board) and `store` (RESP against a fake Redis server), with fetch faked. `npm test` and `npm run check` must pass before any push.
 - `scripts/serve.js` (local server on :5173, with the /app rewrites and /api functions), `scripts/check.js`.
 - `docs/SETUP.md`: users and owner (Google Cloud + Vercel). Keep it in sync with behaviour changes. `docs/ROADMAP.md`: ideas.
 
