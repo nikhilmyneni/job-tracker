@@ -89,18 +89,23 @@ export async function jobDescription(job) {
  * a fee, a bulk invite), then pick the n best by their real descriptions. onDrop(reason, job) is told about each drop.
  */
 export async function vetPostings(candidates, data, n, today, onDrop = () => {}) {
-  const pre = C.pickByScore(candidates, data, n * 3, today);
+  const seenKeys = new Set();
+  const pre = C.pickByScore(candidates, data, Math.max(n * 3, 30), today)
+    .filter(j => { const k = `${j.company}|${j.role}`.toLowerCase(); if (seenKeys.has(k)) return false; seenKeys.add(k); return true; }); // the same job posted twice
   const kept = [];
   let i = 0;
   await Promise.all([0, 1, 2, 3].map(async () => {
     while (i < pre.length) {
       const j = pre[i++];
       const text = await jobDescription(j);
-      const why = C.postingProblem(text, data.settings.prefs);
+      const why = C.postingProblem(text, data.settings.prefs, j);
       if (why) onDrop(why, j); else kept.push(Object.assign({}, j, { details: text }));
     }
   }));
   const picked = C.pickByScore(kept, data, n, today);
+  // Read and fine, but under your minimum match: told with its score, so a run can say how close the best one came.
+  const s = data.settings, skills = C.mySkills(data);
+  kept.forEach(k => { if (!picked.some(p => p.key === k.key && p.link === k.link)) onDrop('belowMinMatch', k, C.matchScore(k, skills, s.keywords, s.prefs.roles, s.prefs.roleRange).score); });
   picked.forEach(p => { const k = kept.find(x => x.key === p.key && x.link === p.link); if (k) p.jd = C.clip(k.details, 8000); });
   return picked;
 }

@@ -126,3 +126,17 @@ test('Core first: at least half the picks are Core when good Core jobs exist; St
   const w1 = C.searchWords(['SOC Analyst', 'Penetration Tester'], 100), w2 = C.searchWords(['SOC Analyst', 'Penetration Tester'], 101);
   assert.equal(w1[0], 'SOC Analyst'); assert.equal(w2[0], 'SOC Analyst'); assert.notDeepEqual(w1, w2);
 });
+
+test('a posting the board gave no place for must say India or remote in its description', () => {
+  assert.equal(C.postingProblem('Únete a nuestro equipo en Madrid. Ciberseguridad.', {}, { location: '' }), 'location');
+  assert.equal(C.postingProblem('Join our Hyderabad team. 0-1 years.', {}, { location: '2 Locations' }), '');
+  assert.equal(C.postingProblem('Fully remote role.', {}, { location: '' }), '');
+  assert.equal(C.postingProblem('Join us in Madrid.', {}, { location: 'Bengaluru' }), ''); // the board's place wins
+});
+
+test('sales and calling jobs are left out even when the title mentions security', () => {
+  const prefs = C.normalizeSettings({ prefs: { roles: ['Security Analyst'], avoid: [] } }).prefs;
+  assert.equal(C.rejectReason({ role: 'Account Executive, Cybersecurity Architecture', location: 'Bengaluru' }, prefs), 'skipList');
+  assert.equal(C.rejectReason({ role: 'Security Presales Consultant', location: 'Bengaluru' }, prefs), 'skipList');
+  assert.equal(C.rejectReason({ role: 'Security Analyst', location: 'Bengaluru' }, prefs), '');
+});

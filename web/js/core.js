@@ -823,6 +823,8 @@ const ROLE_SYNONYMS = {
   data: ['data', 'analytics'],
 };
 const SENIOR_RE = /\b(senior|sr|staff|principal|lead|leader|manager|director|head|vp|vice president|architect|chief|cto|ciso|cio|ii|iii|iv|expert)\b/i;
+// Sales and calling jobs are never a fresher-tech match, whatever their title mentions (left out like your skip list).
+const SALES_RE = /\b(account executive|account manager|sales|business development|bdr|sdr|telecall\w*|tele-?caller|inside sales|pre-?sales|customer success manager|recruiter)\b/i;
 const INTERN_RE = /\b(intern|internship|trainee|apprentice)\b/i;
 const INDIA_RE = /\b(india|bengaluru|bangalore|hyderabad|pune|mumbai|chennai|delhi|gurgaon|gurugram|noida|kolkata|ahmedabad|kochi|coimbatore|jaipur|chandigarh|indore|thiruvananthapuram|trivandrum|visakhapatnam|vizag|bhubaneswar|mysuru|mysore|thane)\b/i;
 const FOREIGN_RE = /\b(us|usa|united states|canada|uk|united kingdom|london|europe|emea|germany|france|netherlands|ireland|poland|spain|portugal|singapore|australia|japan|brazil|mexico|latam|americas|new york|san francisco|seattle|toronto|dubai|uae|israel|philippines|bulgaria|sweden|maryland|virginia|washington|california|texas|massachusetts|illinois|colorado|north carolina|new jersey|oregon|arizona|florida|ohio|pennsylvania|michigan|minnesota|utah|vancouver|berlin|amsterdam|paris|dublin|munich|tokyo|sydney|melbourne|costa rica|colombia|argentina|chile|malaysia|indonesia|vietnam|thailand|korea|china|taiwan|hong kong|south africa|kenya|nigeria|egypt|saudi|qatar|romania|czech|hungary|italy|switzerland|austria|belgium|denmark|norway|finland)\b/i;
@@ -887,7 +889,7 @@ export function rejectReason(l, prefs) {
   if (SENIOR_RE.test(title)) return 'senior';
   if ((prefs.jobType === 'internship' || prefs.level === 'intern') && !INTERN_RE.test(title)) return 'internOnly';
   if (prefs.jobType === 'fulltime' && /\bintern(ship)?\b/i.test(title)) return 'fullTimeOnly';
-  if (prefs.avoid.some(a => a.split(/\s+/).length <= 2 && hasWord(title, a.toLowerCase()))) return 'skipList';
+  if (SALES_RE.test(title) || prefs.avoid.some(a => a.split(/\s+/).length <= 2 && hasWord(title, a.toLowerCase()))) return 'skipList';
 
   const loc = String(l.location || '').toLowerCase();
   if (!loc || /^\d+ locations?$/.test(loc)) return ''; // unknown: let the score decide
@@ -1210,6 +1212,7 @@ export function mySkills(data) {
  * keywords count 1.5×. Returns {score 0–100, matched[], missing[]}: matched are asked for and on your CV (or in
  * your keywords), missing are asked for and not. A job that names no skills gets a middling score from its title.
  */
+const SCORED_ASKS = 10;
 export function matchScore(job, skills, keywords = [], roles = [], range = 'related') {
   const have = new Set([...skills, ...keywords].map(s => String(s).toLowerCase()));
   const kw = new Set(keywords.map(s => String(s).toLowerCase()));
@@ -1222,7 +1225,12 @@ export function matchScore(job, skills, keywords = [], roles = [], range = 'rela
   if (!asked.length) return { score: Math.round(30 + 25 * titleFit), matched: [], missing: [], titleOnly: titleFit === 1 };
   const matched = asked.filter(t => have.has(t.toLowerCase())).sort((a, b) => w(b) - w(a));
   const missing = asked.filter(t => !have.has(t.toLowerCase())).sort((a, b) => w(b) - w(a));
-  const total = asked.reduce((n, t) => n + w(t), 0), got = matched.reduce((n, t) => n + w(t), 0);
+  // Only the asks that come first count toward the score (the title's, then the description's first SCORED_ASKS):
+  // postings put requirements before their long list of nice-to-haves, which shouldn't sink a fresher's score.
+  const body = [job.details, job.jd].filter(Boolean).join('\n').toLowerCase();
+  const at = (t) => { const m = body.match(termRe(t)); return m ? m.index : Infinity; };
+  const counted = asked.slice().sort((a, b) => Number(inTitle.has(b)) - Number(inTitle.has(a)) || at(a) - at(b)).slice(0, SCORED_ASKS);
+  const total = counted.reduce((n, t) => n + w(t), 0), got = counted.filter(t => have.has(t.toLowerCase())).reduce((n, t) => n + w(t), 0);
   // A handful of asks is noisy, so the title's fit with your target roles carries a fifth of the score.
   const score = Math.round(80 * got / total + 20 * titleFit);
   return { score: Math.max(0, Math.min(100, score)), matched, missing };
@@ -1293,10 +1301,14 @@ export function minYears(text) {
 }
 /**
  * Why a posting isn't for a fresher looking for paid work ('' when it's fine), from its full description:
- * experience (2+ years), unpaid (when you want paid work), fee (asks you to pay), bulkInvite ("Dear Candidate" mass mails).
+ * experience (2+ years), unpaid (when you want paid work), fee (asks you to pay), bulkInvite ("Dear Candidate" mass mails),
+ * location (the board gave no place and the description doesn't put it in India or remote).
  */
-export function postingProblem(text, prefs = {}) {
+export function postingProblem(text, prefs = {}, job = {}) {
   const t = String(text || '');
+  // The board didn't say where (or just "3 Locations"): the description has to place it in India, or remote.
+  const loc = String(job.location || '').trim();
+  if ('location' in job && (!loc || /^\d+ locations?$/i.test(loc)) && t && !INDIA_RE.test(t) && !/\bremote\b/i.test(t)) return 'location';
   if (/\bdear candidates?\b/i.test(t)) return 'bulkInvite';
   if (/\b(?:registration|training|joining|processing|security|onboarding)\s+(?:fees?|charges?|deposit)\b|\bpay\s+(?:a|the|an)\s+(?:\w+\s+)?fee\b|\brefundable\s+deposit\b/i.test(t)) return 'fee';
   if (prefs.paidOnly !== false && /\bunpaid\b|\bno\s+stipend\b|\bwithout\s+(?:any\s+)?stipend\b|\bstipend\s*[:\-]?\s*(?:nil|none|not\s+provided)\b/i.test(t)) return 'unpaid';
@@ -1304,7 +1316,7 @@ export function postingProblem(text, prefs = {}) {
   if (y !== null && y >= 2) return 'experience';
   return '';
 }
-export const PROBLEM_TEXT = { experience: 'needs 2+ years', unpaid: 'unpaid', fee: 'asks for a fee', bulkInvite: 'a bulk “Dear Candidate” invite' };
+export const PROBLEM_TEXT = { location: 'not in India', experience: 'needs 2+ years', unpaid: 'unpaid', fee: 'asks for a fee', bulkInvite: 'a bulk “Dear Candidate” invite' };
 
 /** HTML entities to text, without a browser (job boards send descriptions with their HTML escaped). */
 export function decodeEntities(s) {

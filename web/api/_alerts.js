@@ -72,7 +72,7 @@ export async function runAlerts({ now = new Date(), origin = '', budgetMs = 4000
   const { listings, notes } = await fetchBoards([...boards.values()], C.searchWords([...roles], now.getTime() / 864e5), () => {});
 
   const appUrl = (origin || 'https://jobs4you.vercel.app') + '/app/matches';
-  let emailed = 0, done = 0, candidates = 0, found = 0, mailError = '';
+  let emailed = 0, done = 0, candidates = 0, found = 0, mailError = '', bestBelow = 0;
   const leftOut = { seen: 0, role: 0, senior: 0, internOnly: 0, fullTimeOnly: 0, skipList: 0, location: 0, belowMinMatch: 0, experience: 0, unpaid: 0, fee: 0, bulkInvite: 0 };
   for (const u of due) {
     if (Date.now() - start > budgetMs) break;
@@ -83,11 +83,10 @@ export async function runAlerts({ now = new Date(), origin = '', budgetMs = 4000
     const data = { settings: u.p.settings, cv: '', skillsAdded: u.p.skills, skillsRemoved: [] };
     const cands = C.boardCandidates(theirs, u.p.settings.prefs, seen);
     cands.forEach(l => seen.add(l.id)); // scored once, as in the app
-    const jobs = await vetPostings(cands, data, u.p.settings.jobsPerUpdate, u.day, (why) => { leftOut[why]++; });
+    const jobs = await vetPostings(cands, data, u.p.settings.jobsPerUpdate, u.day, (why, j, score) => { leftOut[why]++; if (score > bestBelow) bestBelow = score; });
     candidates += cands.length; found += jobs.length;
     // Counts only (never anyone's settings), so a run's log shows which filter leaves jobs out.
     theirs.forEach(l => { const why = seen.has(l.id) && !cands.includes(l) ? 'seen' : C.rejectReason(l, u.p.settings.prefs); if (why) leftOut[why]++; });
-    leftOut.belowMinMatch += Math.max(0, Math.min(cands.length, u.p.settings.jobsPerUpdate) - jobs.length);
     const waiting = [...jobs, ...parse(foundRaw, [])].slice(0, MAX_FOUND);
     await pipeline([
       ['SET', K.seen(u.sub), JSON.stringify([...seen].slice(-MAX_SEEN))],
@@ -101,5 +100,5 @@ export async function runAlerts({ now = new Date(), origin = '', budgetMs = 4000
     }
     done++;
   }
-  return { users: subs.length, due: due.length, done, boards: boards.size, listings: listings.length, boardErrors: notes.slice(0, 5), leftOut, candidates, found, emailed, mailError };
+  return { users: subs.length, due: due.length, done, boards: boards.size, listings: listings.length, boardErrors: notes.slice(0, 5), leftOut, bestBelow, candidates, found, emailed, mailError };
 }
