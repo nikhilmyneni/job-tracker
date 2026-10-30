@@ -5,7 +5,7 @@
  */
 import { h, busy, icon, pageHead, extLink, isHttp, toast, errText } from './ui.js';
 import { HEADINGS, ORDER } from './pdf.js';
-import { TEMPLATES, skillLabel, matchLabel, atsScore, tailorSuggestions, applySuggestions, tailorScore, highlightJd, termsIn, dateRange, RESUMEFOLD_URL } from './core.js';
+import { TEMPLATES, skillLabel, contactLink, bulletText, matchLabel, atsScore, tailorSuggestions, applySuggestions, tailorScore, highlightJd, termsIn, dateRange, RESUMEFOLD_URL } from './core.js';
 
 export function renderTailor(ctx, root, jobId) {
   const { data, act } = ctx;
@@ -159,8 +159,8 @@ export function renderSheet(r, template, changed = new Set()) {
   const c = r.contact || {};
   const upper = template === 'standard' || template === 'combination';
   const sec = (key, ...body) => h('section', { class: 'rs-sec' }, h('h3', {}, upper ? HEADINGS[key].toUpperCase() : HEADINGS[key]), ...body);
-  const bullets = (list) => (list || []).filter(Boolean).length ? h('ul', { class: 'rs-bullets' }, ...list.filter(Boolean).map(b => h('li', {}, b))) : '';
-  const row = (left, right, cls = '') => h('div', { class: 'rs-row ' + cls }, h('span', { class: 'rs-l' }, left), right ? h('span', { class: 'rs-r' }, right) : '');
+  const bullets = (list) => { const l = (list || []).map(bulletText).filter(Boolean); return l.length ? h('ul', { class: 'rs-bullets' }, ...l.map(b => h('li', {}, b))) : ''; };
+  const row = (left, right, cls = '') => h('div', { class: 'rs-row ' + cls }, h('span', { class: 'rs-l' }, ...[].concat(left)), right ? h('span', { class: 'rs-r' }, right) : '');
   const items = (s) => s.items.flatMap((it, i) => [i ? ', ' : '', changed.has('skill:' + it.toLowerCase()) ? h('mark', { class: 'chg' }, it) : it]);
   const parts = {
     summary: r.summary ? sec('summary', h('p', { class: 'rs-summary' + (changed.has('summary') ? ' chg' : '') }, r.summary)) : '',
@@ -171,14 +171,15 @@ export function renderSheet(r, template, changed = new Set()) {
       return h('div', { class: 'rs-entry' }, row(h('b', {}, e.school || degree), dateRange(e)), e.school && degree ? row(h('i', {}, degree), e.location || '') : '', bullets(e.details));
     })) : '',
     skills: (r.skills || []).length ? sec('skills', h('div', { class: 'rs-skills' + (changed.has('skills') ? ' chg' : '') },
-      ...r.skills.map(s => h('p', {}, skillLabel(s) ? `${skillLabel(s)}: ` : '', ...items(s))))) : '',
+      ...r.skills.map(s => h('p', {}, skillLabel(s) ? h('b', {}, `${skillLabel(s)}: `) : '', ...items(s))))) : '',
     projects: (r.projects || []).length ? sec('projects', ...r.projects.map(p => h('div', { class: 'rs-entry' + (changed.has('project:' + p.id) || changed.has('bullets:' + p.id) ? ' chg' : '') },
-      row(h('b', {}, [p.name, p.tech].filter(Boolean).join(' | ')), dateRange(p)), bullets(p.bullets)))) : '',
-    certifications: (r.certifications || []).length ? sec('certifications', ...r.certifications.map(x => row(h('b', {}, [x.name, x.issuer].filter(Boolean).join(', ')), dateRange(x), 'rs-cert'))) : '',
+      row([h('b', {}, p.name || ''), p.tech ? h('i', {}, ` | ${p.tech}`) : ''], dateRange(p)), bullets(p.bullets)))) : '',
+    certifications: (r.certifications || []).length ? sec('certifications', ...r.certifications.map(x => row([h('b', {}, x.name || ''), x.issuer ? `, ${x.issuer}` : ''], dateRange(x), 'rs-cert'))) : '',
   };
   const contact = [c.email, c.phone, c.location, c.website, c.linkedin, c.github].filter(Boolean);
   const head = h('header', { class: 'rs-head' }, h('h2', {}, c.fullName || 'Your name'),
     template !== 'student' && c.headline ? h('p', { class: 'rs-headline' + (changed.has('headline') ? ' chg' : '') }, c.headline) : '',
-    h('p', { class: 'rs-contact' }, contact.join('  ·  ')));
+    // Email, phone and links are clickable, as in the PDF (only mailto:, tel: and https: ever become links).
+    h('p', { class: 'rs-contact' }, ...contact.flatMap((x, i) => [i ? '  ·  ' : '', contactLink(x) ? h('a', { href: contactLink(x), target: '_blank', rel: 'noopener noreferrer' }, x) : x])));
   return h('article', { class: 'sheet t-' + template, 'aria-label': 'Resume preview' }, head, h('div', { class: 'rs-body' }, ...ORDER.map(k => parts[k])));
 }

@@ -66,3 +66,39 @@ test('with ResumeFold’s font files, the PDF embeds Source Sans 3', async () =>
   assert.ok(s.includes('/FontFile2'));
   checkXref(s);
 });
+
+test('email, phone and web links are clickable; nothing else becomes a link', async () => {
+  const { contactLink, bulletText } = await import('../web/js/core.js');
+  assert.equal(contactLink('test.person@example.com'), 'mailto:test.person@example.com');
+  assert.equal(contactLink('linkedin.com/in/test-person'), 'https://linkedin.com/in/test-person');
+  assert.equal(contactLink('https://github.com/test'), 'https://github.com/test');
+  assert.equal(contactLink('+91 90000 00000'), 'tel:+919000000000');
+  assert.equal(contactLink('Hyderabad, India'), '');
+  assert.equal(contactLink('javascript:alert(1)'), '');
+  assert.equal(bulletText('• Built a lab'), 'Built a lab');
+  assert.equal(bulletText('- Built a lab'), 'Built a lab');
+  assert.equal(bulletText('-1 day early'), '-1 day early'); // a minus that isn't a bullet stays
+  const r = JSON.parse(JSON.stringify(DEMO_FOLD));
+  r.contact.linkedin = 'linkedin.com/in/test-person';
+  r.experience[0].bullets = ['• Reviewed firewall logs'];
+  const s = latin(resumePdf(r));
+  assert.ok(s.includes('/URI (mailto:test.person@jobs4you.vercel.app)'));
+  assert.ok(s.includes('/URI (https://linkedin.com/in/test-person)'));
+  assert.ok(s.includes('/Annots ['));
+  // The CV's own bullet mark is dropped: the text starts with the word, and only one bullet glyph (WinAnsi 149) is drawn for it.
+  assert.ok(s.includes('(Reviewed) Tj')); assert.ok(!s.includes(String.raw`(\225Reviewed)`));
+  checkXref(s);
+});
+
+test('Word and LaTeX resumes have clickable contact details too', async () => {
+  const { resumeDocx, unzipFile } = await import('../web/js/docx.js');
+  const { resumeLatex } = await import('../web/js/core.js');
+  const r = JSON.parse(JSON.stringify(DEMO_FOLD));
+  r.contact.linkedin = 'linkedin.com/in/test-person';
+  const rels = new TextDecoder().decode(await unzipFile(resumeDocx(r), 'word/_rels/document.xml.rels'));
+  assert.match(rels, /Target="mailto:test.person@jobs4you.vercel.app" TargetMode="External"/);
+  assert.match(rels, /Target="https:\/\/linkedin.com\/in\/test-person" TargetMode="External"/);
+  const doc = new TextDecoder().decode(await unzipFile(resumeDocx(r), 'word/document.xml'));
+  assert.match(doc, /<w:hyperlink r:id="rIdL1"/);
+  assert.match(resumeLatex(r), /\href\{mailto:test.person@jobs4you.vercel.app\}/);
+});

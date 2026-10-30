@@ -8,7 +8,7 @@
  * resumePdf(resume, template, fonts?) where fonts = {R, B, I} from readTtf().
  */
 import { CODES, HELVETICA, HELVETICA_BOLD, HELVETICA_OBLIQUE } from './pdf-fonts.js';
-import { dateRange, skillLabel } from './core.js';
+import { dateRange, skillLabel, contactLink, bulletText } from './core.js';
 
 const PAGE_W = 595.28, PAGE_H = 841.89;
 const MARGIN_Y = 36, MARGIN_X = 44.64; // ResumeFold "normal" margins (0.5in / 0.62in)
@@ -51,13 +51,16 @@ const rgb = (c, op) => `${n2(c[0])} ${n2(c[1])} ${n2(c[2])} ${op}`;
 
 // ---------- pages ----------
 function makeDoc() {
-  const pages = [[]];
+  const pages = [[]], links = [[]];
   const doc = {
+    links,
     y: PAGE_H - MARGIN_Y,
     get ops() { return pages[pages.length - 1]; },
     pages,
     /** Room for h more points on this page, or a new page. */
-    need(h) { if (doc.y - h < MARGIN_Y) { pages.push([]); doc.y = PAGE_H - MARGIN_Y; } },
+    need(h) { if (doc.y - h < MARGIN_Y) { pages.push([]); links.push([]); doc.y = PAGE_H - MARGIN_Y; } },
+    /** A clickable area on this page that opens uri. */
+    link(x, y, w, h, uri) { links[links.length - 1].push({ rect: [x, y, x + w, y + h], uri }); },
     text(x, y, s, f, size, color) { if (s) doc.ops.push(`BT /${FONT[f]} ${n2(size)} Tf ${rgb(COLOR[color], 'rg')} ${n2(x)} ${n2(y)} Td ${pdfString(s)} Tj ET`); },
     line(x1, y1, x2, y2, w) { doc.ops.push(`${rgb(COLOR.ink, 'RG')} ${n2(w)} w ${n2(x1)} ${n2(y1)} m ${n2(x2)} ${n2(y2)} l S`); },
     bar(x, y, w, h) { doc.ops.push(`${rgb(COLOR.ink, 'rg')} ${n2(x)} ${n2(y)} ${n2(w)} ${n2(h)} re f`); },
@@ -71,7 +74,15 @@ function wrap(runs, size, maxW) {
   runs.forEach(r => String(r.text || '').split(/(\s+)/).forEach(part => {
     if (!part) return;
     if (/^\s+$/.test(part)) { if (words.length) words[words.length - 1].space = true; return; }
-    words.push({ text: part, f: r.f, color: r.color, space: false });
+    // A single word wider than the whole line (a long link) is broken into pieces that fit.
+    let rest = part;
+    while (measure(rest, r.f, size) > maxW && rest.length > 1) {
+      let n = rest.length - 1;
+      while (n > 1 && measure(rest.slice(0, n), r.f, size) > maxW) n--;
+      words.push({ text: rest.slice(0, n), f: r.f, color: r.color, link: r.link, space: false });
+      rest = rest.slice(n);
+    }
+    words.push({ text: rest, f: r.f, color: r.color, link: r.link, space: false });
   }));
   const lines = [[]];
   let x = 0;
@@ -81,7 +92,7 @@ function wrap(runs, size, maxW) {
     if (lines[lines.length - 1].length && x + gap + ww > maxW) { lines.push([]); x = 0; }
     const line = lines[lines.length - 1];
     const lead = line.length ? gap : 0;
-    line.push({ text: w.text, f: w.f, color: w.color, x: x + lead });
+    line.push({ text: w.text, f: w.f, color: w.color, link: w.link, x: x + lead });
     x += lead + ww;
   });
   return lines.filter(l => l.length).map(l => Object.assign(l, { width: l.reduce((m, p) => Math.max(m, p.x + measure(p.text, p.f, size)), 0) }));
@@ -98,7 +109,10 @@ function layout(r, t, k) {
     doc.need(lineH(s));
     doc.y -= lineH(s);
     const left = align === 'center' ? (x0 + x1 - l.width) / 2 : x;
-    l.forEach(p => doc.text(left + p.x, doc.y + s * 0.25, p.text, p.f, s, p.color));
+    l.forEach(p => {
+      doc.text(left + p.x, doc.y + s * 0.25, p.text, p.f, s, p.color);
+      if (p.link) doc.link(left + p.x, doc.y + s * 0.05, measure(p.text, p.f, s), s * 1.05, p.link);
+    });
   });
   const para = (runs, s, align) => draw(wrap(runs, s, x1 - x0), s, x0, align);
 
@@ -111,7 +125,7 @@ function layout(r, t, k) {
     draw(lines, size);
     if (right) doc.text(x1 - rw, firstY + size * 0.25, right, 'R', small, 'muted');
   };
-  const bullets = (list) => (list || []).filter(Boolean).forEach(b => {
+  const bullets = (list) => (list || []).map(bulletText).filter(Boolean).forEach(b => {
     const lines = wrap([{ text: b, f: 'R', color: 'ink' }], size, x1 - x0 - 12);
     doc.need(lineH(size));
     doc.text(x0 + 2, doc.y - lineH(size) + size * 0.25, '•', 'R', size, 'ink');
@@ -129,7 +143,7 @@ function layout(r, t, k) {
   const contact = [c.email, c.phone, c.location, c.website, c.linkedin, c.github].filter(Boolean);
   if (contact.length) {
     doc.y -= gap(3);
-    para(contact.flatMap((x, i) => [i ? { text: '  ·  ', f: 'R', color: 'ink' } : null, { text: String(x).replace(/\s+/g, ' '), f: 'R', color: 'ink' }].filter(Boolean)), size * 0.92, st.align);
+    para(contact.flatMap((x, i) => [i ? { text: '  ·  ', f: 'R', color: 'ink' } : null, { text: String(x).replace(/\s+/g, ' '), f: 'R', color: 'ink', link: contactLink(x) }].filter(Boolean)), size * 0.92, st.align);
   }
   if (st.headRule) { doc.y -= gap(6); doc.line(x0, doc.y, x1, doc.y, st.headRule); }
   doc.y -= gap(st.headGap) - gap(9); // the first section's 9pt gap below adds the rest
@@ -166,18 +180,18 @@ function layout(r, t, k) {
     }
     if (key === 'skills' && (r.skills || []).length) {
       heading(key);
-      r.skills.forEach(g => { para([skillLabel(g) ? { text: `${skillLabel(g)}: `, f: 'R', color: 'ink' } : null, { text: (g.items || []).join(', '), f: 'R', color: 'ink' }].filter(Boolean), size); doc.y -= gap(1.8); });
+      r.skills.forEach(g => { para([skillLabel(g) ? { text: `${skillLabel(g)}: `, f: 'B', color: 'ink' } : null, { text: (g.items || []).join(', '), f: 'R', color: 'ink' }].filter(Boolean), size); doc.y -= gap(1.8); });
     }
     if (key === 'projects' && (r.projects || []).length) {
       heading(key);
       r.projects.forEach(p => entry(() => {
-        row([{ text: [p.name, p.tech].filter(Boolean).join(' | '), f: 'B', color: 'ink' }], dateRange(p));
+        row([{ text: p.name || '', f: 'B', color: 'ink' }, p.tech ? { text: ` | ${p.tech}`, f: 'I', color: 'ink' } : null].filter(Boolean), dateRange(p));
         bullets(p.bullets);
       }));
     }
     if (key === 'certifications' && (r.certifications || []).length) {
       heading(key);
-      r.certifications.forEach(x => { row([{ text: [x.name, x.issuer].filter(Boolean).join(', '), f: 'B', color: 'ink' }], dateRange(x)); doc.y -= gap(2); });
+      r.certifications.forEach(x => { row([{ text: x.name || '', f: 'B', color: 'ink' }, x.issuer ? { text: `, ${x.issuer}`, f: 'R', color: 'ink' } : null].filter(Boolean), dateRange(x)); doc.y -= gap(2); });
     }
   });
   doc.used = PAGE_H - MARGIN_Y - doc.y;
@@ -193,15 +207,15 @@ export function resumePdf(r, template = 'standard', fonts = null) {
   let lo = 0.92, hi = 1.15;
   if (fits(hi)) lo = hi;
   else if (fits(lo)) { for (let i = 0; i < 12; i++) { const mid = (lo + hi) / 2; if (fits(mid)) lo = mid; else hi = mid; } }
-  const pages = layout(r, t, lo).pages;
-  const out = assemble(pages, r.contact && r.contact.fullName, fonts);
+  const doc = layout(r, t, lo);
+  const out = assemble(doc.pages, r.contact && r.contact.fullName, fonts, doc.links);
   useFonts(null);
   return out;
 }
 
 const latin1 = (bytes) => { let s = ''; for (let i = 0; i < bytes.length; i += 8192) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 8192)); return s; };
 
-function assemble(pages, author, embedded) {
+function assemble(pages, author, embedded, links = []) {
   const objs = [];
   const add = (s) => { objs.push(s); return objs.length; };
   const catalog = add(''), tree = add('');
@@ -215,10 +229,12 @@ function assemble(pages, author, embedded) {
       return add(`<< /Type /Font /Subtype /TrueType /BaseFont /${name} /FirstChar 32 /LastChar 255 /Widths [${t.widths.join(' ')}] /Encoding /WinAnsiEncoding /FontDescriptor ${desc} 0 R >>`);
     })
     : ['Helvetica', 'Helvetica-Bold', 'Helvetica-Oblique'].map(b => add(`<< /Type /Font /Subtype /Type1 /BaseFont /${b} /Encoding /WinAnsiEncoding >>`));
-  const kids = pages.map(ops => {
+  const kids = pages.map((ops, i) => {
     const body = ops.join('\n');
     const content = add(`<< /Length ${body.length} >>\nstream\n${body}\nendstream`);
-    return add(`<< /Type /Page /Parent ${tree} 0 R /MediaBox [0 0 ${PAGE_W} ${PAGE_H}] /Contents ${content} 0 R /Resources << /Font << /F1 ${fonts[0]} 0 R /F2 ${fonts[1]} 0 R /F3 ${fonts[2]} 0 R >> >> >>`);
+    // Clickable contact details: link annotations that open the email, phone or web address.
+    const annots = (links[i] || []).map(l => add(`<< /Type /Annot /Subtype /Link /Rect [${l.rect.map(n2).join(' ')}] /Border [0 0 0] /A << /S /URI /URI ${pdfString(l.uri)} >> >>`));
+    return add(`<< /Type /Page /Parent ${tree} 0 R /MediaBox [0 0 ${PAGE_W} ${PAGE_H}] /Contents ${content} 0 R${annots.length ? ` /Annots [${annots.map(a => a + ' 0 R').join(' ')}]` : ''} /Resources << /Font << /F1 ${fonts[0]} 0 R /F2 ${fonts[1]} 0 R /F3 ${fonts[2]} 0 R >> >> >>`);
   });
   objs[catalog - 1] = `<< /Type /Catalog /Pages ${tree} 0 R >>`;
   objs[tree - 1] = `<< /Type /Pages /Kids [${kids.map(k => k + ' 0 R').join(' ')}] /Count ${kids.length} >>`;

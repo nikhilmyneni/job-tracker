@@ -1519,6 +1519,20 @@ export function resumeFromCv(cv, opts = {}) {
   return cleanResumeFold(r) || r;
 }
 
+/**
+ * Where a contact detail should link: mailto: for an email, tel: for a phone, https:// for a web address (LinkedIn,
+ * GitHub, a site). '' for anything else (a city). Only these three kinds, so nothing odd ever becomes a link.
+ */
+export function contactLink(v) {
+  const s = String(v || '').trim();
+  if (/^[^@\s<>()]+@[^@\s<>()]+\.[a-z]{2,}$/i.test(s)) return 'mailto:' + s;
+  if (/^\+?[\d\s().-]{8,}$/.test(s) && (s.match(/\d/g) || []).length >= 8) return 'tel:' + s.replace(/[^\d+]/g, '');
+  if (/^(https?:\/\/)?(www\.)?([a-z0-9-]+\.)+[a-z]{2,}(\/[^\s<>"]*)?$/i.test(s)) return /^https?:\/\//i.test(s) ? s : 'https://' + s;
+  return '';
+}
+/** A bullet's text without the bullet mark a CV may already start it with ("• ", "- ", "▪ "), so it's never doubled. */
+export const bulletText = (b) => String(b || '').replace(/^\s*(?:[•●◦▪▫■□‣⁃∙·*>]|[-–—](?=\s))+\s*/, '').trim();
+
 /** A skills group's label, or '' when it would only repeat the section heading ("Skills: Skills: …"). */
 export const skillLabel = (g) => (g && g.category && !/^\s*(technical\s+)?skills?\s*$/i.test(g.category) ? g.category : '');
 
@@ -1693,8 +1707,10 @@ export function resumeLatex(r) {
     '\\renewcommand{\\section}[1]{\\vspace{8pt}{\\large\\bfseries #1}\\\\[-6pt]\\rule{\\linewidth}{0.4pt}\\\\[2pt]}', '\\begin{document}',
     `{\\LARGE\\bfseries ${texEsc(c.fullName)}}\\\\`];
   if (c.headline) L.push(`${texEsc(c.headline)}\\\\`);
-  L.push([c.email, c.phone, c.location, c.linkedin, c.github, c.website].filter(Boolean).map(texEsc).join(' \\textbar{} ') + '\\\\');
-  const items = (list) => (list && list.length ? ['\\begin{itemize}', ...list.map(b => `\\item ${texEsc(b)}`), '\\end{itemize}'] : []);
+  // Email, phone and links are clickable (hyperref is loaded).
+  const texLink = (x) => (contactLink(x) ? `\\href{${contactLink(x).replace(/[\\{}%#]/g, '')}}{${texEsc(x)}}` : texEsc(x));
+  L.push([c.email, c.phone, c.location, c.website, c.linkedin, c.github].filter(Boolean).map(texLink).join(' \\textbar{} ') + '\\\\');
+  const items = (raw) => { const list = (raw || []).map(bulletText).filter(Boolean); return list.length ? ['\\begin{itemize}', ...list.map(b => `\\item ${texEsc(b)}`), '\\end{itemize}'] : []; };
   const head = (left, right) => `\\textbf{${texEsc(left)}}${right ? ` \\hfill ${texEsc(right)}` : ''}\\\\`;
   if (r.summary) L.push('\\section{Summary}', texEsc(r.summary));
   if ((r.skills || []).length) L.push('\\section{Skills}', ...r.skills.map(s => `${skillLabel(s) ? `\\textbf{${texEsc(skillLabel(s))}:} ` : ''}${texEsc(s.items.join(', '))}\\\\`));

@@ -98,7 +98,8 @@ and counts toward the 100-user cap. Without Gmail, users add applications by han
 - `js/pdf.js` (+ generated `js/pdf-fonts.js`, core-font widths from vendored pdf.js): **pure** resume → real-text PDF (`resumePdf(resume, template)`)
   in **ResumeFold's layouts** (Standard / Student / Combination / Senior as ResumeFold's own PDF export draws them: its `HEADINGS`, `ORDER`,
   rows, rules, and its font Source Sans 3 embedded from vendor/fonts via `js/ttf.js`; Helvetica if the fonts can't load), scaled to fill one page; downloaded as `Name_Resume_Company_Role.pdf`. The on-screen sheet
-  (`renderSheet`) matches it. No print dialog. Tailoring follows ResumeFold strictly: don't invent a different resume design.
+  (`renderSheet`) and the Word file (`resumeDocx`) match it. Contact details are clickable everywhere (`contactLink`: mailto / tel / https
+  only, PDF link annotations, Word hyperlinks, LaTeX \href); a CV's own bullet marks are dropped (`bulletText`). No print dialog. Tailoring follows ResumeFold strictly: don't invent a different resume design.
 - `js/sources.js`: fetches job boards and full job descriptions. `js/docx.js`: **pure** ZIP + DOCX → text, and the resume as a .docx (`resumeDocx`).
 - `js/ai.js`: `PROVIDERS`, `askWith()` (shared with the server, so no DOM in this file), `useSharedAi()` / `ask()` for the page, `parseJsonLoose()`.
 - `js/google.js`: sign-in, Gmail, Drive app data (`job-tracker.json`, `cv-original.*`).
