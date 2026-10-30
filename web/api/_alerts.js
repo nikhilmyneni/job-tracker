@@ -46,8 +46,8 @@ export const dropAll = (sub) => pipeline([['SREM', K.subs, sub], ['DEL', K.profi
 /**
  * One hourly run: for everyone whose "New jobs ready by" time has passed today (their time zone), check the companies
  * they follow plus the built-in list (each board read once for all of them), keep the new matches for the app, and email them.
- * Stops starting new people after budgetMs; they're picked up next hour. force runs people who already ran today
- * (for testing from the workflow). The counts say why nothing was sent: no boards, no listings, none matched, or an email error.
+ * Stops starting new people after budgetMs; they're picked up next hour. force runs everyone with alerts on, whatever
+ * the day or time and even if they already ran today (for testing from the workflow). The counts say why nothing was sent: no boards, no listings, none matched, or an email error.
  */
 export async function runAlerts({ now = new Date(), origin = '', budgetMs = 40000, force = false } = {}) {
   const start = Date.now();
@@ -59,7 +59,8 @@ export async function runAlerts({ now = new Date(), origin = '', budgetMs = 4000
     const p = parse(vals[2 * i]);
     if (!p || !p.settings || !p.email) return;
     const d = C.alertDue(p, force ? '' : vals[2 * i + 1] || '', now);
-    if (d.due) due.push({ sub, p, day: d.day });
+    // force (a test run from the workflow): anyone with alerts on, whatever the day or time.
+    if (d.due || (force && d.day && p.settings.schedule.on && p.settings.jobsPerUpdate > 0)) due.push({ sub, p, day: d.day });
   });
   if (!due.length) return { users: subs.length, due: 0, emailed: 0 };
 

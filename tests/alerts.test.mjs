@@ -168,3 +168,10 @@ test('force runs again today and the result says why nothing was emailed', async
   assert.equal(forced.due, 1);
   assert.equal(forced.candidates, 0); assert.equal(forced.found, 0); assert.equal(forced.emailed, 0); // never sent twice
 });
+
+test('force runs even before your time or on a day you didn’t pick', async () => {
+  await call(alerts, { method: 'PUT', headers: auth, body: { profile: C.alertProfile(settingsFor('kestrel'), 'Asia/Kolkata') } });
+  const early = new Date('2026-11-03T01:00:00Z'); // 06:30 IST, before 09:00
+  assert.equal((await A.runAlerts({ now: early, origin: 'https://jobs4you.vercel.app' })).due, 0);
+  assert.equal((await A.runAlerts({ now: early, origin: 'https://jobs4you.vercel.app', force: true })).due, 1);
+});

@@ -1,6 +1,6 @@
 # Every hour, asks the site to run the email-alerts search (web/api/alerts-run.js). Each user is emailed once a day,
 # at their own "New jobs ready by" time. Needs the repo secret CRON_SECRET (the same value as in Vercel).
-# Run it by hand from Actions; tick "force" to run again for people who already ran today (testing).
+# Run it by hand from Actions; tick "force" to run now for everyone with alerts on, whatever the day or time (testing).
 name: Job alerts
 on:
   schedule:
@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       force:
-        description: 'Run again for people who already ran today (testing)'
+        description: 'Run now for everyone with alerts on, whatever the time (testing)'
         type: boolean
         default: false
 permissions: {}
