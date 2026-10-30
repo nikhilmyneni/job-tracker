@@ -28,6 +28,10 @@ There's nothing else to set up: the AI is built in and free.
   server, so Job Hunter syncs while it's open: if it was closed at those times, it catches up as soon as you open it.
   **Sync now** runs everything straight away. On the day you sign up, Job Hunter also looks for jobs every two hours
   while it's open, until you have that day's matches.
+- **Email alerts (optional):** turn on *Email me when new jobs are ready* in setup or **Settings → Routine**. At your
+  "New jobs ready by" time, Job Hunter looks through the companies you follow even while it's closed and emails you the
+  new matches (and they're waiting in Job matches next time you open it). It keeps only what matching needs, never your
+  CV or Gmail; turning it off, or *Stop these emails* in an alert, deletes it.
 - **Applications:** Board, Table or Timeline. Drag a card to another column, or tap it to fix the status,
   role, next step or interview time. "N emails need a look" lists emails it couldn't match.
 - **Job matches:** openings from your job-alert emails and the companies you follow, scored by how much of
@@ -92,5 +96,20 @@ npm run check          # syntax check
 2. Set **Root Directory** to `web`, Framework Preset to **Other**, and leave the build command empty. Then click **Deploy**.
 3. Add the Vercel URL to the OAuth client's **Authorized JavaScript origins** (step 1.4).
 4. Every push to `main` deploys automatically.
+
+### 5. Email alerts (optional, free)
+Without these, the *Email me when new jobs are ready* switch says alerts aren't set up, and everything else works.
+1. **Storage:** Vercel → your project → **Storage → Create → Upstash (Redis)**, free plan, connected to the project.
+   That adds `KV_REST_API_URL` and `KV_REST_API_TOKEN`.
+2. **Email:** sign up at brevo.com (free: 300 emails a day). **Senders, domains & IPs → Senders → Add a sender** and
+   verify the address the alerts will come from. Then **SMTP & API → API keys → Generate**.
+   In Vercel add `BREVO_API_KEY` and `ALERTS_FROM` (that verified address), and optionally `ALERTS_FROM_NAME`.
+3. **Secrets:** make two long random strings (for example with `openssl rand -hex 32`). In Vercel add
+   `CRON_SECRET` and `ALERTS_SECRET`. In GitHub: **repo → Settings → Secrets and variables → Actions → New repository
+   secret**, `CRON_SECRET` with the same value.
+4. Redeploy. The workflow `.github/workflows/job-alerts.yml` then calls the site every hour (about 720 free minutes a
+   month of the 2,000 GitHub gives private repos). To try it at once: **Actions → Job alerts → Run workflow**.
+5. Locally, put the same lines in `.env.local` and run
+   `curl -X POST -H "Authorization: Bearer <CRON_SECRET>" http://localhost:5173/api/alerts-run`.
 
 If you use a custom domain, add it to the authorized origins and the Branding page too.

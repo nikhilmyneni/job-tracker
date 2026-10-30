@@ -6,9 +6,14 @@ import * as C from './core.js';
 
 const TIMEOUT_MS = 20000;
 
+// Where "/api/…" lives: the page itself in the browser; on the server (the email alerts) the site's own address.
+let apiOrigin = '';
+export function useApiOrigin(origin) { apiOrigin = String(origin || ''); }
+
 async function getJson(url) {
   const ctl = new AbortController();
   const t = setTimeout(() => ctl.abort(), TIMEOUT_MS);
+  if (apiOrigin && url.startsWith('/')) url = apiOrigin + url;
   try {
     const res = await fetch(url, { signal: ctl.signal, credentials: 'omit', referrerPolicy: 'no-referrer' });
     if (!res.ok) throw new Error(res.status === 404 ? 'board not found' : `error ${res.status}`);

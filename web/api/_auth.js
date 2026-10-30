@@ -9,18 +9,25 @@ const verified = new Map();
 
 /** The Google user id behind a "Bearer <access token>" header, if the token was issued to our OAuth client. */
 export async function userFrom(req) {
+  const me = await userInfo(req);
+  return me ? me.sub : null;
+}
+
+/** {sub, email} behind the token (email is there because sign-in asks for the email scope), or null. */
+export async function userInfo(req) {
   const token = String((req.headers && req.headers.authorization) || '').replace(/^Bearer\s+/i, '');
   if (!token) return null;
   const hit = verified.get(token);
-  if (hit && hit.exp > Date.now()) return hit.sub;
+  if (hit && hit.exp > Date.now()) return { sub: hit.sub, email: hit.email };
   try {
     const r = await fetch('https://oauth2.googleapis.com/tokeninfo?access_token=' + encodeURIComponent(token));
     if (!r.ok) return null;
     const t = await r.json();
     if ((t.aud !== GOOGLE_CLIENT_ID && t.azp !== GOOGLE_CLIENT_ID) || !(Number(t.expires_in) > 0) || !t.sub) return null;
+    const email = t.email && String(t.email_verified) !== 'false' ? String(t.email) : '';
     if (verified.size > 2000) verified.clear();
-    verified.set(token, { sub: t.sub, exp: Date.now() + Number(t.expires_in) * 1000 });
-    return t.sub;
+    verified.set(token, { sub: t.sub, email, exp: Date.now() + Number(t.expires_in) * 1000 });
+    return { sub: t.sub, email };
   } catch (e) { return null; }
 }
 

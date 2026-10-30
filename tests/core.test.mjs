@@ -495,3 +495,19 @@ test('signup day: the job search runs every 2 hours until a day of matches is in
   d.jobs = []; d.startedOn = '2026-10-29';
   assert.equal(C.scheduleDue(d, at(13)).jobs, false); // not the signup day
 });
+
+test('removed applications stay removed: older emails about them are ignored, newer ones bring them back', () => {
+  const data = C.normalizeData({});
+  const r = C.newResult();
+  C.upsertApplication(data.applications, { company: 'Acme', role: 'SOC Analyst', stage: 'Applied', date: '2026-10-01' }, r);
+  C.upsertApplication(data.applications, { company: 'Beta', role: '', stage: 'Interview', date: '2026-10-02' }, r);
+  assert.equal(C.summary(data.applications).active, 2);
+  assert.equal(C.removeApplications(data, data.applications.filter(C.inPlay), '2026-10-30'), 2);
+  assert.equal(data.applications.length, 0);
+  C.upsertApplication(data.applications, { company: 'Acme', role: 'SOC Analyst', stage: 'Screening', date: '2026-10-20' }, r, data.removed);
+  C.upsertApplication(data.applications, { company: 'Beta', role: 'Intern', stage: 'Interview', date: '2026-10-29' }, r, data.removed);
+  assert.equal(data.applications.length, 0); // the re-read of older emails doesn't bring them back
+  C.upsertApplication(data.applications, { company: 'Acme', role: 'SOC Analyst', stage: 'Interview', date: '2026-11-02' }, r, data.removed);
+  assert.equal(data.applications.length, 1); // a new email after removing does
+  assert.equal(C.normalizeData(JSON.parse(JSON.stringify(data))).removed.length, 2);
+});

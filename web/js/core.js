@@ -73,6 +73,7 @@ export function defaultSettings() {
     schedule: { on: true, days: [0, 1, 2, 3, 4, 5, 6], gmailAt: '07:00', jobsAt: '09:00' },
     sinceDays: 120,
     notify: false, // browser notifications after a sync
+    emailAlerts: false, // opt-in: the server looks for jobs while the app is closed and emails them (api/alerts.js)
     keywords: [], // your own words to look for in job posts (they count as skills you have, and weigh more)
     minMatch: 40, // new matches below this score are left out
     matchView: { location: '', experience: 'fresher', internships: true, hideApplied: true }, // the job matches screen's filters
@@ -116,6 +117,7 @@ export function normalizeSettings(raw) {
     schedule: normalizeSchedule(r.schedule, r.autoUpdateHours, d.schedule),
     sinceDays: pick(r.sinceDays, SINCE_DAYS, d.sinceDays),
     notify: r.notify === true,
+    emailAlerts: r.emailAlerts === true,
     keywords: Array.isArray(r.keywords) ? strList(r.keywords, 20, 40) : d.keywords,
     minMatch: MIN_MATCHES.indexOf(Number(r.minMatch)) >= 0 ? Number(r.minMatch) : d.minMatch,
     matchView: (() => { const v = r.matchView && typeof r.matchView === 'object' ? r.matchView : {}; return { location: str(v.location, 60, ''), experience: v.experience === 'any' ? 'any' : 'fresher', internships: v.internships !== false, hideApplied: v.hideApplied !== false }; })(),
@@ -141,7 +143,7 @@ export function prefsText(s) {
 
 // ---------- Data file ----------
 export function emptyData() {
-  return { version: 2, settings: defaultSettings(), applications: [], jobs: [], seen: [], log: [], cv: '', cvFile: null, cvFold: null, cvFoldHash: '', review: [], reviewDone: [], skillsAdded: [], skillsRemoved: [], lastRunAt: '', gmailRunAt: '', gmailScan: GMAIL_SCAN, gmailRescan: false, jobsRunAt: '', startedOn: '' };
+  return { version: 2, settings: defaultSettings(), applications: [], jobs: [], seen: [], log: [], cv: '', cvFile: null, cvFold: null, cvFoldHash: '', review: [], reviewDone: [], skillsAdded: [], skillsRemoved: [], lastRunAt: '', gmailRunAt: '', gmailScan: GMAIL_SCAN, gmailRescan: false, jobsRunAt: '', startedOn: '', removed: [] };
 }
 
 export function normalizeData(raw) {
@@ -169,6 +171,7 @@ export function normalizeData(raw) {
     // GMAIL_SCAN: how Gmail is read now. Older data reads its application emails again once, with the better search and rules.
     gmailScan: r.gmailScan === GMAIL_SCAN ? GMAIL_SCAN : 1,
     startedOn: isYmd(r.startedOn) ? r.startedOn : '', // the day you finished setup
+    removed: arr(r.removed).filter(x => typeof x.key === 'string' && isYmd(x.on)).slice(-MAX_REMOVED), // applications you removed: {key, on}
     gmailRescan: r.gmailRescan === true, // a re-read is under way (its seen ids were cleared once)
     // When Gmail was last read. Older files read Gmail on every run, so their lastRunAt counts.
     gmailRunAt: typeof r.gmailRunAt === 'string' ? r.gmailRunAt : (typeof r.lastRunAt === 'string' && !('gmailRunAt' in r) ? r.lastRunAt : ''),
@@ -220,6 +223,44 @@ export function scheduleDue(data, now) {
   const firstDay = sc.on && data.startedOn === today && foundToday < s.jobsPerUpdate &&
     now.getTime() - new Date(data.jobsRunAt).getTime() >= FIRST_DAY_GAP_H * 3600e3;
   return { gmail: due(data.gmailRunAt, sc.gmailAt), jobs: s.jobsPerUpdate > 0 && (due(data.jobsRunAt, sc.jobsAt) || firstDay) };
+}
+
+// ---------- Email alerts (opt-in; the server side is web/api/_alerts.js) ----------
+/**
+ * What the alerts server keeps for you: only what matching needs. Skill names, never the CV; nothing from Gmail.
+ * tz is this device's time zone, so "New jobs ready by" means your time.
+ */
+export function alertProfile(data, tz) {
+  const s = data.settings;
+  return {
+    settings: { prefs: s.prefs, keywords: s.keywords, minMatch: s.minMatch, jobsPerUpdate: s.jobsPerUpdate, schedule: s.schedule, companies: s.companies },
+    skills: mySkills(data).slice(0, 80), tz: String(tz || 'Asia/Kolkata'),
+  };
+}
+
+/** {due, day}: whether the alert search should run now for this profile (its time zone), and the local day. */
+export function alertDue(profile, sentDay, now) {
+  let parts;
+  try {
+    parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: profile.tz, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', weekday: 'short', hourCycle: 'h23' })
+      .formatToParts(now).map(p => [p.type, p.value]));
+  } catch (e) { return { due: false, day: '' }; }
+  const day = `${parts.year}-${parts.month}-${parts.day}`, time = `${parts.hour}:${parts.minute}`;
+  const s = profile.settings, sc = s.schedule;
+  const due = sc.on && s.jobsPerUpdate > 0 && sc.days.includes(DAYS.indexOf(parts.weekday)) && time >= sc.jobsAt && sentDay !== day;
+  return { due, day };
+}
+
+/** Jobs the alerts server found while the app was closed, added as New (keeping where each was found; skipping ones already here). Returns how many. */
+export function mergeAlertJobs(data, jobs) {
+  const ids = new Set(data.jobs.map(j => j.id)), keys = new Set(data.jobs.map(j => j.key).filter(Boolean));
+  let n = 0;
+  (Array.isArray(jobs) ? jobs : []).forEach(j => {
+    if (!j || typeof j !== 'object' || !j.id || ids.has(j.id) || (j.key && keys.has(j.key))) return;
+    data.jobs.push(Object.assign({}, j, { status: 'New' }));
+    ids.add(j.id); if (j.key) keys.add(j.key); n++;
+  });
+  return n;
 }
 
 // ---------- Gmail message bodies ----------
@@ -342,9 +383,28 @@ const addHistory = (app, on, status, by) => {
 };
 
 /** u: {company, role, stage, next_step, next_at, next_kind, round, date: 'yyyy-mm-dd', channel, link (the email), posting (the job ad)} */
-export function upsertApplication(apps, u, result) {
+export const MAX_REMOVED = 500;
+const IN_PLAY = ['Applied', 'Screening', 'Interview'];
+export const inPlay = (a) => IN_PLAY.includes(a.status);
+
+/** Removes these applications and remembers them, so an email about one from before today doesn't bring it back. */
+export function removeApplications(data, list, today) {
+  const gone = new Set(list);
+  data.removed = (data.removed || []).concat(list.map(a => ({ key: a.key || `${a.company}|${a.role || ''}`.toLowerCase(), on: today }))).slice(-MAX_REMOVED);
+  data.applications = data.applications.filter(a => !gone.has(a));
+  return list.length;
+}
+
+/** Whether an email dated `date` is about an application you removed after that date. */
+function wasRemoved(removed, company, role, date) {
+  const key = (company + '|' + role).toLowerCase(), co = company.toLowerCase() + '|';
+  return removed.some(r => date <= r.on && (r.key === key || (!role && r.key.indexOf(co) === 0) || r.key === co));
+}
+
+export function upsertApplication(apps, u, result, removed = []) {
   const company = String(u.company || '').trim();
   if (!company) return null;
+  if (u.date && wasRemoved(removed, company, String(u.role || '').trim(), u.date)) return null;
   const role = String(u.role || '').trim();
   const stage = STATUSES.indexOf(u.stage) >= 0 ? u.stage : 'Applied';
   const key = (company + '|' + role).toLowerCase();
@@ -545,7 +605,7 @@ export function summary(apps) {
   const responses = apps.filter(a => a.furthest !== 'Applied').length;
   return {
     total, responses,
-    active: apps.filter(a => ['Applied', 'Screening', 'Interview'].includes(a.status)).length,
+    active: apps.filter(inPlay).length,
     rate: total ? Math.round(responses / total * 100) : 0,
     interviews: apps.filter(a => ['Interview', 'Offer'].includes(a.furthest)).length,
     offers: apps.filter(a => a.furthest === 'Offer').length,

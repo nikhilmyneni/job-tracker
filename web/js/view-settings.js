@@ -42,7 +42,7 @@ export function renderProfile(ctx, root) {
 export function renderSettings(ctx, root) {
   const { data, act } = ctx;
   const s = data.settings;
-  const routine = routineBlock(s), companies = companiesBlock(s.companies, { demo: ctx.demo });
+  const routine = routineBlock(s, { email: ctx.me && ctx.me.email }), companies = companiesBlock(s.companies, { demo: ctx.demo });
   const exportBtn = h('button', { class: 'btn btn-quiet', type: 'button', onclick: () => {
     const copy = JSON.parse(JSON.stringify(data));
     downloadBlob(new Blob([JSON.stringify(copy, null, 2)], { type: 'application/json' }), 'job-hunter-export.json');
@@ -68,9 +68,14 @@ function notifyPanel(ctx) {
   const status = h('div', { class: 'status', role: 'status' });
   const btn = h('button', { type: 'button', class: on ? 'btn btn-quiet' : 'btn btn-primary', onclick: () => busy(btn, on ? 'Turning off…' : 'Asking…', () => (on ? act.disableNotifications() : act.enableNotifications()), status) },
     on ? 'Turn off notifications' : 'Turn on notifications');
+  const alerts = h('p', { class: 'hint' });
+  if (data.settings.emailAlerts) {
+    alerts.textContent = 'Email alerts: on.';
+    act.alertsStatus().then(r => { alerts.textContent = r.on ? `Email alerts: on, to ${r.email}${r.lastRun ? `. Last looked on ${r.lastRun}` : ''}.` : 'Email alerts: off.'; }).catch(() => {});
+  } else alerts.textContent = 'Email alerts: off. Turn them on in Routine.';
   return panel('Notifications', notifySupported()
     ? (on ? 'On. You’ll get one when an application changes status or new matches arrive, while Job Hunter is open.' : 'Get one when an application changes status or new matches arrive, while Job Hunter is open (a tab, or the installed app).')
-    : 'This browser can’t show notifications.', notifySupported() ? h('div', { class: 'save-bar' }, btn, status) : '');
+    : 'This browser can’t show notifications.', notifySupported() ? h('div', { class: 'save-bar' }, btn, status) : '', alerts);
 }
 
 /** The skills matching uses: read from your CV; add ones it missed, remove ones that aren't really yours. */

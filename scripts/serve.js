@@ -23,6 +23,7 @@ async function api(name, url, req, res) {
     status(c) { res.statusCode = c; return out; },
     setHeader(k, v) { res.setHeader(k, v); },
     json(b) { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(b)); },
+    end(s) { res.end(s); },
   };
   let raw = '';
   for await (const chunk of req) { raw += chunk; if (raw.length > 200000) break; }

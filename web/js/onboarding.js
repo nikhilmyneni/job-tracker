@@ -61,8 +61,11 @@ export function avoidBlock(s) {
   };
 }
 
-export function routineBlock(s) {
+export function routineBlock(s, { email = '' } = {}) {
   const sc = s.schedule;
+  const alerts = h('input', { type: 'checkbox', class: 'switch', role: 'switch', checked: s.emailAlerts, 'aria-label': 'Email me when new jobs are ready' });
+  const alertsText = h('span', {}, s.emailAlerts ? 'On' : 'Off');
+  alerts.addEventListener('change', () => { alertsText.textContent = alerts.checked ? 'On' : 'Off'; });
   const on = h('input', { type: 'checkbox', class: 'switch', role: 'switch', checked: sc.on, 'aria-label': 'Daily updates' });
   const onText = h('span', {}, sc.on ? 'On' : 'Off');
   const days = WEEK.map(n => h('button', { type: 'button', class: 'day', 'aria-pressed': String(sc.days.includes(n)), 'data-day': n,
@@ -84,6 +87,11 @@ export function routineBlock(s) {
     el: h('div', { class: 'stack' },
       h('label', { class: 'switch-row' }, h('span', { class: 'field-lbl' }, 'Daily updates'), on, onText),
       timed,
+      h('div', { class: 'field' },
+        h('label', { class: 'switch-row' }, h('span', { class: 'field-lbl' }, 'Email me when new jobs are ready'), alerts, alertsText),
+        h('span', { class: 'hint' }, `Job Hunter looks for jobs at your “ready by” time even when it’s closed, and emails them${email ? ' to ' + email : ''}. `,
+          'For this it keeps your roles, places, skill names and followed companies on its server (never your CV or Gmail). ',
+          h('a', { href: '/privacy.html#alerts', target: '_blank', rel: 'noopener' }, 'What’s kept'))),
       group('Role range', range.el, 'Which job titles count as a match for the roles you picked.'),
       group('New jobs per day', jobs.el),
       group('First time, look back through Gmail for', since.el)),
@@ -92,6 +100,7 @@ export function routineBlock(s) {
       d.schedule = { on: on.checked && picked.length > 0, days: picked.length ? picked : sc.days, gmailAt: gmailAt.value || sc.gmailAt, jobsAt: jobsAt.value || sc.jobsAt };
       d.prefs = Object.assign({}, d.prefs, { roleRange: range.get() });
       d.jobsPerUpdate = Number(jobs.get()); d.sinceDays = Number(since.get());
+      d.emailAlerts = alerts.checked;
     },
   };
 }
@@ -233,7 +242,7 @@ const STEPS = [
   { id: 'avoid', title: 'Anything to skip?', intro: 'Openings with these are left out.', block: (d) => avoidBlock(d) },
   { id: 'gmail', title: 'Connect Gmail (optional)', intro: 'So your applications track themselves: confirmations, tests, interviews, offers and rejections, straight from your inbox.', block: (d, ctx) => gmailBlock(ctx) },
   { id: 'companies', title: 'Companies to follow (optional)', intro: 'Job Hunter already reads your job-alert emails from LinkedIn, Naukri, Indeed, Internshala, Wellfound and foundit. Add company career pages for more.', block: (d, ctx) => companiesBlock(d.companies, { demo: ctx.demo }) },
-  { id: 'routine', title: 'Your routine', block: (d) => routineBlock(d) },
+  { id: 'routine', title: 'Your routine', block: (d, ctx) => routineBlock(d, { email: ctx.me && ctx.me.email }) },
 ];
 
 /** Renders the wizard into root. ctx.finish(draft) saves and starts the app. */
@@ -282,7 +291,7 @@ export function runWizard(root, ctx) {
           row('Skip', p.avoid.join(', ')), row('CV', d.cv ? `${d.cv.length.toLocaleString()} characters${d.cvUpload ? ' · ' + d.cvUpload.name : ''}` : 'Not added yet'),
           row('Gmail', ctx.gmailOn && ctx.gmailOn() ? 'Connected (read-only)' : 'Not connected. You can connect it any time'),
           row('Companies', (d.companies || []).map(c => c.name).join(', ') || 'None yet'),
-                    row('Updates', `${scheduleLabel(d.schedule)} · ${d.jobsPerUpdate || 'no'} new jobs a day · ${ROLE_RANGES[d.prefs.roleRange]}`)),
+                    row('Updates', `${scheduleLabel(d.schedule)} · ${d.jobsPerUpdate || 'no'} new jobs a day · ${ROLE_RANGES[d.prefs.roleRange]}${d.emailAlerts ? ' · emailed to you' : ''}`)),
         h('p', { class: 'hint' }, ctx.gmailOn && ctx.gmailOn() ? 'Start reads your Gmail (read-only) from the last ' + d.sinceDays + ' days. Applications appear as they’re sorted.' : 'Start checks the companies you follow for openings.')];
       next = h('button', { type: 'button', class: 'btn btn-primary', onclick: () => busy(next, 'Saving…', () => ctx.finish(d), status) }, 'Start');
     }

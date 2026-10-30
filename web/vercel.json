@@ -1,6 +1,6 @@
 {
   "cleanUrls": false,
-  "functions": { "api/ai.js": { "maxDuration": 60 }, "api/workday.js": { "maxDuration": 20 } },
+  "functions": { "api/ai.js": { "maxDuration": 60 }, "api/workday.js": { "maxDuration": 20 }, "api/alerts.js": { "maxDuration": 15 }, "api/alerts-run.js": { "maxDuration": 60 } },
   "rewrites": [
     { "source": "/app", "destination": "/app.html" },
     { "source": "/app/", "destination": "/app.html" },

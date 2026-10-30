@@ -109,6 +109,33 @@ async function sharedAi(task, prompt, json) {
   return j.result;
 }
 
+// ---------- email alerts (opt-in; the server is api/alerts.js) ----------
+async function alertsApi(method, body) {
+  const res = await fetch('/api/alerts', { method, headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + G.accessToken() }, body: body ? JSON.stringify(body) : undefined });
+  const j = await res.json().catch(() => ({}));
+  if (res.status === 401) { showReconnect(true); throw new G.NeedSignIn(j.error || 'Sign in again.'); }
+  if (!res.ok) throw new Error(j.error || `Email alerts error ${res.status}`);
+  return j;
+}
+const myTimeZone = () => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata'; } catch (e) { return 'Asia/Kolkata'; } };
+/** Sends the server what matching needs (when alerts are on), or deletes it (when they've just been turned off). */
+async function syncAlerts(wasOn) {
+  if (DEMO) return;
+  if (ctx.data.settings.emailAlerts) await alertsApi('PUT', { profile: C.alertProfile(ctx.data, myTimeZone()) });
+  else if (wasOn) await alertsApi('DELETE');
+}
+/** Jobs the server found while the app was closed: added as New, then the server forgets them. */
+async function pickUpAlerts() {
+  if (DEMO || !ctx.data.settings.emailAlerts) return;
+  try {
+    const r = await alertsApi('GET');
+    if (!r.on) { ctx.data.settings.emailAlerts = false; await persist(); return; } // stopped from the email's link
+    const n = C.mergeAlertJobs(ctx.data, r.jobs);
+    if (r.jobs && r.jobs.length) await alertsApi('POST', { ack: r.jobs.map(j => j.id) });
+    if (n) { rescore(); await persist(); render(true); toast(`${n} new job${n === 1 ? '' : 's'} found while you were away.`); }
+  } catch (e) { /* tried; the jobs wait on the server for next time */ }
+}
+
 // ---------- saving ----------
 function showReconnect(on) { $('reconnect').hidden = !on; }
 
@@ -128,9 +155,15 @@ async function persist() {
 const today = () => C.ymd(new Date());
 Object.assign(ctx.act, {
   async saveSettings(d) {
+    const wasOn = ctx.data.settings.emailAlerts;
     ctx.data.settings = C.normalizeSettings(Object.assign({}, d, { onboarded: true }));
     rescore(); // the role range and your keywords change scores
+    let alertErr = null;
+    if (wasOn || ctx.data.settings.emailAlerts) {
+      try { await syncAlerts(wasOn); } catch (e) { alertErr = e; if (!wasOn) ctx.data.settings.emailAlerts = false; }
+    }
     await persist(); render(true);
+    if (alertErr) throw new Error('Saved, but email alerts couldn’t be turned on: ' + errText(alertErr));
   },
   async saveCv(text, file) {
     const changed = String(text || '') !== ctx.data.cv;
@@ -139,6 +172,7 @@ Object.assign(ctx.act, {
     ctx.data.cv = String(text || '').slice(0, C.MAX_CV);
     if (changed) rescore();
     await persist(); render(true);
+    if (changed && ctx.data.settings.emailAlerts) syncAlerts(true).catch(() => {}); // new skills for the alerts
   },
   async downloadCv() {
     const f = ctx.data.cvFile;
@@ -239,6 +273,7 @@ Object.assign(ctx.act, {
     ctx.data.skillsRemoved = [...fromCv].filter(c => !want.has(c.toLowerCase()));
     rescore();
     await persist(); render(true);
+    if (ctx.data.settings.emailAlerts) syncAlerts(true).catch(() => {});
   },
   async setJobStatus(job, status) {
     job.status = status;
@@ -278,14 +313,22 @@ Object.assign(ctx.act, {
     toast('Notifications on. You’ll hear about status changes and new matches while Job Hunter is open.');
   },
   async disableNotifications() { ctx.data.settings.notify = false; await persist(); render(true); },
-  async deleteApplication(app) { ctx.data.applications = ctx.data.applications.filter(a => a !== app); await persist(); render(true); },
+  async deleteApplication(app) { return ctx.act.deleteApplications([app]); },
+  /** Removes applications (one, or a selection); emails from before today won't bring them back. */
+  async deleteApplications(list) {
+    const n = C.removeApplications(ctx.data, list, today());
+    await persist(); render(true);
+    toast(`Removed ${n} application${n === 1 ? '' : 's'}.`);
+  },
   async deleteAll() {
     if (DEMO) { toast('Demo: nothing to delete.'); return; }
+    if (ctx.data.settings.emailAlerts) await alertsApi('DELETE').catch(() => {}); // what the alerts server kept, too
     await guarded(() => G.deleteAllData());
     await G.signOut();
     location.href = '/';
   },
   updateNow: () => updateNow(),
+  alertsStatus: () => (DEMO ? Promise.resolve({ on: ctx.data.settings.emailAlerts, email: ctx.me.email, lastRun: '' }) : alertsApi('GET')),
   gmailOn,
   /** Adds read-only Gmail access (Google shows its unverified-app screen here), then syncs. Must run from a click. */
   async connectGmail() {
@@ -382,6 +425,7 @@ async function enter() {
   }
   show('app'); render();
   runScheduled();
+  pickUpAlerts();
 }
 
 async function finishWizard(d) {
@@ -393,6 +437,7 @@ async function finishWizard(d) {
   if (!ctx.data.startedOn) ctx.data.startedOn = C.ymd(new Date());
   C.addLog(ctx.data, 'Set up Job Hunter');
   await persist();
+  if (ctx.data.settings.emailAlerts) await syncAlerts(false).catch(() => { ctx.data.settings.emailAlerts = false; toast('Email alerts couldn’t be turned on. Try again in Settings.', true); });
   show('app'); render();
   if (!DEMO) updateNow();
 }

@@ -5,7 +5,7 @@
   "description": "Free job-application tracker that runs in the browser: Gmail read-only, job matches and tailored resumes with free AI keys.",
   "license": "MIT",
   "scripts": {
-    "test": "node --test tests/core.test.mjs tests/notify.test.mjs tests/files.test.mjs tests/api.test.mjs tests/match.test.mjs tests/google.test.mjs tests/tailor.test.mjs",
+    "test": "node --test tests/core.test.mjs tests/notify.test.mjs tests/files.test.mjs tests/api.test.mjs tests/match.test.mjs tests/google.test.mjs tests/tailor.test.mjs tests/alerts.test.mjs",
     "check": "node scripts/check.js",
     "dev": "node scripts/serve.js"
   },

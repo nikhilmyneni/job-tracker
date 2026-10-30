@@ -1,12 +1,13 @@
 /** Applications: everything you've applied to, kept up to date from Gmail. Board, table or timeline. */
 import { h, busy, icon, pageHead, ago, openDialog, isHttp, toast, errText, copyButton } from './ui.js';
-import { STATUSES, STATUS_LABEL, summary, bySource, ymd } from './core.js';
-import { renderBoard, renderTimeline, editDialog } from './view-board.js';
+import { STATUSES, STATUS_LABEL, summary, bySource, ymd, inPlay } from './core.js';
+import { renderBoard, renderTimeline, editDialog, removeBtn } from './view-board.js';
 import { notifySupported, notifyAllowed } from './notify.js';
 
 const VIEWS = ['Board', 'Table', 'Timeline'];
 let view = (() => { try { return VIEWS.includes(localStorage.getItem('jh-apps-view')) ? localStorage.getItem('jh-apps-view') : 'Board'; } catch (e) { return 'Board'; } })();
 let sortCol = 'applied_on', sortDir = -1, query = '';
+const picked = new Set(); // applications ticked in the table (by id), for removing several at once
 
 export function renderApplications(ctx, root) {
   const { data, act } = ctx;
@@ -77,24 +78,41 @@ const dismissedNotify = () => { try { return localStorage.getItem('jh-notify-lat
 
 function table(ctx, list) {
   const { act } = ctx;
-  const head = h('tr', {}, ...[['company', 'Company'], ['role', 'Role'], ['channel', 'Channel'], ['applied_on', 'Applied'], ['status', 'Status'], ['next_step', 'Next step']]
+  const ids = new Set(ctx.data.applications.map(a => a.id));
+  [...picked].forEach(id => { if (!ids.has(id)) picked.delete(id); });
+  const redraw = () => box.replaceWith(table(ctx, list));
+  const pick = (a, on) => { if (on) picked.add(a.id); else picked.delete(a.id); redraw(); };
+  const visible = list.filter(a => a.id);
+  const all = h('input', { type: 'checkbox', 'aria-label': 'Select all shown', checked: visible.length > 0 && visible.every(a => picked.has(a.id)),
+    onchange: () => { visible.forEach(a => (all.checked ? picked.add(a.id) : picked.delete(a.id))); redraw(); } });
+  const playing = visible.filter(inPlay);
+  const chosen = ctx.data.applications.filter(a => picked.has(a.id));
+  const bar = h('div', { class: 'bulk-bar', role: 'region', 'aria-label': 'Selected applications' },
+    h('span', {}, chosen.length ? `${chosen.length} selected` : 'Tick applications to remove several at once.'),
+    playing.some(a => !picked.has(a.id)) ? h('button', { type: 'button', class: 'btn btn-quiet btn-sm', onclick: () => { playing.forEach(a => picked.add(a.id)); redraw(); } }, `Select all in play (${playing.length})`) : '',
+    chosen.length ? h('button', { type: 'button', class: 'btn btn-quiet btn-sm', onclick: () => { picked.clear(); redraw(); } }, 'Clear') : '',
+    chosen.length ? removeBtn(() => act.deleteApplications(chosen).then(() => picked.clear()), `Remove ${chosen.length}`, `Remove ${chosen.length} application${chosen.length === 1 ? '' : 's'}?`) : '');
+  const head = h('tr', {}, h('th', { class: 'cell-pick' }, all), ...[['company', 'Company'], ['role', 'Role'], ['channel', 'Channel'], ['applied_on', 'Applied'], ['status', 'Status'], ['next_step', 'Next step']]
     .map(([k, l]) => h('th', { scope: 'col', 'aria-sort': k === sortCol ? (sortDir > 0 ? 'ascending' : 'descending') : null },
-      h('button', { type: 'button', class: 'th-sort', onclick: (e) => { if (k === sortCol) sortDir = -sortDir; else { sortCol = k; sortDir = k === 'applied_on' ? -1 : 1; } e.currentTarget.closest('.table-box').replaceWith(table(ctx, list)); } }, l))),
+      h('button', { type: 'button', class: 'th-sort', onclick: (e) => { if (k === sortCol) sortDir = -sortDir; else { sortCol = k; sortDir = k === 'applied_on' ? -1 : 1; } e.currentTarget.closest('.table-wrap').replaceWith(table(ctx, list)); } }, l))),
     h('th', {}, h('span', { class: 'visually-hidden' }, 'Edit')));
   const rows = list.slice().sort((a, b) => sortDir * String(a[sortCol] || '').localeCompare(String(b[sortCol] || '')));
   const tbody = h('tbody', {}, ...(rows.length ? rows.map(a => {
+    const tick = h('input', { type: 'checkbox', 'aria-label': `Select ${a.company}${a.role ? ' – ' + a.role : ''}`, checked: picked.has(a.id), onchange: () => pick(a, tick.checked) });
     const sel = h('select', { class: 'select-sm', 'aria-label': 'Status for ' + a.company, onchange: async () => {
       sel.disabled = true;
       try { await act.setApplicationStatus(a, sel.value); } catch (e) { toast(errText(e), true); sel.disabled = false; }
     } }, ...STATUSES.map(st => h('option', { value: st, selected: st === a.status }, STATUS_LABEL[st])));
-    return h('tr', {},
+    return h('tr', { class: picked.has(a.id) ? 'row-picked' : '' },
+      h('td', { class: 'cell-pick' }, tick),
       h('td', {}, h('span', { class: 'cell-co' }, h('span', { class: 'ini' }, (a.company || '?').charAt(0).toUpperCase()), h('b', {}, a.company))),
       h('td', {}, isHttp(a.posting_link) ? h('a', { href: a.posting_link, target: '_blank', rel: 'noopener noreferrer', title: 'Open the job posting' }, a.role || 'Role not stated') : (a.role || 'Role not stated'),
         isHttp(a.email_link) ? h('a', { href: a.email_link, target: '_blank', rel: 'noopener noreferrer', class: 'cell-link', 'aria-label': `Open the latest ${a.company} email in Gmail` }, icon('mail')) : ''),
       h('td', {}, a.channel), h('td', { class: 'num' }, a.applied_on), h('td', {}, sel), h('td', { class: 'muted' }, a.next_step || ''),
       h('td', {}, h('button', { type: 'button', class: 'icon-btn', 'aria-label': `Edit ${a.company}`, onclick: () => editDialog(ctx, a) }, icon('file'))));
-  }) : [h('tr', {}, h('td', { colSpan: 7, class: 'empty' }, 'No applications match that search.'))]));
-  return h('div', { class: 'table-box panel' }, h('table', { class: 'table' }, h('thead', {}, head), tbody));
+  }) : [h('tr', {}, h('td', { colSpan: 8, class: 'empty' }, 'No applications match that search.'))]));
+  const box = h('div', { class: 'table-wrap' }, bar, h('div', { class: 'table-box panel' }, h('table', { class: 'table' }, h('thead', {}, head), tbody)));
+  return box;
 }
 
 function addDialog(ctx) {

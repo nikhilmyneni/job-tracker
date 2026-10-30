@@ -76,12 +76,12 @@ export function editDialog(ctx, a) {
 }
 
 /** Remove, confirmed in place: the button becomes "Yes, remove" and "Keep" (no second dialog). */
-function removeBtn(onRemove) {
+export function removeBtn(onRemove, label = 'Remove', question = 'Remove it?') {
   const box = h('div', { class: 'confirm-inline' });
-  const ask = () => box.replaceChildren(h('span', { class: 'confirm-q', role: 'status' }, 'Remove it?'),
+  const ask = () => box.replaceChildren(h('span', { class: 'confirm-q', role: 'status' }, question),
     h('button', { type: 'button', class: 'btn btn-danger', onclick: (e) => busy(e.currentTarget, 'Removing…', onRemove) }, 'Yes, remove'),
     h('button', { type: 'button', class: 'btn btn-quiet', onclick: idle }, 'Keep'));
-  const idle = () => box.replaceChildren(h('button', { type: 'button', class: 'btn btn-quiet', onclick: () => { ask(); box.querySelector('.btn-danger').focus(); } }, 'Remove'));
+  const idle = () => box.replaceChildren(h('button', { type: 'button', class: 'btn btn-quiet', onclick: () => { ask(); box.querySelector('.btn-danger').focus(); } }, label));
   idle();
   return box;
 }

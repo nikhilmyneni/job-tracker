@@ -125,7 +125,7 @@ async function syncApplications(data, me, afterStr, seen, result, report, note, 
     outs.flatMap(o => o.updates).sort((a, b) => a.email.date - b.email.date).forEach(u => C.upsertApplication(data.applications, {
       company: u.company, role: u.role, stage: u.stage, next_step: u.next_step, next_at: u.next_at, next_kind: u.next_kind, round: u.round,
       date: C.ymd(u.email.date), channel: C.channelFromSender(u.email.from), link: u.email.link,
-    }, result));
+    }, result, data.removed));
     outs.flatMap(o => o.review).forEach(u => { if (C.addReview(data, u.email, u)) result.review++; });
     group.flat().forEach(e => seen.add(e.id));
     refresh();

@@ -27,9 +27,11 @@ and counts toward the 100-user cap. Without Gmail, users add applications by han
 ## Hard constraints (don't break these)
 - **Free.** No paid APIs or services. Server code only as free Vercel functions, and only when a
   source can't be called from the browser.
-- **Gmail is read-only** (`gmail.readonly`). Never send, delete, label or modify mail. There's no outgoing mail at all.
+- **Gmail is read-only** (`gmail.readonly`). Never send, delete, label or modify mail. The only outgoing mail is the opt-in job alerts, sent by the server through Brevo, never through the user's Gmail.
 - **Narrow scopes:** sign-in `drive.appdata`, `openid`, `email`, `profile`; plus `gmail.readonly` only when the user connects Gmail. No full Drive, no Docs.
-- **No user data is stored anywhere but the user's browser and Drive.** It goes to Google (Gmail, the
+- **No user data is stored anywhere but the user's browser and Drive**, except the **opt-in email-alerts profile** (`api/alerts.js`,
+  Upstash): email, time zone, schedule, prefs, keywords, skill *names*, followed companies, job ids; never CV text, Gmail or
+  applications; deleted when alerts are turned off, via the email's unsubscribe, or by *Delete all my data*. Otherwise it goes to Google (Gmail, the
   Drive app folder) and, for AI tasks, through `api/ai.js` to Groq/Gemini. That function passes text straight
   through: no storage, no logs. Job boards and `api/workday.js` only ever get a company's board name and a role. No analytics, no telemetry, no CDNs: fonts and pdf.js are vendored in
   `web/vendor/`. The CSP in each HTML page is the allow-list: keep it tight when adding an origin.
@@ -70,6 +72,11 @@ and counts toward the 100-user cap. Without Gmail, users add applications by han
 - `config.js` (public OAuth client id), `sw.js` (caches only our own files; `npm run check` fails if
   a `js/` file is missing from `SHELL`), `manifest.webmanifest`, `icon.svg`, `vercel.json` (rewrites, headers),
   `package.json` (`type: module` for the functions), `robots.txt`, `sitemap.xml`.
+- `api/alerts.js` (your switch: GET/PUT/POST ack/DELETE, `?unsub=` confirm page) and `api/alerts-run.js` (hourly, `CRON_SECRET`, called by
+  `.github/workflows/job-alerts.yml`): email alerts. `_alerts.js` (`cleanProfile`, `runAlerts`: each board once per run, `boardCandidates` +
+  `pickByScore` with skill names, one Brevo email, jobs kept in `alerts:new:<sub>` for the app), `_store.js` (Upstash REST), `_mail.js` (Brevo,
+  escaped HTML). Env: `KV_REST_API_URL`/`KV_REST_API_TOKEN`, `BREVO_API_KEY`, `ALERTS_FROM`, `CRON_SECRET`, `ALERTS_SECRET`. The app sends
+  `alertProfile()` on save, picks up waiting jobs on open (`mergeAlertJobs`), and `alertDue()` says when (the user's time zone).
 - `api/ai.js`: the built-in AI (see the constraints). `api/_auth.js`: shared token check and allowance. `api/workday.js`: reads a company's public Workday board
   (Workday has no CORS). Host, site and path are validated.
 - `js/core.js`: **pure** logic: constants, settings and prefs, the data shape, Gmail body decoding,
@@ -87,15 +94,15 @@ and counts toward the 100-user cap. Without Gmail, users add applications by han
 - `js/app.js`: boot, routing, sync, actions. Screens: `view-applications.js` (+ `view-board.js`: board, timeline, edit dialog), `view-matches.js`,
   `view-tailor.js`, `view-settings.js` (Profile and Settings). `onboarding.js`: the wizard plus the shared
   field blocks. `ui.js`: `h()`, `busy`, `holdButton`, `setLabel`, `icon`, `pageHead`, chips, dialogs. `demo.js`.
-- `tests/`: Node tests: `core`, `match`, `files` (PDF lines), `notify`, `api` (the AI function), `google` (rate-limit retries, paging) and `tailor` (suggestions, LaTeX, .docx), with fetch faked. `npm test` and `npm run check` must pass before any push.
+- `tests/`: Node tests: `core`, `match`, `files` (PDF lines), `notify`, `api` (the AI function), `google` (rate-limit retries, paging), `tailor` (suggestions, LaTeX, .docx) and `alerts` (the email alerts, with a fake store, Brevo and board), with fetch faked. `npm test` and `npm run check` must pass before any push.
 - `scripts/serve.js` (local server on :5173, with the /app rewrites and /api functions), `scripts/check.js`.
 - `docs/SETUP.md`: users and owner (Google Cloud + Vercel). Keep it in sync with behaviour changes. `docs/ROADMAP.md`: ideas.
 
 ## Data (one Drive app-data file per user, `job-tracker.json`)
-`{version: 2, settings, applications[], jobs[], seen[] (≤5000), log[] (newest first, ≤300), cv, cvFile, cvFold, cvFoldHash, review[] (≤50), reviewDone[], lastRunAt, gmailRunAt, gmailScan, gmailRescan, jobsRunAt, startedOn}`.
+`{version: 2, settings, applications[], jobs[], seen[] (≤5000), log[] (newest first, ≤300), cv, cvFile, cvFold, cvFoldHash, review[] (≤50), reviewDone[], lastRunAt, gmailRunAt, gmailScan, gmailRescan, jobsRunAt, startedOn, removed[] ({key, on}: removed applications; older emails don't bring them back)}`.
 `gmailRunAt` is when Gmail was last read (so connecting it later still looks back `sinceDays`); it only moves once every matching email is read. `gmailScan` = `GMAIL_SCAN` marks data read the current way; older data reads its application emails again once over `sinceDays` (`gmailRescan` while that runs). An email older than an application's last update, or from on/before your own last change, never moves its status.
 - `settings`: onboarded, name, city, prefs {roles[], level, jobType, paidOnly, minPay,
-  locations[], relocate, roleRange (core/related: `roleFits`), avoid[]}, schedule {on, days[] (0 = Sun), gmailAt, jobsAt}, jobsPerUpdate (per day), sinceDays, notify, keywords[], minMatch (0–90),
+  locations[], relocate, roleRange (core/related: `roleFits`), avoid[]}, schedule {on, days[] (0 = Sun), gmailAt, jobsAt}, jobsPerUpdate (per day), sinceDays, notify, emailAlerts, keywords[], minMatch (0–90),
   matchView {location, experience, internships, hideApplied}, companies[{ats, slug, name, host?, site?}].
   To add a setting, update `defaultSettings` + `normalizeSettings`
   (+ `prefsText` if the scorer should use it), the block in `onboarding.js`, and the docs.
