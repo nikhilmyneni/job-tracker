@@ -193,6 +193,17 @@ export function addLog(data, msg, now) {
 }
 
 export const FIRST_DAY_GAP_H = 2; // on the day you sign up, the job search runs this often until you have a day's matches
+/**
+ * A match score in words: shown instead of the number everywhere. tone is for colour (hi, mid, low).
+ * Excellent 80+, Good 65–79, Fair 50–64, Ambitious 35–49 (a reach), Poor under 35.
+ */
+export const MATCH_LEVELS = [[80, 'Excellent', 'hi'], [65, 'Good', 'hi'], [50, 'Fair', 'mid'], [35, 'Ambitious', 'low'], [0, 'Poor', 'low']];
+export function matchLabel(score) {
+  const s = Number(score) || 0;
+  const [, label, tone] = MATCH_LEVELS.find(([min]) => s >= min);
+  return { label, tone };
+}
+
 export const MIN_UPDATE_GAP_MIN = 10; // automatic syncs that fail aren't retried sooner than this
 
 /** The latest scheduled time at or before now (on a chosen day), or null. at is "HH:MM" on this device's clock. */

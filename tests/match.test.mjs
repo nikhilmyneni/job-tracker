@@ -140,3 +140,8 @@ test('sales and calling jobs are left out even when the title mentions security'
   assert.equal(C.rejectReason({ role: 'Security Presales Consultant', location: 'Bengaluru' }, prefs), 'skipList');
   assert.equal(C.rejectReason({ role: 'Security Analyst', location: 'Bengaluru' }, prefs), '');
 });
+
+test('match scores are shown as words', () => {
+  assert.deepEqual([85, 70, 55, 40, 20].map(s => C.matchLabel(s).label), ['Excellent', 'Good', 'Fair', 'Ambitious', 'Poor']);
+  assert.equal(C.matchLabel(80).label, 'Excellent'); assert.equal(C.matchLabel(79).label, 'Good');
+});

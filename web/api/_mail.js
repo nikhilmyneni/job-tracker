@@ -3,6 +3,8 @@
  * Env: BREVO_API_KEY, ALERTS_FROM (the verified address), optional ALERTS_FROM_NAME. Plain fetch, no packages.
  * Job text comes from company job boards, so it's escaped everywhere and only http(s) links are kept.
  */
+import { matchLabel } from '../js/core.js';
+
 export const mailReady = () => !!(process.env.BREVO_API_KEY && process.env.ALERTS_FROM);
 
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -28,8 +30,8 @@ export function jobsEmail(jobs, { appUrl, unsubUrl, now = new Date() }) {
     const apply = safeUrl(j.link) || appUrl, tailor = `${base}/app/tailor/${encodeURIComponent(j.id || '')}`;
     return `<tr><td style="padding:0 0 14px">
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border:1px solid ${line};border-radius:12px;background:#ffffff"><tr>
-<td width="64" valign="top" style="padding:18px 0 18px 18px">
-  <div style="width:52px;height:52px;border-radius:12px;background:${j.score >= 70 ? navy : '#eef2fb'};color:${j.score >= 70 ? '#ffffff' : navy};font:700 17px/52px ${sans};text-align:center">${esc(j.score)}%</div>
+<td width="90" valign="top" style="padding:18px 0 18px 18px">
+  <div style="width:78px;padding:8px 0;border-radius:10px;background:${matchLabel(j.score).tone === 'hi' ? navy : '#eef2fb'};color:${matchLabel(j.score).tone === 'hi' ? '#ffffff' : navy};font:700 12px/1.2 ${sans};text-align:center">${esc(matchLabel(j.score).label)}<br><span style="font-weight:500;font-size:10px;opacity:.85">match</span></div>
 </td>
 <td valign="top" style="padding:16px 18px 18px 14px">
   <a href="${esc(apply)}" style="font:600 17px/1.3 ${serif};color:${ink};text-decoration:none">${esc(j.role)}</a>
@@ -40,7 +42,7 @@ export function jobsEmail(jobs, { appUrl, unsubUrl, now = new Date() }) {
 </td></tr></table>
 </td></tr>`;
   };
-  const preview = esc(n === 1 ? `${top.role} at ${top.company}, ${top.score}% match.` : `${top.role} at ${top.company} (${top.score}%) and ${n - 1} more, picked from company job boards.`);
+  const preview = esc(n === 1 ? `${top.role} at ${top.company}: ${matchLabel(top.score).label} match.` : `${top.role} at ${top.company} (${matchLabel(top.score).label} match) and ${n - 1} more, picked from company job boards.`);
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><title>${esc(subject)}</title></head>
 <body style="margin:0;padding:0;background:#eef1f6">
 <div style="display:none;max-height:0;overflow:hidden;opacity:0">${preview}&#8199;&#65279;&#847;&#8199;&#65279;&#847;</div>
@@ -69,7 +71,7 @@ export function jobsEmail(jobs, { appUrl, unsubUrl, now = new Date() }) {
 </table>
 </td></tr></table>
 </body></html>`;
-  const text = [subject, '', ...jobs.map(j => [`${j.role} (${j.score}% match)`, where(j), j.why, gap(j) && `Skill to pick up: ${gap(j)}`, `Apply: ${safeUrl(j.link) || appUrl}`].filter(Boolean).join('\n') + '\n'),
+  const text = [subject, '', ...jobs.map(j => [`${j.role} (${matchLabel(j.score).label} match)`, where(j), j.why, gap(j) && `Skill to pick up: ${gap(j)}`, `Apply: ${safeUrl(j.link) || appUrl}`].filter(Boolean).join('\n') + '\n'),
     `All your matches: ${appUrl}`, `Stop these emails: ${unsubUrl}`].join('\n');
   return { subject, html, text };
 }

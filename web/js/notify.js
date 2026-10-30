@@ -2,7 +2,7 @@
  * Browser notifications after a sync: a status changed, or new matches arrived.
  * There's no push server, so they only fire while Job Hunter is open (a tab or the installed app).
  */
-import { STATUS_LABEL } from './core.js';
+import { STATUS_LABEL, matchLabel } from './core.js';
 
 export const notifySupported = () => 'Notification' in window;
 export const notifyAllowed = () => notifySupported() && Notification.permission === 'granted';
@@ -33,7 +33,7 @@ export function notificationsFor(result, jobs) {
   }
   if (jobs.length) {
     const best = jobs.slice().sort((a, b) => b.fit - a.fit)[0];
-    out.push({ title: `${jobs.length} new job match${jobs.length === 1 ? '' : 'es'}`, body: `Best: ${best.role} at ${best.company} (${Math.round(best.fit * 20)}%)`, url: '/app/matches', tag: 'jobs' });
+    out.push({ title: `${jobs.length} new job match${jobs.length === 1 ? '' : 'es'}`, body: `Best: ${best.role} at ${best.company} (${matchLabel(best.score ?? best.fit * 20).label} match)`, url: '/app/matches', tag: 'jobs' });
   }
   return out;
 }

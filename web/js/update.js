@@ -181,11 +181,11 @@ async function findJobs(data, me, afterStr, seen, result, report, note, gmail) {
   })).forEach(job => {
     if (boardId(job)) seen.add(boardId(job));
     data.jobs.push(job);
-    result.jobsNew.push(`${job.company} – ${job.role} (${job.score}%)`);
+    result.jobsNew.push(`${job.company} – ${job.role} (${C.matchLabel(job.score).label})`);
   });
   const left = Object.entries(dropped).map(([k, v]) => `${v} ${C.PROBLEM_TEXT[k]}`);
   if (left.length) note(`Left out after reading the postings: ${left.join(', ')}.`);
-  if (best && !result.jobsNew.length) note(`Some fitting jobs scored under your minimum match of ${s.minMatch}% (best ${best}%). Lower it in Job matches to see them.`);
+  if (best && !result.jobsNew.length) note(`Some fitting jobs were below your minimum match (${C.matchLabel(s.minMatch).label}; the best was ${C.matchLabel(best).label}). Lower it in Job matches to see them.`);
 }
 
 /** The CV as ResumeFold's Resume JSON (not tailored: ResumeFold does that). Made once per CV and kept. */

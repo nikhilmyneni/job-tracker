@@ -4,7 +4,7 @@
  * tailored resume) or the list with the selected job's details beside it (a dialog on phones).
  */
 import { h, busy, icon, pageHead, ago, extLink, isHttp, chipInput, openDialog, toast, errText } from './ui.js';
-import { filterJobs, MIN_MATCHES, roleKind, tailorSuggestions, applySuggestions } from './core.js';
+import { filterJobs, MIN_MATCHES, roleKind, tailorSuggestions, applySuggestions, matchLabel } from './core.js';
 
 let show = 'New', selectedId = null;
 // Table or cards on desktop: a display preference, kept on this device.
@@ -14,6 +14,9 @@ const SHOWS = { New: ['New'], Saved: ['Saved'], Applied: ['Applied'], Hidden: ['
 const isPhone = () => matchMedia('(max-width: 900px)').matches;
 
 const scoreOf = (j) => (j.score ?? Math.round((Number(j.fit) || 0) * 20));
+/** The match in words (Excellent … Poor), never a number. */
+const level = (sc, cls = '') => { const m = matchLabel(sc); return h('span', { class: `lvl lvl-${m.tone} ${cls}`.trim() }, m.label); };
+const atLeast = (min) => (min ? `${matchLabel(min).label} and better` : 'Any match');
 const posted = (j) => (j.posted ? 'posted ' + ago(j.posted + 'T09:00:00') : j.found_on ? 'found ' + ago(j.found_on + 'T09:00:00') : '');
 const credit = (j) => h('span', { class: 'job-src' }, 'From ' + (j.source || 'a job-alert email'));
 
@@ -31,9 +34,9 @@ export function renderMatches(ctx, root) {
   const experience = h('select', { 'aria-label': 'Experience', onchange: () => save({ experience: experience.value }) },
     h('option', { value: 'fresher', selected: v.experience !== 'any' }, 'Fresher (0–1 yrs)'), h('option', { value: 'any', selected: v.experience === 'any' }, 'Any experience'));
   const toggle = (label, key) => { const i = h('input', { type: 'checkbox', checked: !!v[key], onchange: () => save({ [key]: i.checked }) }); return h('label', { class: 'inline' }, i, ' ', label); };
-  const minVal = h('output', { class: 'min-val' }, s.minMatch + '%');
-  const min = h('input', { type: 'range', min: 0, max: 90, step: 10, value: s.minMatch, 'aria-label': 'Minimum match', 'aria-valuetext': s.minMatch + '%',
-    oninput: () => { minVal.textContent = min.value + '%'; min.setAttribute('aria-valuetext', min.value + '%'); },
+  const minVal = h('output', { class: 'min-val' }, atLeast(s.minMatch));
+  const min = h('input', { type: 'range', min: 0, max: 90, step: 10, value: s.minMatch, 'aria-label': 'Minimum match', 'aria-valuetext': atLeast(s.minMatch),
+    oninput: () => { minVal.textContent = atLeast(Number(min.value)); min.setAttribute('aria-valuetext', atLeast(Number(min.value))); },
     onchange: () => save({}, null, MIN_MATCHES.includes(Number(min.value)) ? Number(min.value) : s.minMatch) });
   const tabs = h('div', { class: 'seg', role: 'radiogroup', 'aria-label': 'Show' }, ...Object.keys(SHOWS).map(k =>
     h('button', { type: 'button', role: 'radio', 'aria-checked': String(show === k), onclick: () => { show = k; renderMatches(ctx, root); } }, k)));
@@ -72,7 +75,7 @@ export function renderMatches(ctx, root) {
   const empty = (title, text) => h('div', { class: 'empty-block' }, h('h2', {}, title), h('p', {}, text));
   const asTable = layout === 'table' && !isPhone();
   const body = rows.length ? (asTable ? jobsTable(ctx, rows, () => renderMatches(ctx, root)) : h('div', { class: 'matches' }, list, detail))
-    : all.length && show === 'New' ? empty(`No matches at ${s.minMatch}% or more`, 'Lower the minimum match, change the filters, or add keywords you’re strong in.')
+    : all.length && show === 'New' ? empty(`No ${matchLabel(s.minMatch).label.toLowerCase()} or better matches`, 'Lower the minimum match, change the filters, or add keywords you’re strong in.')
       : show !== 'New' ? empty(`Nothing ${show.toLowerCase()} yet`, show === 'Saved' ? 'Save a match to come back to it here.' : 'Jobs you mark show up here.')
         : !data.cv ? empty('Add your CV first', 'Matches are scored against the skills in your CV. Add it in Profile and CV, then sync.')
           : empty('No matches yet', 'New openings arrive with each sync: from job-alert emails (with Gmail connected) and the companies you follow.');
@@ -84,7 +87,7 @@ export function renderMatches(ctx, root) {
 function jobCard(j, select, current) {
   const sc = scoreOf(j);
   return h('button', { type: 'button', class: 'job-card', dataset: { id: j.id }, 'aria-current': String(current), onclick: () => select(j) },
-    h('span', { class: 'score' + (sc >= 80 ? ' score-hi' : ''), 'aria-label': `${sc}% match` }, sc),
+    level(sc, 'lvl-card'),
     h('span', { class: 'job-card-body' },
       h('b', {}, j.role),
       h('span', { class: 'job-meta' }, [j.company, j.location, posted(j)].filter(Boolean).join(' · ')),
@@ -106,7 +109,7 @@ function jobDetail(ctx, j, redraw, inDialog) {
     inDialog ? '' : h('h2', { class: 'jd-title' }, j.role),
     h('p', { class: 'job-meta' }, [j.company, j.location, j.pay, posted(j)].filter(Boolean).join(' · ')),
     h('div', { class: 'meter', role: 'meter', 'aria-valuemin': 0, 'aria-valuemax': 100, 'aria-valuenow': sc, 'aria-label': 'Match' },
-      h('div', { class: 'meter-top' }, h('b', {}, sc + '%'), h('span', {}, 'match with your CV')),
+      h('div', { class: 'meter-top' }, h('b', {}, matchLabel(sc).label), h('span', {}, 'match with your CV')),
       h('div', { class: 'meter-track' }, h('i'))),
     (j.matched || []).length ? h('div', {}, h('h3', { class: 'jd-h' }, 'On your CV'), h('p', { class: 'chips-row' }, ...j.matched.map(m => h('span', { class: 'kw' }, m)))) : '',
     (j.missing || []).length ? h('div', {}, h('h3', { class: 'jd-h' }, 'Asked for, not on your CV'), h('p', { class: 'chips-row' }, ...j.missing.map(m => h('span', { class: 'kw kw-miss' }, '+ ' + m)))) : '',
@@ -137,10 +140,10 @@ function jobsTable(ctx, rows, redraw) {
   const { data, act } = ctx;
   const roles = data.settings.prefs.roles;
   const th = (t, cls) => h('th', { scope: 'col', class: cls || '' }, t);
-  const head = h('tr', {}, th('Fit', 'num'), th('Match', 'num'), th('Type'), th('Company'), th('Role'), th('Location'), th('Pay'),
+  const head = h('tr', {}, th('Match'), th('Type'), th('Company'), th('Role'), th('Location'), th('Pay'),
     th('Why it fits', 'col-wide'), th('Skill to pick up'), th('Apply by'), th('Status'), h('th', {}, h('span', { class: 'visually-hidden' }, 'Actions')));
   const body = rows.map(j => {
-    const sc = scoreOf(j), fit = Math.max(1, Math.round(sc / 20));
+    const sc = scoreOf(j);
     const status = h('select', { class: 'select-sm', 'aria-label': `Status for ${j.role} at ${j.company}`, onchange: async () => {
       status.disabled = true;
       try { await act.setJobStatus(j, status.value); toast(status.value === 'Applied' ? 'Added to your applications' : 'Saved'); redraw(); } catch (e) { toast(errText(e), true); status.disabled = false; }
@@ -152,8 +155,7 @@ function jobsTable(ctx, rows, redraw) {
     }) }, h('span', {}, 'Resume PDF'), icon('download'));
     const kind = roleKind(j.role, roles);
     return h('tr', {},
-      h('td', { class: 'num' }, h('span', { class: 'fit fit-' + fit, title: `Fit ${fit} of 5` }, fit)),
-      h('td', { class: 'num' }, h('span', { class: 'score score-sm' + (sc >= 80 ? ' score-hi' : ''), 'aria-label': `${sc}% match` }, sc + '%')),
+      h('td', {}, level(sc)),
       h('td', {}, h('span', { class: 'pill ' + (kind === 'Core' ? 'pill-blue' : kind === 'Stretch' ? 'pill-orange' : '') }, kind)),
       h('td', {}, h('b', {}, j.company)),
       h('td', { class: 'col-role' }, isHttp(j.link) ? h('a', { href: j.link, target: '_blank', rel: 'noopener noreferrer' }, j.role) : j.role),

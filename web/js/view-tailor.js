@@ -4,7 +4,7 @@
  * preview in ResumeFold's four layouts, and downloads (ResumeFold, PDF, Word, LaTeX). Saved with the job.
  */
 import { h, busy, icon, pageHead, extLink, isHttp, toast, errText } from './ui.js';
-import { TEMPLATES, tailorSuggestions, applySuggestions, tailorScore, highlightJd, termsIn, dateRange, RESUMEFOLD_URL } from './core.js';
+import { TEMPLATES, matchLabel, tailorSuggestions, applySuggestions, tailorScore, highlightJd, termsIn, dateRange, RESUMEFOLD_URL } from './core.js';
 
 export function renderTailor(ctx, root, jobId) {
   const { data, act } = ctx;
@@ -49,8 +49,8 @@ export function renderTailor(ctx, root, jobId) {
     const delta = now.score - baseScore;
     const card = h('div', { class: 'score-card' },
       h('p', { class: 'score-card-k' }, 'JD match'),
-      h('p', { class: 'score-card-v' }, now.score + '%'),
-      h('p', { class: 'score-card-s' }, delta > 0 ? `from ${baseScore}% on your base CV` : 'on your base CV'),
+      h('p', { class: 'score-card-v' }, matchLabel(now.score).label),
+      h('p', { class: 'score-card-s' }, matchLabel(now.score).label !== matchLabel(baseScore).label ? `up from ${matchLabel(baseScore).label} on your base CV` : delta > 0 ? 'better than your base CV' : 'on your base CV'),
       h('div', { class: 'meter-track' }, h('i')));
     card.querySelector('.meter-track i').style.width = now.score + '%';
     const scoreWith = (s) => tailorScore(applySuggestions(base, [...accepted, s]).resume, job, data.settings.keywords).score - now.score;
@@ -61,7 +61,7 @@ export function renderTailor(ctx, root, jobId) {
       const accept = h('button', { type: 'button', class: on ? 'btn btn-sm btn-quiet' : 'btn btn-sm btn-primary', disabled: !on && s.warn && !t.confirmed.includes(s.id),
         onclick: () => { t.accepted = on ? t.accepted.filter(x => x !== s.id) : [...t.accepted, s.id]; save(); draw(); } }, on ? 'Accepted — undo' : 'Accept');
       return h('li', { class: 'sug' + (on ? ' sug-on' : '') },
-        h('div', { class: 'sug-top' }, h('span', { class: 'pill ' + (s.kind === 'Add skill' ? 'pill-orange' : 'pill-blue') }, s.kind), pts > 0 ? h('span', { class: 'sug-pts' }, `+${pts} pts`) : ''),
+        h('div', { class: 'sug-top' }, h('span', { class: 'pill ' + (s.kind === 'Add skill' ? 'pill-orange' : 'pill-blue') }, s.kind), pts > 0 ? h('span', { class: 'sug-pts' }, 'Raises your match') : ''),
         h('b', {}, s.title), h('p', {}, s.text),
         s.warn && !on ? h('p', { class: 'sug-warn' }, icon('alert'), h('span', {}, s.warn)) : '',
         s.warn && !on ? h('label', { class: 'inline small' }, ok, ' I can talk about this in an interview') : '',
@@ -144,7 +144,7 @@ function renderPicker(ctx, root) {
     pasteForm(ctx),
     jobs.length ? h('h2', { class: 'panel-title' }, 'Or pick a job') : '',
     jobs.length ? h('ul', { class: 'pick' }, ...jobs.map(j => h('li', {}, h('a', { href: `/app/tailor/${encodeURIComponent(j.id)}` },
-      h('b', {}, j.role), h('span', {}, [j.company, j.tailored ? 'tailored' : (j.score != null ? j.score + '% match' : '')].filter(Boolean).join(' · ')))))) :
+      h('b', {}, j.role), h('span', {}, [j.company, j.tailored ? 'tailored' : (j.score != null ? matchLabel(j.score).label + ' match' : '')].filter(Boolean).join(' · ')))))) :
       '');
 }
 
