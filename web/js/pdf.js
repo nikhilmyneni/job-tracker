@@ -11,7 +11,11 @@ const FONT = { R: 'F1', B: 'F2', I: 'F3' };
 const WIDTHS = {};
 [['R', TIMES_ROMAN], ['B', TIMES_BOLD], ['I', TIMES_ITALIC]].forEach(([f, list]) => { WIDTHS[f] = new Map(CODES.map((c, i) => [c, list[i]])); });
 const COLOR = { ink: [0.078, 0.09, 0.122], text: [0.17, 0.184, 0.22], muted: [0.357, 0.384, 0.44], accent: [0.114, 0.227, 0.431], rule: [0.79, 0.81, 0.86], tint: [0.953, 0.961, 0.976] };
-const SIZE = { body: 10, small: 8.7, head: 8.6, name: 23, headline: 10.3 };
+const BASE = { body: 10, small: 8.7, head: 8.6, name: 23, headline: 10.3 };
+let SIZE = Object.assign({}, BASE), gapK = 1;
+const GAP = (n) => n * gapK;
+/** Type at k times its base size; spacing grows (or shrinks) faster, so a short resume breathes instead of leaving a blank page. */
+function scaleTo(k) { SIZE = Object.fromEntries(Object.entries(BASE).map(([key, v]) => [key, v * k])); gapK = k * k * k; }
 const LEAD = 1.32;
 
 // ---------- characters: WinAnsi codes, with stand-ins for what the core fonts lack ----------
@@ -86,34 +90,35 @@ function header(doc, r, template, x0, x1) {
   const top = doc.y;
   const nameSize = template === 'senior' ? SIZE.name + 3 : SIZE.name;
   drawLines(doc, wrap([{ text: c.fullName || 'Your name', f: 'B', color: 'ink' }], nameSize, x1 - tx), tx, nameSize, center ? 'center' : 'left', x1);
-  if (c.headline) { doc.y -= 1; drawLines(doc, wrap([{ text: c.headline, f: 'R', color: 'accent' }], SIZE.headline, x1 - tx), tx, SIZE.headline, center ? 'center' : 'left', x1); }
+  if (c.headline) { doc.y -= GAP(1); drawLines(doc, wrap([{ text: c.headline, f: 'R', color: 'accent' }], SIZE.headline, x1 - tx), tx, SIZE.headline, center ? 'center' : 'left', x1); }
   const bits = [c.email, c.phone, c.location, c.linkedin, c.github, c.website].filter(Boolean);
   const runs = bits.flatMap((b, i) => [i ? { text: '  |  ', f: 'R', color: 'rule' } : null, { text: b.replace(/\s+/g, ' '), f: 'R', color: 'muted' }].filter(Boolean));
-  if (runs.length) { doc.y -= 2; drawLines(doc, wrap(runs, SIZE.small, x1 - tx), tx, SIZE.small, center ? 'center' : 'left', x1); }
-  doc.y -= 8;
+  if (runs.length) { doc.y -= GAP(2); drawLines(doc, wrap(runs, SIZE.small, x1 - tx), tx, SIZE.small, center ? 'center' : 'left', x1); }
+  doc.y -= GAP(8);
   if (bar) doc.ops.push(doc.rect(x0, doc.y + 4, 3, top - doc.y - 2, 'accent'));
   else if (template === 'senior') { doc.line(x0, doc.y, x1, doc.y, 0.8, 'accent'); doc.line(x0, doc.y - 2.4, x1, doc.y - 2.4, 0.8, 'accent'); doc.y -= 2.4; }
   else doc.line(x0, doc.y, x1, doc.y, 1.2, 'accent');
-  doc.y -= 4;
+  doc.y -= GAP(4);
 }
 
 function section(doc, title, x0, x1, first) {
   doc.need(SIZE.head * 2 + SIZE.body * LEAD * 2); // keep a heading with at least its first lines
-  doc.y -= first ? 10 : 17;
+  doc.y -= GAP(first ? 10 : 17);
   const t = title.toUpperCase(), w = measure(t, 'B', SIZE.head);
   doc.text(x0, doc.y, t, 'B', SIZE.head, 'accent');
-  doc.line(x0 + w + 7, doc.y + 2.9, x1, doc.y + 2.9, 0.55, 'rule');
-  doc.y -= 4;
+  doc.line(x0 + w + 7, doc.y + SIZE.head * 0.34, x1, doc.y + SIZE.head * 0.34, 0.55, 'rule');
+  doc.y -= GAP(4);
 }
 
 function bullets(doc, list, x0, x1) {
   (list || []).filter(Boolean).forEach(b => {
-    const lines = wrap([{ text: b, f: 'R', color: 'text' }], SIZE.body, x1 - x0 - 11);
+    const ind = SIZE.body * 1.1;
+    const lines = wrap([{ text: b, f: 'R', color: 'text' }], SIZE.body, x1 - x0 - ind);
     doc.need(SIZE.body * LEAD);
     const y0 = doc.y - SIZE.body * LEAD;
     doc.text(x0 + 2, y0 + SIZE.body * 0.28, '•', 'R', SIZE.body, 'accent');
-    drawLines(doc, lines, x0 + 11, SIZE.body);
-    doc.y -= 0.6;
+    drawLines(doc, lines, x0 + ind, SIZE.body);
+    doc.y -= GAP(0.6);
   });
 }
 
@@ -121,7 +126,7 @@ function entry(doc, what, where, when, list, x0, x1) {
   const dateW = when ? measure(when, 'R', SIZE.small) + 12 : 0;
   const lines = wrap([{ text: what, f: 'B', color: 'ink' }, where ? { text: ', ' + where, f: 'I', color: 'muted' } : null].filter(Boolean), SIZE.body, x1 - x0 - dateW);
   doc.need(SIZE.body * LEAD * 2);
-  doc.y -= 3;
+  doc.y -= GAP(3);
   const firstY = doc.y - SIZE.body * LEAD;
   drawLines(doc, lines, x0, SIZE.body);
   if (when) doc.text(x1 - measure(when, 'R', SIZE.small), firstY + SIZE.body * 0.28, when, 'R', SIZE.small, 'accent');
@@ -135,12 +140,12 @@ function skills(doc, groups, x0, x1, stacked) {
     if (stacked) {
       drawLines(doc, wrap([{ text: g.category, f: 'B', color: 'ink' }], SIZE.body, x1 - x0), x0, SIZE.body);
       drawLines(doc, wrap(runs, SIZE.body, x1 - x0), x0, SIZE.body);
-      doc.y -= 4;
+      doc.y -= GAP(4);
     } else {
       doc.need(SIZE.body * LEAD);
       doc.text(x0, doc.y - SIZE.body * LEAD + SIZE.body * 0.28, g.category, 'B', SIZE.body, 'ink');
       drawLines(doc, wrap(runs, SIZE.body, x1 - x0 - labelW), x0 + labelW, SIZE.body);
-      doc.y -= 1;
+      doc.y -= GAP(1);
     }
   });
 }
@@ -169,6 +174,19 @@ function sections(doc, r, keys, x0, x1, stacked) {
 /** The PDF file's bytes. */
 export function resumePdf(r, template = 'standard') {
   const t = ORDER[template] ? template : 'standard';
+  // Fit the page: the largest size (up to 1.25×) that still fits one page; if even 0.9× doesn't, it runs onto a second.
+  const usable = PAGE_H - TOP - BOTTOM;
+  const fits = (k) => { const d = layout(r, t, k); return d.pages.length === 1 && d.used <= usable; };
+  let lo = 0.9, hi = 1.25;
+  if (fits(hi)) lo = hi;
+  else if (fits(lo)) { for (let i = 0; i < 12; i++) { const mid = (lo + hi) / 2; if (fits(mid)) lo = mid; else hi = mid; } }
+  const doc = layout(r, t, lo);
+  scaleTo(1);
+  return assemble(doc.pages, r.contact && r.contact.fullName);
+}
+
+function layout(r, t, k) {
+  scaleTo(k);
   const doc = makeDoc();
   const x0 = MARGIN_X, x1 = PAGE_W - MARGIN_X;
   header(doc, r, t, x0, x1);
@@ -183,7 +201,8 @@ export function resumePdf(r, template = 'standard') {
     doc.y = top;
     sections(doc, r, ORDER.combination, x0 + sideW + gap, x1, false);
   } else sections(doc, r, ORDER[t], x0, x1, false);
-  return assemble(doc.pages, r.contact && r.contact.fullName);
+  doc.used = PAGE_H - TOP - doc.y;
+  return doc;
 }
 
 function assemble(pages, author) {

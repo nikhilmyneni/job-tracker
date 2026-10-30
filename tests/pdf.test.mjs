@@ -44,3 +44,13 @@ test('a long resume flows onto a second page', () => {
   assert.ok(s.includes('/Count 2'));
   checkXref(s);
 });
+
+test('a short resume is set larger to fill the page; a long one smaller to keep one page', () => {
+  const size = (r) => Number(latin(resumePdf(r)).match(/\/F1 ([\d.]+) Tf[^\n]*\(Cyber\)/)?.[1] || 0);
+  const short = JSON.parse(JSON.stringify(DEMO_FOLD));
+  const long = JSON.parse(JSON.stringify(DEMO_FOLD));
+  long.experience = Array.from({ length: 5 }, (_, i) => Object.assign({}, long.experience[0], { id: 'x' + i, bullets: Array(3).fill('Reviewed firewall and VPN logs daily and flagged unusual logins to the team lead.') }));
+  const s = latin(resumePdf(long));
+  assert.ok(s.includes('/Count 1'), 'still one page');
+  assert.ok(size(short) > size(long), `${size(short)} > ${size(long)}`);
+});
