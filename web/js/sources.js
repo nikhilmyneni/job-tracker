@@ -45,7 +45,7 @@ export async function fetchBoards(companies, roles, report) {
       report(`Checking company job boards ${++done} of ${companies.length}…`);
     }
   };
-  await Promise.all([0, 1, 2, 3].map(worker));
+  await Promise.all([0, 1, 2, 3, 4, 5].map(worker)); // 6 boards at a time: the built-in list is about 40
   return { listings: all, notes };
 }
 

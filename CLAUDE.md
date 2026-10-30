@@ -48,7 +48,8 @@ and counts toward the 100-user cap. Without Gmail, users add applications by han
   tasks classify/extract/cv, prompts ≤ 40k characters, `AI_DAILY_LIMIT` calls per user per day.
 - **Untrusted text** (emails, AI output, CV, job boards) goes into the DOM with `h()` / `textContent` only, never `innerHTML`.
 - **Never commit personal data** (CVs, keys, real emails, screenshots) to the repo or tests.
-- **Job sources:** only official public APIs and the user's own alert emails. No scraping of sites whose terms forbid it.
+- **Job sources:** only official public APIs and the user's own alert emails. No scraping of sites whose terms forbid it
+  (so no Amazon, Google, Microsoft, TCS, Infosys or Wipro: their careers sites have no public listing API).
 
 ## Browser realities
 - Google Identity Services token client: tokens last about 1 hour. `G.resumeSession()` picks the
@@ -82,7 +83,8 @@ and counts toward the 100-user cap. Without Gmail, users add applications by han
 - `js/core.js`: **pure** logic: constants, settings and prefs, the data shape, Gmail body decoding,
   the classifier, applications, job prompts, matching (`termsIn`, `mySkills`, `matchScore`, `pickByScore`,
   `filterJobs`), CV sections (`cvSections`), job boards (`parseCareerUrl`,
-  `listingsFromBoard`, `matchesPrefs`, `boardCandidates`), the ResumeFold hand-off
+  `listingsFromBoard`, `matchesPrefs`, `boardCandidates`; `INDIA_BOARDS` is the built-in list of ~40 start-ups and MNCs on Greenhouse/Lever/Ashby/
+  SmartRecruiters/Workday, searched unless `autoCompanies` is off; `searchCompanies(settings)` = followed + built-in), the ResumeFold hand-off
   (`resumeFoldPrompt`, `cleanResumeFold`, `resumeFoldFor`), the resume tailor (`TEMPLATES`, `pastedJob` for a pasted description, `resumeFromCv` by rules,
   `tailorSuggestions` / `applySuggestions` / `tailorScore`, `highlightJd`, `honestRewrite` for AI summaries, `resumeLatex`),
   and the dashboard numbers.
@@ -103,7 +105,7 @@ and counts toward the 100-user cap. Without Gmail, users add applications by han
 `gmailRunAt` is when Gmail was last read (so connecting it later still looks back `sinceDays`); it only moves once every matching email is read. `gmailScan` = `GMAIL_SCAN` marks data read the current way; older data reads its application emails again once over `sinceDays` (`gmailRescan` while that runs). An email older than an application's last update, or from on/before your own last change, never moves its status.
 - `settings`: onboarded, name, city, prefs {roles[], level, jobType, paidOnly, minPay,
   locations[], relocate, roleRange (core/related: `roleFits`), avoid[]}, schedule {on, days[] (0 = Sun), gmailAt, jobsAt}, jobsPerUpdate (per day), sinceDays, notify, emailAlerts, keywords[], minMatch (0–90),
-  matchView {location, experience, internships, hideApplied}, companies[{ats, slug, name, host?, site?}].
+  matchView {location, experience, internships, hideApplied}, companies[{ats, slug, name, host?, site?}] (followed), autoCompanies (default true).
   To add a setting, update `defaultSettings` + `normalizeSettings`
   (+ `prefsText` if the scorer should use it), the block in `onboarding.js`, and the docs.
 - **Application:** id, company, role, channel, applied_on, status, furthest, last_update,

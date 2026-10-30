@@ -42,7 +42,7 @@ export function renderProfile(ctx, root) {
 export function renderSettings(ctx, root) {
   const { data, act } = ctx;
   const s = data.settings;
-  const routine = routineBlock(s, { email: ctx.me && ctx.me.email }), companies = companiesBlock(s.companies, { demo: ctx.demo });
+  const routine = routineBlock(s, { email: ctx.me && ctx.me.email }), companies = companiesBlock(s.companies, { demo: ctx.demo, auto: s.autoCompanies });
   const exportBtn = h('button', { class: 'btn btn-quiet', type: 'button', onclick: () => {
     const copy = JSON.parse(JSON.stringify(data));
     downloadBlob(new Blob([JSON.stringify(copy, null, 2)], { type: 'application/json' }), 'job-hunter-export.json');
@@ -53,7 +53,7 @@ export function renderSettings(ctx, root) {
     h('div', { class: 'cols' },
       h('div', { class: 'stack-lg' },
         panel('Routine', 'When your Gmail sync and job search run on their own, and what they bring.', routine.el, saveBar('Save routine', (d) => routine.collect(d), ctx)),
-        panel('Companies to follow', 'Their open jobs are checked on every sync, alongside your job-alert emails.', companies.el, saveBar('Save companies', (d) => companies.collect(d), ctx))),
+        panel('Companies', 'Their open jobs are checked on every sync and for email alerts, alongside your job-alert emails.', companies.el, saveBar('Save companies', (d) => companies.collect(d), ctx))),
       h('div', { class: 'stack-lg' },
         notifyPanel(ctx),
         panel('Your data', `Saved in a hidden app folder in ${ctx.me ? ctx.me.email + '’s' : 'your'} Google Drive. Only Job Hunter can open it.`,

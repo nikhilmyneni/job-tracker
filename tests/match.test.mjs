@@ -70,3 +70,16 @@ test('settings: keywords, minMatch, matchView', () => {
   assert.equal(s.minMatch, 40); // only the offered steps (0, 10 … 90)
   assert.deepEqual(s.matchView, { location: 'Pune', experience: 'fresher', internships: false, hideApplied: true });
 });
+
+test('built-in company list: short role words are whole words, US remote and CTO roles are left out', () => {
+  const prefs = C.normalizeSettings({ prefs: { roles: ['SOC Analyst'], locations: ['Hyderabad', 'Remote'] } }).prefs;
+  const L = (role, location) => ({ id: 'x', role, location });
+  assert.equal(C.matchesPrefs(L('SOC Analyst L1', 'Hyderabad'), prefs), true);
+  assert.equal(C.matchesPrefs(L('SOC Analysts', 'Hyderabad'), prefs), true);
+  assert.equal(C.matchesPrefs(L('Social Media Associate', 'Hyderabad'), prefs), false);
+  assert.equal(C.matchesPrefs(L('Security Engineer', 'Remote, Maryland; Remote, Virginia'), Object.assign({}, prefs, { roles: ['Security Engineer'] })), false);
+  assert.equal(C.matchesPrefs(L('Technical Leader & CTO, National Security', 'Remote - India'), Object.assign({}, prefs, { roles: ['Security Analyst'] })), false);
+  assert.equal(C.searchCompanies(C.normalizeSettings({})).length, C.INDIA_BOARDS.length);
+  assert.equal(C.searchCompanies(C.normalizeSettings({ autoCompanies: false })).length, 0);
+  C.INDIA_BOARDS.forEach(c => assert.ok(C.normalizeCompany(c), c.name));
+});

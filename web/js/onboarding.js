@@ -2,7 +2,7 @@
  * First-run setup: one question per step. The same field blocks make up the Preferences part of Settings.
  */
 import { h, chipInput, segmented, busy, errText, extLink, icon } from './ui.js';
-import { LEVELS, JOB_TYPES, JOBS_PER_UPDATE, DAYS, ROLE_RANGES, SINCE_DAYS, ATS, COMPANY_SUGGESTIONS, companyKey, normalizeCompany, parseCareerUrl, placeMatches, profileFromCv, applyCvProfile } from './core.js';
+import { LEVELS, JOB_TYPES, JOBS_PER_UPDATE, DAYS, ROLE_RANGES, SINCE_DAYS, ATS, COMPANY_SUGGESTIONS, INDIA_BOARDS, companyKey, normalizeCompany, parseCareerUrl, placeMatches, profileFromCv, applyCvProfile } from './core.js';
 import { fetchBoard } from './sources.js';
 import { readCvFile, CV_ACCEPT } from './files.js';
 
@@ -172,6 +172,10 @@ export function cvBlock(cvText, cvFile, opts = {}) {
  */
 export function companiesBlock(list, opts = {}) {
   let cur = (list || []).slice();
+  const auto = h('input', { type: 'checkbox', class: 'switch', role: 'switch', checked: opts.auto !== false, 'aria-label': 'Also search Job Hunter’s company list' });
+  const autoRow = h('div', { class: 'field' },
+    h('label', { class: 'switch-row' }, h('span', { class: 'field-lbl' }, `Also search ${INDIA_BOARDS.length} companies hiring in India`), auto),
+    h('span', { class: 'hint' }, 'On by default, so you get matches without following anyone: ' + INDIA_BOARDS.slice(0, 8).map(c => c.name).join(', ') + ' and more. Add any others below.'));
   const box = h('ul', { class: 'fade-list', 'aria-label': 'Companies you follow' });
   const sugg = h('div', { class: 'chip-sugg' });
   const input = h('input', { type: 'url', placeholder: 'Paste a careers page link, e.g. jobs.lever.co/cred', 'aria-label': 'Careers page link', 'aria-describedby': 'co-hint' });
@@ -180,7 +184,7 @@ export function companiesBlock(list, opts = {}) {
     box.replaceChildren(...(cur.length ? cur.map((c, i) => h('li', {},
       h('span', { class: 'ini' }, c.name.charAt(0).toUpperCase()), h('span', { class: 'co-name' }, h('b', {}, c.name), h('small', {}, ATS[c.ats])),
       h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Stop following ' + c.name, onclick: () => { cur.splice(i, 1); draw(); } }, icon('x')))) :
-      [h('li', { class: 'muted' }, 'None yet. Job-alert emails still bring in matches.')]));
+      [h('li', { class: 'muted' }, 'None of your own yet. The list above and your job-alert emails still bring in matches.')]));
     const have = new Set(cur.map(companyKey));
     sugg.replaceChildren(...COMPANY_SUGGESTIONS.filter(c => !have.has(companyKey(c))).map(c =>
       h('button', { type: 'button', class: 'chip-add', onclick: () => { cur.push(normalizeCompany(c)); draw(); } }, '+ ' + c.name)));
@@ -196,9 +200,9 @@ export function companiesBlock(list, opts = {}) {
   }, status) }, 'Add');
   draw();
   return {
-    el: h('div', { class: 'stack' }, box, h('div', { class: 'inline-form' }, input, add),
+    el: h('div', { class: 'stack' }, autoRow, box, h('div', { class: 'inline-form' }, input, add),
       h('p', { class: 'hint', id: 'co-hint' }, 'Works with Greenhouse, Lever, Ashby, SmartRecruiters, Workable, Recruitee and Workday career pages.'), status, sugg),
-    collect: (d) => { d.companies = cur.slice(); },
+    collect: (d) => { d.companies = cur.slice(); d.autoCompanies = auto.checked; },
   };
 }
 
@@ -241,7 +245,7 @@ const STEPS = [
   { id: 'where', title: 'Where would you like to work?', block: (d) => whereBlock(d) },
   { id: 'avoid', title: 'Anything to skip?', intro: 'Openings with these are left out.', block: (d) => avoidBlock(d) },
   { id: 'gmail', title: 'Connect Gmail (optional)', intro: 'So your applications track themselves: confirmations, tests, interviews, offers and rejections, straight from your inbox.', block: (d, ctx) => gmailBlock(ctx) },
-  { id: 'companies', title: 'Companies to follow (optional)', intro: 'Job Hunter already reads your job-alert emails from LinkedIn, Naukri, Indeed, Internshala, Wellfound and foundit. Add company career pages for more.', block: (d, ctx) => companiesBlock(d.companies, { demo: ctx.demo }) },
+  { id: 'companies', title: 'Companies (optional)', intro: 'Job Hunter already searches a list of companies hiring in India, and reads your job-alert emails if Gmail is connected. Add any company’s career page for more.', block: (d, ctx) => companiesBlock(d.companies, { demo: ctx.demo, auto: d.autoCompanies }) },
   { id: 'routine', title: 'Your routine', block: (d, ctx) => routineBlock(d, { email: ctx.me && ctx.me.email }) },
 ];
 
@@ -290,7 +294,7 @@ export function runWizard(root, ctx) {
           row('Locations', p.locations.join(', ') + (p.relocate ? ' · open to relocating' : '')),
           row('Skip', p.avoid.join(', ')), row('CV', d.cv ? `${d.cv.length.toLocaleString()} characters${d.cvUpload ? ' · ' + d.cvUpload.name : ''}` : 'Not added yet'),
           row('Gmail', ctx.gmailOn && ctx.gmailOn() ? 'Connected (read-only)' : 'Not connected. You can connect it any time'),
-          row('Companies', (d.companies || []).map(c => c.name).join(', ') || 'None yet'),
+          row('Companies', [(d.autoCompanies !== false) && `Job Hunter’s list (${INDIA_BOARDS.length})`, ...(d.companies || []).map(c => c.name)].filter(Boolean).join(', ') || 'None yet'),
                     row('Updates', `${scheduleLabel(d.schedule)} · ${d.jobsPerUpdate || 'no'} new jobs a day · ${ROLE_RANGES[d.prefs.roleRange]}${d.emailAlerts ? ' · emailed to you' : ''}`)),
         h('p', { class: 'hint' }, ctx.gmailOn && ctx.gmailOn() ? 'Start reads your Gmail (read-only) from the last ' + d.sinceDays + ' days. Applications appear as they’re sorted.' : 'Start checks the companies you follow for openings.')];
       next = h('button', { type: 'button', class: 'btn btn-primary', onclick: () => busy(next, 'Saving…', () => ctx.finish(d), status) }, 'Start');

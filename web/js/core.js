@@ -77,7 +77,8 @@ export function defaultSettings() {
     keywords: [], // your own words to look for in job posts (they count as skills you have, and weigh more)
     minMatch: 40, // new matches below this score are left out
     matchView: { location: '', experience: 'fresher', internships: true, hideApplied: true }, // the job matches screen's filters
-    companies: [], // company job boards to check: [{ats, slug, name, host?, site?}]
+    companies: [], // company job boards you follow: [{ats, slug, name, host?, site?}]
+    autoCompanies: true, // also search INDIA_BOARDS, so matches come without following anyone
   };
 }
 
@@ -118,6 +119,7 @@ export function normalizeSettings(raw) {
     sinceDays: pick(r.sinceDays, SINCE_DAYS, d.sinceDays),
     notify: r.notify === true,
     emailAlerts: r.emailAlerts === true,
+    autoCompanies: r.autoCompanies !== false,
     keywords: Array.isArray(r.keywords) ? strList(r.keywords, 20, 40) : d.keywords,
     minMatch: MIN_MATCHES.indexOf(Number(r.minMatch)) >= 0 ? Number(r.minMatch) : d.minMatch,
     matchView: (() => { const v = r.matchView && typeof r.matchView === 'object' ? r.matchView : {}; return { location: str(v.location, 60, ''), experience: v.experience === 'any' ? 'any' : 'fresher', internships: v.internships !== false, hideApplied: v.hideApplied !== false }; })(),
@@ -233,7 +235,7 @@ export function scheduleDue(data, now) {
 export function alertProfile(data, tz) {
   const s = data.settings;
   return {
-    settings: { prefs: s.prefs, keywords: s.keywords, minMatch: s.minMatch, jobsPerUpdate: s.jobsPerUpdate, schedule: s.schedule, companies: s.companies },
+    settings: { prefs: s.prefs, keywords: s.keywords, minMatch: s.minMatch, jobsPerUpdate: s.jobsPerUpdate, schedule: s.schedule, companies: s.companies, autoCompanies: s.autoCompanies },
     skills: mySkills(data).slice(0, 80), tz: String(tz || 'Asia/Kolkata'),
   };
 }
@@ -662,6 +664,33 @@ export const COMPANY_SUGGESTIONS = [
   { ats: 'ashby', slug: 'sarvam', name: 'Sarvam AI' },
   { ats: 'workday', slug: 'nvidia', host: 'nvidia.wd5.myworkdayjobs.com', site: 'NVIDIAExternalCareerSite', name: 'NVIDIA' },
 ];
+/**
+ * Searched for everyone (unless switched off), so matches come without following anyone: companies (start-ups and
+ * large companies) with public job boards that list jobs in India, each checked to answer on 2026-10-30. Amazon, Google,
+ * Microsoft, TCS, Infosys and Wipro have no public listing API (their own sites only), so they aren't here. Following a company adds it on top.
+ */
+export const INDIA_BOARDS = [
+  ...COMPANY_SUGGESTIONS,
+  ...[['databricks', 'Databricks'], ['rubrik', 'Rubrik'], ['okta', 'Okta'], ['mongodb', 'MongoDB'], ['stripe', 'Stripe'], ['twilio', 'Twilio'],
+    ['elastic', 'Elastic'], ['cloudflare', 'Cloudflare'], ['hackerrank', 'HackerRank'], ['inmobi', 'InMobi'], ['gitlab', 'GitLab'],
+    ['coinbase', 'Coinbase'], ['airbnb', 'Airbnb'], ['purestorage', 'Pure Storage']].map(([slug, name]) => ({ ats: 'greenhouse', slug, name })),
+  { ats: 'lever', slug: 'paytm', name: 'Paytm' },
+  { ats: 'ashby', slug: 'notion', name: 'Notion' },
+  { ats: 'smartrecruiters', slug: 'Freshworks', name: 'Freshworks' },
+  // Large companies on Workday (searched by your roles; India jobs kept by your locations)
+  ...[['accenture.wd103', 'AccentureCareers', 'Accenture'], ['salesforce.wd12', 'External_Career_Site', 'Salesforce'], ['adobe.wd5', 'external_experienced', 'Adobe'],
+    ['intel.wd1', 'External', 'Intel'], ['mastercard.wd1', 'CorporateCareers', 'Mastercard'], ['pwc.wd3', 'Global_Experienced_Careers', 'PwC'],
+    ['target.wd5', 'targetcareers', 'Target'], ['hp.wd5', 'ExternalCareerSite', 'HP'], ['cisco.wd5', 'Cisco_Careers', 'Cisco'],
+    ['crowdstrike.wd5', 'crowdstrikecareers', 'CrowdStrike'], ['citi.wd5', '2', 'Citi'], ['micron.wd1', 'External', 'Micron'],
+    ['workday.wd5', 'Workday', 'Workday'], ['visa.wd5', 'Visa', 'Visa']]
+    .map(([h, site, name]) => ({ ats: 'workday', slug: h.split('.')[0], host: h + '.myworkdayjobs.com', site, name })),
+];
+/** The boards a job search reads: the ones you follow, plus the built-in list when autoCompanies is on. */
+export function searchCompanies(s) {
+  const out = new Map();
+  [...(s.companies || []), ...(s.autoCompanies === false ? [] : INDIA_BOARDS)].forEach(c => { if (!out.has(companyKey(c))) out.set(companyKey(c), c); });
+  return [...out.values()];
+}
 export const MAX_COMPANIES = 40, MAX_BOARD_CANDIDATES = 40;
 
 const SLUG_RE = /^[A-Za-z0-9._-]{1,80}$/;
@@ -781,16 +810,18 @@ const ROLE_SYNONYMS = {
   network: ['network', 'noc'],
   data: ['data', 'analytics'],
 };
-const SENIOR_RE = /\b(senior|sr|staff|principal|lead|manager|director|head|vp|vice president|architect|chief|ii|iii|iv|expert)\b/i;
+const SENIOR_RE = /\b(senior|sr|staff|principal|lead|leader|manager|director|head|vp|vice president|architect|chief|cto|ciso|cio|ii|iii|iv|expert)\b/i;
 const INTERN_RE = /\b(intern|internship|trainee|apprentice)\b/i;
 const INDIA_RE = /\b(india|bengaluru|bangalore|hyderabad|pune|mumbai|chennai|delhi|gurgaon|gurugram|noida|kolkata|ahmedabad|kochi|coimbatore|jaipur|chandigarh|indore|thiruvananthapuram|trivandrum|visakhapatnam|vizag|bhubaneswar|mysuru|mysore|thane)\b/i;
-const FOREIGN_RE = /\b(us|usa|united states|canada|uk|united kingdom|london|europe|emea|germany|france|netherlands|ireland|poland|spain|portugal|singapore|australia|japan|brazil|mexico|latam|americas|new york|san francisco|seattle|toronto|dubai|uae|israel|philippines|bulgaria|sweden)\b/i;
+const FOREIGN_RE = /\b(us|usa|united states|canada|uk|united kingdom|london|europe|emea|germany|france|netherlands|ireland|poland|spain|portugal|singapore|australia|japan|brazil|mexico|latam|americas|new york|san francisco|seattle|toronto|dubai|uae|israel|philippines|bulgaria|sweden|maryland|virginia|washington|california|texas|massachusetts|illinois|colorado|north carolina|new jersey|oregon|arizona|florida|ohio|pennsylvania|michigan|minnesota|utah|vancouver|berlin|amsterdam|paris|dublin|munich|tokyo|sydney|melbourne|costa rica|colombia|argentina|chile|malaysia|indonesia|vietnam|thailand|korea|china|taiwan|hong kong|south africa|kenya|nigeria|egypt|saudi|qatar|romania|czech|hungary|italy|switzerland|austria|belgium|denmark|norway|finland)\b/i;
 const CITY_ALIASES = {
   bengaluru: ['bengaluru', 'bangalore'], bangalore: ['bengaluru', 'bangalore'],
   'delhi ncr': ['delhi', 'gurgaon', 'gurugram', 'noida'], delhi: ['delhi', 'gurgaon', 'gurugram', 'noida'],
   mumbai: ['mumbai', 'bombay', 'thane'], vizag: ['visakhapatnam', 'vizag'], trivandrum: ['thiruvananthapuram', 'trivandrum'],
 };
-const hasWord = (text, term) => new RegExp('\\b' + term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).test(text);
+// Short words (SOC, QA, ML, SDE) must be whole words, so "SOC" doesn't match "Social"; longer ones may run on
+// ("engineer" → "engineering").
+const hasWord = (text, term) => new RegExp('\\b' + term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + (term.length <= 4 ? 's?\\b' : '')).test(text);
 
 /** Per target role, the title words that count as a match (with a few synonyms). */
 export function roleTerms(roles) {

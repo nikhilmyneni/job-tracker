@@ -56,7 +56,7 @@ const auth = { authorization: 'Bearer good' };
 
 function settingsFor(company) {
   const s = C.normalizeSettings({ onboarded: true, prefs: { roles: ['SOC Analyst'], locations: ['Hyderabad'], avoid: ['Sales'] }, minMatch: 0, jobsPerUpdate: 5,
-    schedule: { on: true, days: [0, 1, 2, 3, 4, 5, 6], gmailAt: '07:00', jobsAt: '09:00' }, companies: [{ ats: 'greenhouse', slug: company, name: 'Kestrel' }] });
+    schedule: { on: true, days: [0, 1, 2, 3, 4, 5, 6], gmailAt: '07:00', jobsAt: '09:00' }, companies: [{ ats: 'greenhouse', slug: company, name: 'Kestrel' }], autoCompanies: false });
   return { settings: s, cv: 'Secret CV text: Splunk, SIEM, Python', skillsAdded: [], skillsRemoved: [], jobs: [] };
 }
 

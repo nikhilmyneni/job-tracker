@@ -153,15 +153,16 @@ async function findJobs(data, me, afterStr, seen, result, report, note, gmail) {
     }
   }
 
-  if (s.companies.length) {
+  const companies = C.searchCompanies(s);
+  if (companies.length) {
     report('Checking company job boards…', 0.88);
-    const boards = await fetchBoards(s.companies, s.prefs.roles, (t) => report(t, 0.9));
+    const boards = await fetchBoards(companies, s.prefs.roles, (t) => report(t, 0.9));
     boards.notes.forEach(note);
     const fromBoards = C.boardCandidates(boards.listings, s.prefs, seen);
     fromBoards.forEach(l => seen.add(l.id)); // scored once; not offered again unless it's picked
     listings = listings.concat(fromBoards);
   }
-  if (!alerts.length && !s.companies.length) {
+  if (!alerts.length && !companies.length) {
     result.notes.push(gmail ? 'No new job-alert emails. Turn on job alerts on LinkedIn, Naukri, Internshala or Indeed, or follow companies in Settings.'
       : 'Follow some companies in Settings, or connect Gmail to read your job alerts, to get matches.');
   }

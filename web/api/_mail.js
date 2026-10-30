@@ -23,7 +23,7 @@ export function jobsEmail(jobs, { appUrl, unsubUrl }) {
   const html = `<!doctype html><html><body style="margin:0;background:#f5f6f8;font-family:Arial,Helvetica,sans-serif;color:#222">
 <div style="max-width:560px;margin:0 auto;padding:24px 16px">
   <h1 style="font-size:20px;margin:0 0 4px">${esc(subject)}</h1>
-  <p style="color:#555;font-size:14px;margin:0 0 12px">Picked from the companies you follow, matched to your roles and skills.</p>
+  <p style="color:#555;font-size:14px;margin:0 0 12px">Picked from company job boards, matched to your roles, places and skills.</p>
   <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#fff;border-radius:12px;padding:0 16px">${rows}</table>
   <p style="margin:20px 0"><a href="${esc(appUrl)}" style="background:#2f5bd3;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none;font-weight:600">Open Job Hunter</a></p>
   <p style="color:#888;font-size:12px">You get this because you turned on email alerts in Job Hunter. <a href="${esc(unsubUrl)}" style="color:#888">Stop these emails</a>.</p>

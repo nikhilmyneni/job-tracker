@@ -25,7 +25,7 @@ export function cleanProfile(raw, email) {
   const skills = (Array.isArray(r.skills) ? r.skills : []).map(x => String(x).trim().slice(0, 40)).filter(Boolean).slice(0, 80);
   return {
     email: String(email), tz, skills, at: new Date().toISOString(),
-    settings: { prefs: s.prefs, keywords: s.keywords, minMatch: s.minMatch, jobsPerUpdate: s.jobsPerUpdate, schedule: s.schedule, companies: s.companies },
+    settings: { prefs: s.prefs, keywords: s.keywords, minMatch: s.minMatch, jobsPerUpdate: s.jobsPerUpdate, schedule: s.schedule, companies: s.companies, autoCompanies: s.autoCompanies },
   };
 }
 
@@ -44,7 +44,7 @@ export const dropAll = (sub) => pipeline([['SREM', K.subs, sub], ['DEL', K.profi
 
 /**
  * One hourly run: for everyone whose "New jobs ready by" time has passed today (their time zone), check the companies
- * they follow (each board read once for all of them), keep the new matches for the app, and email them.
+ * they follow plus the built-in list (each board read once for all of them), keep the new matches for the app, and email them.
  * Stops starting new people after budgetMs; they're picked up next hour. force runs people who already ran today
  * (for testing from the workflow). The counts say why nothing was sent: no boards, no listings, none matched, or an email error.
  */
@@ -65,7 +65,7 @@ export async function runAlerts({ now = new Date(), origin = '', budgetMs = 4000
   // Each followed board once, for everyone due now.
   const boards = new Map(), roles = new Set();
   due.forEach(u => {
-    u.p.settings.companies.forEach(c => boards.set(C.companyKey(c), c));
+    C.searchCompanies(u.p.settings).forEach(c => boards.set(C.companyKey(c), c));
     u.p.settings.prefs.roles.forEach(r => roles.add(r));
   });
   if (origin) useApiOrigin(origin);
@@ -77,7 +77,7 @@ export async function runAlerts({ now = new Date(), origin = '', budgetMs = 4000
     if (Date.now() - start > budgetMs) break;
     const [seenRaw, foundRaw] = await pipeline([['GET', K.seen(u.sub)], ['GET', K.found(u.sub)]]);
     const seen = new Set(parse(seenRaw, []));
-    const mine = new Set(u.p.settings.companies.map(c => `ats:${C.companyKey(c)}:`));
+    const mine = new Set(C.searchCompanies(u.p.settings).map(c => `ats:${C.companyKey(c)}:`));
     const theirs = listings.filter(l => [...mine].some(pre => String(l.id).startsWith(pre)));
     const data = { settings: u.p.settings, cv: '', skillsAdded: u.p.skills, skillsRemoved: [] };
     const cands = C.boardCandidates(theirs, u.p.settings.prefs, seen);
