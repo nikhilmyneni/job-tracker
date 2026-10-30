@@ -159,7 +159,6 @@ async function findJobs(data, me, afterStr, seen, result, report, note, gmail) {
     const boards = await fetchBoards(companies, C.searchWords(s.prefs.roles, Date.now() / 864e5), (t) => report(t, 0.9));
     boards.notes.forEach(note);
     const fromBoards = C.boardCandidates(boards.listings, s.prefs, seen);
-    fromBoards.forEach(l => seen.add(l.id)); // scored once; not offered again unless it's picked
     listings = listings.concat(fromBoards);
   }
   if (!alerts.length && !companies.length) {
@@ -172,7 +171,15 @@ async function findJobs(data, me, afterStr, seen, result, report, note, gmail) {
   report(`Checking the best of ${candidates.length} openings…`, 0.96);
   const dropped = {};
   let best = 0;
-  (await vetPostings(candidates, data, s.jobsPerUpdate, C.ymd(new Date()), (why, j, score) => { if (why === 'belowMinMatch') best = Math.max(best, score); else dropped[why] = (dropped[why] || 0) + 1; })).forEach(job => {
+  // A board job is remembered once it's picked or a posting check rules it out; one that only missed your minimum match
+  // stays open, so lowering the minimum brings it back.
+  const boardId = (j) => (j.ref && j.ref.ats ? `ats:${C.companyKey(j.ref)}:${j.ref.id}` : '');
+  (await vetPostings(candidates, data, s.jobsPerUpdate, C.ymd(new Date()), (why, j, score) => {
+    if (why === 'belowMinMatch') { best = Math.max(best, score); return; }
+    dropped[why] = (dropped[why] || 0) + 1;
+    if (boardId(j)) seen.add(boardId(j));
+  })).forEach(job => {
+    if (boardId(job)) seen.add(boardId(job));
     data.jobs.push(job);
     result.jobsNew.push(`${job.company} – ${job.role} (${job.score}%)`);
   });

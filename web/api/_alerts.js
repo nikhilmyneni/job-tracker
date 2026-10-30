@@ -14,6 +14,7 @@ export const K = {
   profile: (s) => 'alerts:p:' + s, seen: (s) => 'alerts:seen:' + s, found: (s) => 'alerts:new:' + s, sent: (s) => 'alerts:sent:' + s,
 };
 export const MAX_SEEN = 3000, MAX_FOUND = 50;
+const doneKey = (j) => `${j.company}|${j.role}`.toLowerCase();
 
 /** Only the fields matching needs, through the same checks as the app's settings. The email comes from the token. */
 export function cleanProfile(raw, email) {
@@ -77,16 +78,23 @@ export async function runAlerts({ now = new Date(), origin = '', budgetMs = 4000
   for (const u of due) {
     if (Date.now() - start > budgetMs) break;
     const [seenRaw, foundRaw] = await pipeline([['GET', K.seen(u.sub)], ['GET', K.found(u.sub)]]);
+    // Remembered (by company and title, so a repost counts too): jobs already sent, and ones a posting check ruled out.
+    // Jobs that only missed your minimum match aren't remembered: a lower minimum gives them another chance.
     const seen = new Set(parse(seenRaw, []));
     const mine = new Set(C.searchCompanies(u.p.settings).map(c => `ats:${C.companyKey(c)}:`));
     const theirs = listings.filter(l => [...mine].some(pre => String(l.id).startsWith(pre)));
+    const fresh = theirs.filter(l => !seen.has(doneKey(l)));
+    leftOut.seen += theirs.length - fresh.length;
     const data = { settings: u.p.settings, cv: '', skillsAdded: u.p.skills, skillsRemoved: [] };
-    const cands = C.boardCandidates(theirs, u.p.settings.prefs, seen);
-    cands.forEach(l => seen.add(l.id)); // scored once, as in the app
-    const jobs = await vetPostings(cands, data, u.p.settings.jobsPerUpdate, u.day, (why, j, score) => { leftOut[why]++; if (score > bestBelow) bestBelow = score; });
+    const cands = C.boardCandidates(fresh, u.p.settings.prefs, new Set());
+    const jobs = await vetPostings(cands, data, u.p.settings.jobsPerUpdate, u.day, (why, j, score) => {
+      leftOut[why]++;
+      if (why === 'belowMinMatch') bestBelow = Math.max(bestBelow, score); else seen.add(doneKey(j));
+    });
+    jobs.forEach(j => seen.add(doneKey(j)));
     candidates += cands.length; found += jobs.length;
     // Counts only (never anyone's settings), so a run's log shows which filter leaves jobs out.
-    theirs.forEach(l => { const why = seen.has(l.id) && !cands.includes(l) ? 'seen' : C.rejectReason(l, u.p.settings.prefs); if (why) leftOut[why]++; });
+    fresh.forEach(l => { const why = C.rejectReason(l, u.p.settings.prefs); if (why) leftOut[why]++; });
     const waiting = [...jobs, ...parse(foundRaw, [])].slice(0, MAX_FOUND);
     await pipeline([
       ['SET', K.seen(u.sub), JSON.stringify([...seen].slice(-MAX_SEEN))],
