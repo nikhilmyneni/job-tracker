@@ -14,8 +14,8 @@ function saveBar(label, collect, ctx) {
     collect(d);
     if (!d.prefs.roles.length) throw new Error('Add at least one role you want.');
     await ctx.act.saveSettings(d);
-    toast('Saved'); // the screen redraws with the new settings, so a status line here would vanish
-  }, status) }, label);
+    toast('Saved');
+  }) }, label); // no status line: the screen redraws on save, so busy() shows errors as a toast
   return h('div', { class: 'save-bar' }, btn, status);
 }
 
