@@ -98,8 +98,12 @@ async function syncApplications(data, me, afterStr, seen, result, report, note, 
   for (let i = 0; i < batches.length; i += SORT_PARALLEL) {
     const group = batches.slice(i, i + SORT_PARALLEL);
     const from = i * SORT_BATCH + 1, to = Math.min(emails.length, (i + group.length) * SORT_BATCH);
-    report(`Sorting emails ${from}–${to} of ${emails.length}…`, 0.3 + 0.5 * (from - 1) / emails.length);
-    const outs = await Promise.all(group.map(b => classifyBatch(s, b, note)));
+    const label = `Sorting emails ${from}–${to} of ${emails.length}…`, frac = 0.3 + 0.5 * (from - 1) / emails.length;
+    report(label, frac);
+    // A slow AI answer can take up to a minute: say so, so the bar doesn't look stuck.
+    const started = Date.now();
+    const slow = setInterval(() => report(`${label} The AI is slow right now (${Math.round((Date.now() - started) / 1000)}s). If it doesn't answer, keyword rules take over.`, frac), 10000);
+    const outs = await Promise.all(group.map(b => classifyBatch(s, b, note))).finally(() => clearInterval(slow));
     outs.flatMap(o => o.updates).sort((a, b) => a.email.date - b.email.date).forEach(u => C.upsertApplication(data.applications, {
       company: u.company, role: u.role, stage: u.stage, next_step: u.next_step, next_at: u.next_at, next_kind: u.next_kind, round: u.round,
       date: C.ymd(u.email.date), channel: C.channelFromSender(u.email.from), link: u.email.link,

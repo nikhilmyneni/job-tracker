@@ -97,8 +97,9 @@ async function sharedAi(task, prompt, json) {
   const token = G.accessToken();
   let res;
   try {
-    res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: JSON.stringify({ task, prompt, json }) });
-  } catch (e) { throw new AiError('Built-in AI: network error', true); }
+    // Never wait forever: past this, the sync sorts the batch with keyword rules instead.
+    res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: JSON.stringify({ task, prompt, json }), signal: AbortSignal.timeout(65000) });
+  } catch (e) { throw new AiError(e && e.name === 'TimeoutError' ? 'the AI took too long' : 'Built-in AI: network error', true); }
   const j = await res.json().catch(() => ({}));
   if (res.status === 401) { showReconnect(true); throw new G.NeedSignIn(j.error || 'Sign in again.'); }
   if (!res.ok) throw new AiError(j.error || `Built-in AI error ${res.status}`, res.status >= 500);
