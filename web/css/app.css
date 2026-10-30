@@ -346,6 +346,8 @@ input[type=time] { min-height: var(--tap); padding: 0 10px; border: 1px solid va
   .side, .sync, .banner, .page-acts, .notice, .tabs, #toast, .app-card-links, .icon-btn, .cell-link, .skip { display: none !important; }
   body, .panel, .stats, .col, .app-card, .tl-list { background: #fff !important; color: #000 !important; }
   .shell { grid-template-columns: 1fr; }
+  body:has(> .shell:not([hidden])) { height: auto !important; display: block !important; overflow: visible !important; }
+  .shell > .canvas { overflow: visible !important; }
   .canvas { padding: 0; }
   .board-box, .table-box, .panel > .table-box { overflow: visible; max-height: none; }
   .board { grid-template-columns: repeat(5, 1fr); min-width: 0; }
@@ -409,6 +411,11 @@ input[type=time] { min-height: var(--tap); padding: 0 10px; border: 1px solid va
   :root { --side-open: 240px; --side-rail: 64px; --side-ease: cubic-bezier(.32, .72, 0, 1); }
   .shell { transition: grid-template-columns 260ms var(--side-ease); }
   .shell.side-collapsed { grid-template-columns: var(--side-rail) minmax(0, 1fr); }
+  /* The sidebar never scrolls or slides off: the page is one screen tall (banners on top) and only the content scrolls. */
+  body:has(> .shell:not([hidden])) { height: 100vh; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+  body > .shell:not([hidden]) { flex: 1; min-height: 0; }
+  .shell > .side { height: auto; }
+  .shell > .canvas { overflow-y: auto; overscroll-behavior: contain; scroll-behavior: smooth; }
   .side { z-index: 35; width: var(--side-open); overflow: hidden; background: var(--ground);
     transition: width 260ms var(--side-ease), box-shadow 200ms var(--ease), background-color 200ms var(--ease); }
   /* The contents keep their open width while the panel animates, so nothing re-wraps; the rail just clips them. */

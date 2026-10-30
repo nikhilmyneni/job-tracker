@@ -62,11 +62,13 @@ function render(keepFocus) {
   $('nav-matches').hidden = !n; $('nav-matches').textContent = n;
   $('nav-matches').setAttribute('aria-label', `${n} new`);
   const root = $('content');
-  const scroll = window.scrollY;
+  // On desktop only the content column scrolls (the sidebar stays put); on phones the page does.
+  const scroll = root.scrollTop || window.scrollY;
   fn(ctx, root, m && m[1] ? decodeURIComponent(m[1]) : undefined);
   document.title = (root.querySelector('h1') ? root.querySelector('h1').textContent + ' – ' : '') + 'Job Hunter';
-  if (keepFocus) window.scrollTo(0, scroll);
-  else { const t = root.querySelector('h1'); if (t) t.focus({ preventScroll: true }); window.scrollTo(0, 0); }
+  const to = keepFocus ? scroll : 0;
+  if (!keepFocus) { const t = root.querySelector('h1'); if (t) t.focus({ preventScroll: true }); }
+  root.scrollTop = to; window.scrollTo(0, to);
 }
 
 function go(href) {
