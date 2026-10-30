@@ -253,6 +253,8 @@ Object.assign(ctx.act, {
     ctx.data.settings = C.normalizeSettings(s);
     rescore();
     await persist(); render(true);
+    // Keywords and the minimum match also steer the email alerts.
+    if ((keywords || minMatch != null) && ctx.data.settings.emailAlerts) syncAlerts(true).catch(() => {});
   },
   /** A job's full description (fetched once, kept with the job), and its score again with it. */
   async loadJobDetails(job) {
