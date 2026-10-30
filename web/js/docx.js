@@ -1,5 +1,5 @@
 /**
- * Word (.docx) CV import, with no libraries.
+ * Word (.docx), with no libraries: CV import (reading), and the tailored resume (writing).
  * A .docx is a ZIP of XML files: we read word/document.xml and turn its paragraphs into lines.
  * zipStore writes a ZIP (used by the tests to build sample files).
  */
@@ -97,4 +97,45 @@ export async function docxToText(bytes) {
   const doc = await unzipFile(bytes, 'word/document.xml');
   if (!doc) throw new Error('No text found in this .docx.');
   return docxXmlToText(new TextDecoder().decode(doc));
+}
+
+// ---------- resume → .docx ----------
+const xmlEsc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+const run = (text, props = '') => `<w:r>${props ? `<w:rPr>${props}</w:rPr>` : ''}<w:t xml:space="preserve">${xmlEsc(text)}</w:t></w:r>`;
+const para = (runs, pPr = '') => `<w:p>${pPr ? `<w:pPr>${pPr}</w:pPr>` : ''}${runs}</w:p>`;
+const W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"';
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const ym = (s) => { const [y, m] = String(s || '').split('-'); return y ? (m ? `${MONTHS[Number(m) - 1]} ${y}` : y) : ''; };
+const range = (e) => [ym(e.start), e.current ? 'Present' : ym(e.end || e.date)].filter(Boolean).join(' – ');
+
+/** The resume's word/document.xml: one A4 page, headings with a rule under them, real bullet lists. */
+export function resumeDocumentXml(r) {
+  const c = r.contact || {};
+  const out = [];
+  const heading = (t) => out.push(para(run(t, '<w:b/><w:sz w:val="22"/><w:color w:val="0F1730"/>'), '<w:spacing w:before="200" w:after="60"/><w:pBdr><w:bottom w:val="single" w:sz="6" w:space="1" w:color="C9D0E0"/></w:pBdr>'));
+  const line = (left, right) => out.push(para(run(left, '<w:b/>') + (right ? run('\t' + right) : ''), '<w:tabs><w:tab w:val="right" w:pos="9638"/></w:tabs><w:spacing w:before="80" w:after="20"/>'));
+  const bullets = (list) => (list || []).filter(Boolean).forEach(b => out.push(para(run(b), '<w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr><w:spacing w:after="20"/>')));
+  out.push(para(run(c.fullName, '<w:b/><w:sz w:val="36"/>'), '<w:spacing w:after="20"/>'));
+  if (c.headline) out.push(para(run(c.headline, '<w:color w:val="39425C"/>')));
+  out.push(para(run([c.email, c.phone, c.location, c.linkedin, c.github, c.website].filter(Boolean).join(' | '), '<w:sz w:val="18"/>'), '<w:spacing w:after="80"/>'));
+  if (r.summary) { heading('Summary'); out.push(para(run(r.summary))); }
+  if ((r.skills || []).length) { heading('Skills'); r.skills.forEach(s => out.push(para(run(s.category + ': ', '<w:b/>') + run(s.items.join(', '))))); }
+  if ((r.experience || []).length) { heading('Experience'); r.experience.forEach(e => { line([e.title, e.company].filter(Boolean).join(', '), range(e)); bullets(e.bullets); }); }
+  if ((r.projects || []).length) { heading('Projects'); r.projects.forEach(p => { line([p.name, p.tech].filter(Boolean).join(' — '), range(p)); bullets(p.bullets); }); }
+  if ((r.education || []).length) { heading('Education'); r.education.forEach(e => { line([e.degree, e.field, e.school].filter(Boolean).join(', '), range(e)); bullets([e.gpa && `GPA ${e.gpa}`, ...(e.details || [])]); }); }
+  if ((r.certifications || []).length) { heading('Certifications'); bullets(r.certifications.map(x => [x.name, x.issuer, ym(x.date)].filter(Boolean).join(', '))); }
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document ${W}><w:body>${out.join('')}` +
+    '<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="850" w:right="1000" w:bottom="850" w:left="1000" w:header="0" w:footer="0" w:gutter="0"/></w:sectPr></w:body></w:document>';
+}
+
+/** The resume as a .docx file (bytes). */
+export function resumeDocx(r) {
+  return zipStore([
+    { name: '[Content_Types].xml', data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/></Types>' },
+    { name: '_rels/.rels', data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>' },
+    { name: 'word/_rels/document.xml.rels', data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/></Relationships>' },
+    { name: 'word/styles.xml', data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles ${W}><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Georgia" w:hAnsi="Georgia" w:cs="Georgia"/><w:sz w:val="20"/><w:color w:val="111111"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="0" w:line="252" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults></w:styles>` },
+    { name: 'word/numbering.xml', data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:numbering ${W}><w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="bullet"/><w:lvlText w:val="•"/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="300" w:hanging="200"/></w:pPr></w:lvl></w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num></w:numbering>` },
+    { name: 'word/document.xml', data: resumeDocumentXml(r) },
+  ]);
 }

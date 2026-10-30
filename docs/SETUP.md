@@ -29,7 +29,9 @@ There's nothing else to set up: the AI is built in and free.
   role, next step or interview time. "N emails need a look" lists emails it couldn't match.
 - **Job matches:** openings from your job-alert emails and the companies you follow, scored by how much of
   what they ask for is on your CV. Filter by place, experience, internships and minimum match; add your own keywords;
-  open a job to see what matches and what's missing. **Tailor resume** prepares your CV and the job for ResumeFold.
+  open a job to see what matches and what's missing. **Tailor resume** shows the job's keywords against your CV, suggests edits
+  you accept or undo (reordering and rewording only; adding a skill your CV doesn't show needs you to confirm), and previews a
+  one-page resume in four layouts. Download it as PDF, Word or LaTeX, or open it in ResumeFold. Your choices are saved with the job.
 - **Notifications:** turn them on to hear about status changes and new matches while Job Hunter is open.
 - **Profile and CV:** check the skills read from your CV (add or remove any) and what was read under each heading.
 - **Profile and CV / Settings:** change any answer from setup, upload a new CV, follow companies, or manage your data.

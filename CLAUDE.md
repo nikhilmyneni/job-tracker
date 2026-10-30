@@ -73,8 +73,10 @@ and counts toward the 100-user cap. Without Gmail, users add applications by han
   the classifier, applications, job prompts, matching (`termsIn`, `mySkills`, `matchScore`, `pickByScore`,
   `filterJobs`), CV sections (`cvSections`), job boards (`parseCareerUrl`,
   `listingsFromBoard`, `matchesPrefs`, `boardCandidates`), the ResumeFold hand-off
-  (`resumeFoldPrompt`, `cleanResumeFold`, `resumeFoldFor`), and the dashboard numbers.
-- `js/sources.js`: fetches job boards and full job descriptions. `js/docx.js`: **pure** ZIP + DOCX → text.
+  (`resumeFoldPrompt`, `cleanResumeFold`, `resumeFoldFor`), the resume tailor (`TEMPLATES`, `resumeFromCv` by rules,
+  `tailorSuggestions` / `applySuggestions` / `tailorScore`, `highlightJd`, `honestRewrite` for AI summaries, `resumeLatex`),
+  and the dashboard numbers.
+- `js/sources.js`: fetches job boards and full job descriptions. `js/docx.js`: **pure** ZIP + DOCX → text, and the resume as a .docx (`resumeDocx`).
 - `js/ai.js`: `PROVIDERS`, `askWith()` (shared with the server, so no DOM in this file), `useSharedAi()` / `ask()` for the page, `parseJsonLoose()`.
 - `js/google.js`: sign-in, Gmail, Drive app data (`job-tracker.json`, `cv-original.*`).
 - `js/update.js`: `runUpdate()` and `cvForResumeFold()`. `js/files.js`: CV import (pdf.js / DOCX / TXT), downloads.
@@ -82,7 +84,7 @@ and counts toward the 100-user cap. Without Gmail, users add applications by han
 - `js/app.js`: boot, routing, sync, actions. Screens: `view-applications.js` (+ `view-board.js`: board, timeline, edit dialog), `view-matches.js`,
   `view-tailor.js`, `view-settings.js` (Profile and Settings). `onboarding.js`: the wizard plus the shared
   field blocks. `ui.js`: `h()`, `busy`, `holdButton`, `setLabel`, `icon`, `pageHead`, chips, dialogs. `demo.js`.
-- `tests/`: Node tests: `core`, `match`, `files` (PDF lines), `notify`, `api` (the AI function) and `google` (rate-limit retries), with fetch faked. `npm test` and `npm run check` must pass before any push.
+- `tests/`: Node tests: `core`, `match`, `files` (PDF lines), `notify`, `api` (the AI function), `google` (rate-limit retries, paging) and `tailor` (suggestions, LaTeX, .docx), with fetch faked. `npm test` and `npm run check` must pass before any push.
 - `scripts/serve.js` (local server on :5173, with the /app rewrites and /api functions), `scripts/check.js`.
 - `docs/SETUP.md`: users and owner (Google Cloud + Vercel). Keep it in sync with behaviour changes. `docs/ROADMAP.md`: ideas.
 
@@ -100,7 +102,8 @@ and counts toward the 100-user cap. Without Gmail, users add applications by han
 - **review:** emails that look like an application update but couldn't be matched ("N emails need a look"); `addReview()`.
 - **Job:** id, found_on, posted, score (0–100), fit (score/20), matched[], missing[], company, role, location, pay, why,
   skill_gap, apply_by, link, details, jd (full description, fetched when opened), status (New/Saved/Applied/Skipped/Expired),
-  key, source, ref (board + id, for the full description), resumefold_at.
+  key, source, ref (board + id, for the full description), resumefold_at, tailored {accepted[], confirmed[], template, extra[] (an AI summary that
+  passed `honestRewrite`), at} (the tailored resume is rebuilt from these).
 - `skillsAdded[]`, `skillsRemoved[]`: your edits to the skills read from the CV (Profile).
 - `cvFold`: the CV as ResumeFold's Resume JSON, made once per CV (`cvFoldHash`).
 - **Statuses:** Applied, Screening, Interview, Offer, Rejected, Withdrawn, Ghosted (shown as `STATUS_LABEL`: Screening = "Assessment",

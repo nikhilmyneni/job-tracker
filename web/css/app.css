@@ -114,6 +114,79 @@ th[aria-sort="descending"] .th-sort::after { content: " ↓"; }
 .pick a:hover { border-color: var(--blue); }
 .pick span { color: var(--muted); font-size: 14px; }
 .how-list { padding-left: 20px; display: grid; gap: 8px; margin: 0; }
+.tailor { display: grid; gap: 20px; grid-template-columns: minmax(0, 1fr) minmax(0, 0.95fr) minmax(0, 1.25fr); align-items: start; }
+.tl-col { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-card); padding: 20px; display: grid; gap: 14px; min-width: 0; }
+.tl-jd { position: sticky; top: 16px; max-height: calc(100dvh - 32px); overflow-y: auto; align-content: start; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; }
+.jd-text { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14.5px; line-height: 1.65; color: var(--text); }
+.hl { border-radius: 3px; font-weight: 500; box-shadow: 0 0 0 2px var(--hl-bg); background: var(--hl-bg); }
+.hl-have { --hl-bg: var(--blue-soft); color: var(--blue-text); }
+.hl-miss { --hl-bg: var(--orange-soft); color: var(--orange-text); }
+.tl-mid { background: none; border: 0; padding: 0; align-content: start; }
+.score-card { background: var(--night); color: var(--night-text); border-radius: var(--r-card); padding: 20px; display: grid; gap: 4px; }
+.score-card p { margin: 0; }
+.score-card-k { font: 500 12px/1 var(--mono); text-transform: uppercase; letter-spacing: 0.08em; }
+.score-card-v { font: 700 44px/1.05 var(--display); color: #fff; letter-spacing: -0.02em; }
+.score-card-s { font-size: 14px; }
+.score-card .meter-track { margin-top: 10px; background: var(--night-2); }
+.score-card .meter-track i { display: block; height: 100%; background: var(--blue); border-radius: inherit; transition: width 400ms var(--ease); }
+.sugs { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.sug { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-card); padding: 14px 16px; display: grid; gap: 6px; justify-items: start; }
+.sug-on { border-color: var(--blue); }
+.sug p { margin: 0; font-size: 14px; color: var(--text); overflow-wrap: anywhere; }
+.sug b { color: var(--ink); overflow-wrap: anywhere; }
+.sug-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; }
+.sug-pts { font: 500 12.5px/1 var(--mono); color: var(--green); }
+.sug .sug-warn { display: flex; gap: 6px; align-items: flex-start; color: var(--orange-text); }
+.sug label.inline { display: flex; gap: 8px; align-items: center; font-size: 14px; min-height: 32px; }
+.pv-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.pv-acts { display: flex; flex-wrap: wrap; gap: 8px; }
+.sheet-box { container-type: inline-size; background: var(--track); border-radius: 12px; padding: 12px; }
+
+/* The resume sheet: A4, drawn at the column's width (the type scales with it). */
+.sheet { --ink-r: #111; aspect-ratio: 210 / 297; min-height: max-content; background: #fff; color: #222; box-shadow: var(--shadow-lift);
+  font: 1.76cqw/1.35 var(--serif); padding: 6% 7%; display: grid; align-content: start; gap: 0.9em; overflow: hidden; }
+.sheet h2, .sheet h3, .sheet p, .sheet ul { margin: 0; }
+.rs-head { text-align: center; display: grid; gap: 0.25em; }
+.rs-head h2 { font: 700 2.1em/1.1 var(--serif); color: var(--ink-r); letter-spacing: 0; }
+.rs-headline { font-size: 1.05em; color: #333; }
+.rs-contact { font-size: 0.9em; color: #444; overflow-wrap: anywhere; }
+.rs-sec { display: grid; gap: 0.4em; }
+.rs-sec + .rs-sec { margin-top: 0.7em; }
+.rs-sec h3 { font: 700 0.95em/1.2 var(--serif); text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-r); border-bottom: 1px solid #999; padding-bottom: 0.15em; }
+.rs-entry { display: grid; gap: 0.15em; }
+.rs-line { display: flex; justify-content: space-between; gap: 1em; }
+.rs-line b { color: var(--ink-r); }
+.rs-line span { white-space: nowrap; color: #444; }
+.sheet ul { padding-left: 1.2em; display: grid; gap: 0.1em; }
+.rs-cols { display: grid; grid-template-columns: 30% minmax(0, 1fr); gap: 1.4em; }
+.rs-side .rs-skills { display: block; }
+.t-student .rs-head, .t-senior .rs-head { text-align: left; }
+.t-senior .rs-head h2 { font-size: 2.4em; }
+.t-senior .rs-sec h3 { border-bottom-width: 2px; border-color: #222; }
+.sheet .chg { background: #E8EEFC; box-shadow: 0 0 0 2px #E8EEFC; border-radius: 2px; }
+.sheet mark.chg { color: inherit; }
+
+@media (max-width: 1279px) {
+  .tailor { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .tl-preview { grid-column: 1 / -1; }
+}
+@media (max-width: 900px) {
+  .tailor { grid-template-columns: minmax(0, 1fr); }
+  .tl-jd { position: static; max-height: 60vh; }
+  .tl-col { padding: 16px; }
+  .sheet-box { padding: 6px; }
+}
+@media print {
+  body.printing-resume > :not(#print-sheet) { display: none !important; }
+  body.printing-resume { height: auto !important; display: block !important; overflow: visible !important; background: #fff !important; }
+  #print-sheet { container-type: normal; }
+  #print-sheet .sheet { aspect-ratio: auto; box-shadow: none; padding: 0; font-size: 10.5pt; }
+  #print-sheet .chg { background: none; box-shadow: none; }
+}
+@page { size: A4; margin: 14mm 16mm; }
+#print-sheet { display: none; }
+@media print { body.printing-resume #print-sheet { display: block; } }
 
 /* ---------- forms ---------- */
 .stack { display: grid; gap: 16px; }

@@ -13,6 +13,7 @@ import { renderTailor } from './view-tailor.js';
 import { renderProfile, renderSettings } from './view-settings.js';
 import { demoData, DEMO_ME, DEMO_FOLD } from './demo.js';
 import { downloadBlob } from './files.js';
+import { resumeDocx } from './docx.js';
 import { askToNotify, notifySync } from './notify.js';
 
 const params = new URLSearchParams(location.search);
@@ -144,23 +145,59 @@ Object.assign(ctx.act, {
     if (DEMO) { toast('Demo: no real file to download.'); return; }
     try { downloadBlob(await guarded(() => G.downloadFile(f.id)), f.name); } catch (e) { toast(errText(e), true); }
   },
-  /** Your CV as ResumeFold's JSON with this job filled in, downloaded so you can import it there. */
-  async exportResumeFold(job) {
-    const d = ctx.data, hash = C.textHash(d.cv);
-    if (!d.cv) throw new Error('Add your CV in Profile and CV first.');
-    let base = d.cvFold && d.cvFoldHash === hash ? d.cvFold : null;
-    if (!base) {
-      if (DEMO) { await sleep(700); base = DEMO_FOLD; } else {
-        if (!hasAi(d.settings)) throw new Error('Reading your CV into ResumeFold’s format needs the AI, which isn’t available right now. You can upload your CV straight into ResumeFold instead.');
-        base = await cvForResumeFold(d);
-      }
-      d.cvFold = base; d.cvFoldHash = hash;
-    }
-    const desc = DEMO ? job.details : await jobDescription(job);
-    const file = C.resumeFoldFor(base, job, desc);
+  /** The resume tailoring starts from: the CV as the AI read it (if it has, for this CV), else as read by rules. */
+  baseResume() {
+    const d = ctx.data;
+    if (d.cvFold && d.cvFoldHash === C.textHash(d.cv)) return d.cvFold;
+    return C.resumeFromCv(d.cv, { skills: C.mySkills(d), hint: ctx.me && ctx.me.email });
+  },
+  baseIsRough: () => !(ctx.data.cvFold && ctx.data.cvFoldHash === C.textHash(ctx.data.cv)),
+  /** The AI reads the CV into proper sections, once per CV (facts copied, never rewritten). */
+  async readCvWithAi() {
+    const d = ctx.data;
+    if (DEMO) { await sleep(700); d.cvFold = DEMO_FOLD; d.cvFoldHash = C.textHash(d.cv); return; }
+    if (!hasAi(d.settings)) throw new Error('The AI isn’t available right now. The rules-based version still works.');
+    d.cvFold = await cvForResumeFold(d); d.cvFoldHash = C.textHash(d.cv);
+    await persist();
+  },
+  canReword: () => hasAi(ctx.data.settings),
+  /** An AI-reworded summary as a suggestion, or null when it says something the CV doesn't. */
+  async rewordSummary(job, resume) {
+    const d = ctx.data;
+    const out = await ask(d.settings, C.rewordPrompt(resume.summary, d.cv, job), true, () => {}, 'cv');
+    const text = String((out && out.summary) || '').trim().slice(0, 800);
+    if (!C.honestRewrite(text, d.cv, d.settings.keywords).ok) return null;
+    return { id: 'summary', kind: 'Reword', title: 'A summary for this job', text, patch: { op: 'summary', value: text } };
+  },
+  /** Tailoring choices are saved with the job (the resume itself is rebuilt from them). */
+  async saveTailored(job, t) {
+    const ids = (v) => (Array.isArray(v) ? v.map(String).slice(0, 40) : []);
+    job.tailored = { accepted: ids(t.accepted), confirmed: ids(t.confirmed), template: t.template in C.TEMPLATES ? t.template : 'standard',
+      extra: (Array.isArray(t.extra) ? t.extra : []).slice(0, 3), at: new Date().toISOString() };
+    await persist();
+  },
+  /** The tailored resume as ResumeFold's JSON (with the job and layout filled in), to import there. */
+  async exportResumeFold(job, resume, template) {
+    const desc = DEMO ? job.details : (job.jd || await jobDescription(job));
+    const file = C.resumeFoldFor(resume, job, desc, template);
     downloadBlob(new Blob([JSON.stringify(file, null, 2)], { type: 'application/json' }), file.meta.exportSettings.filename + '.json');
     job.resumefold_at = new Date().toISOString();
     await persist();
+  },
+  async downloadResume(job, resume, kind) {
+    const name = C.resumeFileBase(resume.contact.fullName, job.company, job.role);
+    if (kind === 'docx') downloadBlob(new Blob([resumeDocx(resume)], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }), name + '.docx');
+    else downloadBlob(new Blob([C.resumeLatex(resume)], { type: 'application/x-tex' }), name + '.tex');
+  },
+  /** Prints just the sheet (Save as PDF in the print dialog). The page title becomes the suggested file name. */
+  async printResume(job, sheet) {
+    const box = h('div', { id: 'print-sheet' }, sheet.cloneNode(true));
+    document.body.append(box); document.body.classList.add('printing-resume');
+    const title = document.title;
+    document.title = C.resumeFileBase(sheet.querySelector('.rs-head h2').textContent, job.company, job.role);
+    const done = () => { box.remove(); document.body.classList.remove('printing-resume'); document.title = title; };
+    window.addEventListener('afterprint', done, { once: true });
+    window.print();
   },
   /** The job matches screen: filters and your keywords are saved with your settings. */
   async saveMatchView(view, keywords, minMatch) {

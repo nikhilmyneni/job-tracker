@@ -9,7 +9,8 @@ A free job-hunting web app for freshers in India, live at https://jobs4you.verce
 - **Finds openings** from your job-alert emails (LinkedIn, Naukri, Internshala, Indeed, Wellfound, foundit…) and
   the career pages of companies you follow (Greenhouse, Lever, Ashby, SmartRecruiters, Workable, Recruitee,
   Workday), scored against your CV.
-- **Tailored resumes** through ResumeFold, on request, built only from your CV.
+- **Resume tailor**: the job's keywords against your CV, suggested edits you accept or undo (only from what your CV says), a
+  live one-page preview in ResumeFold's four layouts, and PDF, Word, LaTeX or ResumeFold downloads.
 - **AI built in and free:** nothing to set up.
 - **Notifications** for status changes and new matches, a pitch-dark theme that follows your system, works on
   phones, installable as an app.

@@ -751,7 +751,7 @@ export function cleanResumeFold(raw) {
 }
 
 /** The file to import into ResumeFold: the CV plus this job, so ResumeFold can tailor against it. */
-export function resumeFoldFor(base, job, description) {
+export function resumeFoldFor(base, job, description, template = 'standard') {
   const r = JSON.parse(JSON.stringify(base));
   r.meta = {
     analysis: {
@@ -759,7 +759,7 @@ export function resumeFoldFor(base, job, description) {
       jobDescription: String(description || job.details || '').slice(0, 30000), keywords: '', keywordsMode: 'suggested', addedSkills: [], source: 'draft',
     },
     exportSettings: { filename: resumeFileBase(r.contact.fullName, job.company, job.role) },
-    template: 'standard', paper: 'a4',
+    template: template in TEMPLATES ? template : 'standard', paper: 'a4',
   };
   return r;
 }
@@ -1067,4 +1067,211 @@ export function cvSections(text) {
     if (cur) out[cur].push(l.replace(/^[•\-–*·▪●]\s*/, ''));
   });
   return out;
+}
+
+// ---------- Resume tailor ----------
+// A resume is ResumeFold's Resume shape (contact, summary, experience[], education[], skills[], projects[],
+// certifications[]), so it opens in ResumeFold as is. Tailoring only reorders, rewords or brings forward what the
+// CV already says; adding a skill the CV doesn't show is its own suggestion that you have to confirm.
+
+export const TEMPLATES = { standard: 'Standard', student: 'Student', combination: 'Combination', senior: 'Senior' };
+const YEAR_RE = /\b(19|20)\d{2}\b/;
+const isEntryHead = (l) => l.length <= 140 && (YEAR_RE.test(l) || /\s[|–—]\s|\s-\s|:\s*$/.test(l) || /\b(present|current)\b/i.test(l));
+const splitHead = (l) => {
+  const parts = l.split(/\s*(?:[|–—]|\s-\s|,|:)\s*/).map(x => x.trim()).filter(Boolean);
+  const dates = parts.filter(p => YEAR_RE.test(p) || /present|current/i.test(p));
+  const words = parts.filter(p => !dates.includes(p));
+  return { a: words[0] || l, b: words.slice(1).join(', '), dates: dates.join(' – ') };
+};
+const datesOf = (s) => {
+  const ys = String(s || '').split(/\s*(?:–|—|-|to)\s*/i);
+  const current = /present|current|now/i.test(s);
+  return { start: toYearMonth(ys[0]), end: current ? '' : toYearMonth(ys[1] || ''), current };
+};
+/** Lines under a heading → entries: a line that looks like a title (dates, "|", " – ") starts one; the rest are its bullets. */
+function entries(lines) {
+  const out = [];
+  lines.forEach(l => {
+    if (!out.length || isEntryHead(l)) out.push({ head: l, bullets: [] });
+    else out[out.length - 1].bullets.push(l);
+  });
+  return out;
+}
+
+/** The CV as a structured resume, by rules (no AI). Used when the AI hasn't read the CV yet, or isn't available. */
+export function resumeFromCv(cv, opts = {}) {
+  const sec = cvSections(cv), p = profileFromCv(cv, new Date(), { hint: opts.hint });
+  const skills = opts.skills || [...termsIn(cv)];
+  const r = {
+    contact: { fullName: p.name, headline: '', email: p.email, phone: p.phone, location: p.city, website: '', linkedin: p.linkedin, github: p.github },
+    summary: sec.summary.join(' ').slice(0, 1200),
+    experience: entries(sec.experience).map((e, i) => { const h = splitHead(e.head), d = datesOf(h.dates);
+      return { id: 'exp' + (i + 1), title: h.a, company: h.b, location: '', start: d.start, end: d.end, current: d.current, bullets: e.bullets }; }),
+    education: entries(sec.education).map((e, i) => { const h = splitHead(e.head), d = datesOf(h.dates);
+      return { id: 'edu' + (i + 1), school: h.b || h.a, degree: h.b ? h.a : '', field: '', location: '', start: d.start, end: d.end, gpa: '', details: e.bullets }; }),
+    skills: skills.length ? [{ id: 'skill1', category: 'Skills', items: skills.slice(0, 40) }] : [],
+    projects: entries(sec.projects).map((e, i) => { const h = splitHead(e.head), d = datesOf(h.dates);
+      return { id: 'proj' + (i + 1), name: h.a, link: '', tech: h.b, start: d.start, end: d.end, bullets: e.bullets }; }),
+    certifications: sec.certifications.map((l, i) => ({ id: 'cert' + (i + 1), name: l.slice(0, 200), issuer: '', date: toYearMonth((l.match(YEAR_RE) || [''])[0]), link: '' })),
+  };
+  return cleanResumeFold(r) || r;
+}
+
+/** Everything a resume says, as plain text (for scoring and checks). */
+export function resumeText(r) {
+  const x = [r.contact && r.contact.headline, r.summary];
+  (r.experience || []).forEach(e => x.push(e.title, e.company, ...(e.bullets || [])));
+  (r.projects || []).forEach(p => x.push(p.name, p.tech, ...(p.bullets || [])));
+  (r.education || []).forEach(e => x.push(e.degree, e.field, e.school, ...(e.details || [])));
+  (r.skills || []).forEach(s => x.push(s.category, (s.items || []).join(', ')));
+  (r.certifications || []).forEach(c => x.push(c.name, c.issuer));
+  return x.filter(Boolean).join('\n');
+}
+
+/** How well a resume covers what the job asks for (the same matchScore as Job matches). */
+export function tailorScore(r, job, keywords = []) {
+  return matchScore({ role: job.role, details: job.jd || job.details }, [...termsIn(resumeText(r), keywords)], keywords, []);
+}
+
+/** The job description in pieces, each marked 'have' (on your CV), 'miss' (asked for, not on it) or '' (plain text). */
+export function highlightJd(text, have, keywords = []) {
+  const t = String(text || '');
+  const haveSet = new Set([...have].map(x => x.toLowerCase()));
+  const keys = [];
+  for (const [k, canon] of SKILL_KEYS) keys.push([k, canon]);
+  keywords.forEach(k => keys.push([String(k).toLowerCase(), k]));
+  const lower = t.toLowerCase(), hits = [];
+  keys.forEach(([k, canon]) => {
+    if (!k || (EXACT.has(canon) && k === canon.toLowerCase())) {
+      const re = new RegExp('(^|[^A-Za-z0-9+#])(' + esc(canon) + ')(?=$|[^A-Za-z0-9+#])', 'g');
+      for (let m; (m = re.exec(t));) hits.push([m.index + m[1].length, m[2].length, canon]);
+      return;
+    }
+    const re = new RegExp('(^|[^a-z0-9+#])(' + esc(k) + ')(?=$|[^a-z0-9+#])', 'g');
+    for (let m; (m = re.exec(lower));) hits.push([m.index + m[1].length, m[2].length, canon]);
+  });
+  hits.sort((a, b) => a[0] - b[0] || b[1] - a[1]);
+  const out = [];
+  let at = 0;
+  hits.forEach(([i, n, canon]) => {
+    if (i < at) return; // overlaps a longer, earlier match
+    if (i > at) out.push({ text: t.slice(at, i), kind: '' });
+    out.push({ text: t.slice(i, i + n), kind: haveSet.has(canon.toLowerCase()) ? 'have' : 'miss', term: canon });
+    at = i + n;
+  });
+  if (at < t.length) out.push({ text: t.slice(at), kind: '' });
+  return out;
+}
+
+const hitsIn = (text, asked) => asked.filter(a => termsIn(text, [a]).has(a)).length;
+
+/**
+ * Suggested edits for this job, best first. Each: {id, kind, title, text, patch, warn?}. Kinds: 'Reorder' and 'Reword'
+ * change only order or wording of what's there; 'Surface' adds to your skills something your CV already shows;
+ * 'Add skill' adds something it doesn't (only if you can talk about it), so it carries a warning.
+ */
+export function tailorSuggestions(base, job, cv, keywords = []) {
+  const jd = [job.role, job.jd || job.details].join('\n');
+  const asked = [...termsIn(jd, keywords)];
+  const inResume = termsIn(resumeText(base), keywords), inCv = termsIn(cv, keywords);
+  const skillItems = (base.skills || []).flatMap(s => s.items || []);
+  const has = (t) => skillItems.some(i => i.toLowerCase() === t.toLowerCase());
+  const out = [];
+  // Lead the skills with what's asked for.
+  const askedInSkills = skillItems.filter(i => asked.some(a => a.toLowerCase() === i.toLowerCase()));
+  if (askedInSkills.length && askedInSkills.some((t, i) => skillItems.indexOf(t) !== i)) {
+    out.push({ id: 'skills-order', kind: 'Reorder', title: 'Lead with the skills this job asks for', text: `Put ${askedInSkills.slice(0, 4).join(', ')} first in your skills.`, patch: { op: 'skillsFirst', terms: askedInSkills } });
+  }
+  // Skills the CV shows (in a project, a course…) but the skills list doesn't name.
+  asked.filter(t => inCv.has(t) && !has(t)).slice(0, 5).forEach(t => out.push({ id: 'surface:' + t, kind: 'Surface', title: `Add ${t} to your skills`, text: `Your CV already shows ${t}; listing it makes it easy to spot.`, patch: { op: 'addSkill', term: t } }));
+  // The project that fits best goes first.
+  const projects = base.projects || [];
+  if (projects.length > 1) {
+    const scored = projects.map((p, i) => ({ i, n: hitsIn([p.name, p.tech, ...(p.bullets || [])].join(' '), asked) }));
+    const best = scored.slice().sort((a, b) => b.n - a.n || a.i - b.i)[0];
+    if (best.n > 0 && best.i !== 0) out.push({ id: 'project-first', kind: 'Reorder', title: `Move "${projects[best.i].name}" to the top`, text: `It shows ${best.n} thing${best.n === 1 ? '' : 's'} this job asks for.`, patch: { op: 'projectFirst', index: best.i } });
+  }
+  // Within each role and project, bullets that mention the job's skills go first.
+  const bulletsToMove = [...(base.experience || []), ...projects].some(e => { const b = e.bullets || []; const first = b.findIndex(x => hitsIn(x, asked)); return first > 0; });
+  if (bulletsToMove) out.push({ id: 'bullets-order', kind: 'Reorder', title: 'Lead each entry with its most relevant point', text: 'Bullets that mention what this job asks for move to the top of their entry.', patch: { op: 'bulletsFirst', terms: asked } });
+  // The headline names the role you're applying for, with true focus areas from your skills.
+  const focus = asked.filter(t => inResume.has(t)).slice(0, 3);
+  const headline = [job.role, focus.join(', ')].filter(Boolean).join(' · ').slice(0, 120);
+  if (job.role && headline !== (base.contact && base.contact.headline)) out.push({ id: 'headline', kind: 'Reword', title: 'Headline for this role', text: `“${headline}”`, patch: { op: 'headline', value: headline } });
+  // Asked for, nowhere in the CV.
+  asked.filter(t => !inCv.has(t) && !has(t)).slice(0, 3).forEach(t => out.push({ id: 'add:' + t, kind: 'Add skill', title: `Add ${t}`, text: `The job asks for ${t}, and your CV doesn't mention it.`, warn: 'Only add this if you can talk about it in an interview.', patch: { op: 'addSkill', term: t } }));
+  return out;
+}
+
+/** Applies accepted suggestions to a copy of base. Returns {resume, changed}: changed marks what to highlight in the preview. */
+export function applySuggestions(base, accepted) {
+  const r = JSON.parse(JSON.stringify(base));
+  const changed = new Set();
+  const lower = (x) => String(x).toLowerCase();
+  accepted.forEach(s => {
+    const p = s.patch || {};
+    if (p.op === 'addSkill') {
+      if (!r.skills.length) r.skills.push({ id: 'skill1', category: 'Skills', items: [] });
+      if (!r.skills.some(g => g.items.some(i => lower(i) === lower(p.term)))) { r.skills[0].items.unshift(p.term); changed.add('skill:' + lower(p.term)); }
+    } else if (p.op === 'skillsFirst') {
+      const want = new Set(p.terms.map(lower));
+      r.skills.forEach(g => { g.items = [...g.items.filter(i => want.has(lower(i))), ...g.items.filter(i => !want.has(lower(i)))]; });
+      r.skills.sort((a, b) => b.items.filter(i => want.has(lower(i))).length - a.items.filter(i => want.has(lower(i))).length);
+      changed.add('skills');
+    } else if (p.op === 'projectFirst' && r.projects[p.index]) {
+      r.projects.unshift(r.projects.splice(p.index, 1)[0]);
+      changed.add('project:' + r.projects[0].id);
+    } else if (p.op === 'bulletsFirst') {
+      [...r.experience, ...r.projects].forEach(e => {
+        const hit = (x) => hitsIn(x, p.terms) > 0;
+        const before = e.bullets.join('\n');
+        e.bullets = [...e.bullets.filter(hit), ...e.bullets.filter(x => !hit(x))];
+        if (e.bullets.join('\n') !== before) changed.add('bullets:' + e.id);
+      });
+    } else if (p.op === 'headline') {
+      r.contact.headline = p.value; changed.add('headline');
+    } else if (p.op === 'summary') {
+      r.summary = p.value; changed.add('summary');
+    }
+  });
+  return { resume: r, changed };
+}
+
+/** An AI-reworded summary is only offered if it brings in no skill or tool the CV doesn't already show. */
+export function honestRewrite(text, cv, keywords = []) {
+  const allowed = termsIn(cv, keywords);
+  const added = [...termsIn(text, keywords)].filter(t => !allowed.has(t));
+  return { ok: !added.length && String(text || '').trim().length > 20, added };
+}
+
+export function rewordPrompt(summary, cv, job) {
+  return 'Rewrite this resume summary for the job below, in 2–3 short sentences. STRICT: use ONLY facts, skills and tools that appear in the CV. ' +
+    'Do not add anything the CV does not say. You may reorder and reword, and use the job\'s wording only for things the CV shows. ' +
+    'Return JSON {"summary": ""}.\n\nJob: ' + clip([job.role, job.company, job.jd || job.details].filter(Boolean).join('\n'), 3000) +
+    '\n\nCurrent summary: ' + (summary || '(none)') + '\n\nCV:\n' + clip(cv, 8000);
+}
+
+// LaTeX: a plain article-class resume (compiles with any TeX install or Overleaf).
+const texEsc = (s) => String(s || '').replace(/\\/g, '\\textbackslash{}').replace(/([#$%&_{}])/g, '\\$1').replace(/~/g, '\\textasciitilde{}').replace(/\^/g, '\\textasciicircum{}');
+const ym = (s) => { const [y, m] = String(s || '').split('-'); return y ? (m ? `${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][Number(m) - 1]} ${y}` : y) : ''; };
+export const dateRange = (e) => [ym(e.start), e.current ? 'Present' : ym(e.end || e.date)].filter(Boolean).join(' – ');
+
+export function resumeLatex(r) {
+  const c = r.contact || {};
+  const L = ['\\documentclass[10pt]{article}', '\\usepackage[a4paper,margin=1.6cm]{geometry}', '\\usepackage[hidelinks]{hyperref}', '\\usepackage{enumitem}',
+    '\\setlist[itemize]{leftmargin=1.2em,itemsep=1pt,topsep=2pt}', '\\pagestyle{empty}', '\\setlength{\\parindent}{0pt}',
+    '\\renewcommand{\\section}[1]{\\vspace{8pt}{\\large\\bfseries #1}\\\\[-6pt]\\rule{\\linewidth}{0.4pt}\\\\[2pt]}', '\\begin{document}',
+    `{\\LARGE\\bfseries ${texEsc(c.fullName)}}\\\\`];
+  if (c.headline) L.push(`${texEsc(c.headline)}\\\\`);
+  L.push([c.email, c.phone, c.location, c.linkedin, c.github, c.website].filter(Boolean).map(texEsc).join(' \\textbar{} ') + '\\\\');
+  const items = (list) => (list && list.length ? ['\\begin{itemize}', ...list.map(b => `\\item ${texEsc(b)}`), '\\end{itemize}'] : []);
+  const head = (left, right) => `\\textbf{${texEsc(left)}}${right ? ` \\hfill ${texEsc(right)}` : ''}\\\\`;
+  if (r.summary) L.push('\\section{Summary}', texEsc(r.summary));
+  if ((r.skills || []).length) L.push('\\section{Skills}', ...r.skills.map(s => `\\textbf{${texEsc(s.category)}:} ${texEsc(s.items.join(', '))}\\\\`));
+  if ((r.experience || []).length) { L.push('\\section{Experience}'); r.experience.forEach(e => L.push(head([e.title, e.company].filter(Boolean).join(', '), dateRange(e)), ...items(e.bullets))); }
+  if ((r.projects || []).length) { L.push('\\section{Projects}'); r.projects.forEach(p => L.push(head([p.name, p.tech].filter(Boolean).join(' — '), dateRange(p)), ...items(p.bullets))); }
+  if ((r.education || []).length) { L.push('\\section{Education}'); r.education.forEach(e => L.push(head([e.degree, e.field, e.school].filter(Boolean).join(', '), dateRange(e)), ...items([e.gpa && `GPA ${e.gpa}`, ...(e.details || [])].filter(Boolean)))); }
+  if ((r.certifications || []).length) L.push('\\section{Certifications}', ...items(r.certifications.map(c2 => [c2.name, c2.issuer, ym(c2.date)].filter(Boolean).join(', '))));
+  L.push('\\end{document}', '');
+  return L.join('\n');
 }
