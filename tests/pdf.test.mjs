@@ -21,8 +21,8 @@ test('every layout makes a valid PDF with the resume as real text', () => {
     assert.ok(s.trimEnd().endsWith('%%EOF'));
     checkXref(s);
     assert.ok(s.includes('(Test) Tj') && s.includes('(Person) Tj'), t); // each word is placed on its own
-    assert.ok(s.includes('(EXPERIENCE) Tj'), t);
-    assert.ok(s.includes('/BaseFont /Times-Bold'), t);
+    assert.ok(/\((WORK EXPERIENCE|Work Experience)\) Tj/.test(s), t); // ResumeFold's heading, in capitals for Standard and Combination
+    assert.ok(s.includes('/BaseFont /Helvetica-Bold'), t);
   }
 });
 

@@ -1443,6 +1443,29 @@ export function tailorScore(r, job, keywords = []) {
   return matchScore({ role: job.role, details: job.jd || job.details }, [...termsIn(resumeText(r), keywords)], keywords, []);
 }
 
+/**
+ * An estimate of how an applicant tracking system would rate this resume for this job: three quarters from the job's
+ * keywords found in the resume (tailorScore), one quarter from what ATS software looks for in the format.
+ * Returns {score, keywords: {found, total, missing[]}, checks: [{ok, text}]}; show it in words (matchLabel).
+ */
+export function atsScore(r, job, keywords = []) {
+  const kw = tailorScore(r, job, keywords);
+  const text = resumeText(r), c = r.contact || {};
+  const entries = [...(r.experience || []), ...(r.projects || []), ...(r.education || [])];
+  const bulletCount = [...(r.experience || []), ...(r.projects || [])].reduce((n, e) => n + (e.bullets || []).filter(Boolean).length, 0);
+  const checks = [
+    { ok: !!(c.email && c.phone), text: 'Email and phone at the top' },
+    { ok: (r.education || []).length > 0 && (r.skills || []).length > 0, text: 'Standard sections: Education and Skills' },
+    { ok: !!job.role && roleFits(text, [job.role], 'core'), text: 'The job title appears in your resume' },
+    { ok: entries.length > 0 && entries.every(e => e.start || e.end || e.current), text: 'A date on every entry' },
+    { ok: bulletCount >= 3, text: 'Bullet points that show what you did' },
+    { ok: String(r.summary || '').length >= 60, text: 'A short summary at the top' },
+  ];
+  const format = 100 * checks.filter(x => x.ok).length / checks.length;
+  const found = kw.matched.length, total = kw.matched.length + kw.missing.length;
+  return { score: Math.round(0.75 * kw.score + 0.25 * format), keywords: { found, total, missing: kw.missing.slice(0, 8) }, checks };
+}
+
 /** The job description in pieces, each marked 'have' (on your CV), 'miss' (asked for, not on it) or '' (plain text). */
 export function highlightJd(text, have, keywords = []) {
   const t = String(text || '');

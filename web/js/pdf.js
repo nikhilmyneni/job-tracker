@@ -1,22 +1,28 @@
 /**
- * The tailored resume as a real PDF, made in the browser with no library: text set in the PDF core fonts (Times), so
- * it's selectable and reads cleanly for applicant tracking systems. Same four layouts and navy accent as the sheet on
- * screen (view-tailor.js renderSheet). Pure, no DOM: resumePdf(resume, template) → Uint8Array.
+ * The tailored resume as a real PDF, made in the browser with no library, in ResumeFold's layouts (Standard, Student,
+ * Combination, Senior), following ResumeFold's own PDF export: its section names and order, the title / dates and
+ * company / location rows, "•" bullets, rules and spacing. Text is set in Helvetica (a PDF core font, the closest to
+ * ResumeFold's default Source Sans), so it's selectable and reads cleanly for applicant tracking systems.
+ * Type and spacing scale a little to fill one page without blank space. Pure, no DOM: resumePdf(resume, template).
  */
-import { CODES, TIMES_ROMAN, TIMES_BOLD, TIMES_ITALIC } from './pdf-fonts.js';
+import { CODES, HELVETICA, HELVETICA_BOLD, HELVETICA_OBLIQUE } from './pdf-fonts.js';
 import { dateRange } from './core.js';
 
-const PAGE_W = 595.28, PAGE_H = 841.89, MARGIN_X = 52, TOP = 50, BOTTOM = 48;
+const PAGE_W = 595.28, PAGE_H = 841.89;
+const MARGIN_Y = 36, MARGIN_X = 44.64; // ResumeFold "normal" margins (0.5in / 0.62in)
 const FONT = { R: 'F1', B: 'F2', I: 'F3' };
 const WIDTHS = {};
-[['R', TIMES_ROMAN], ['B', TIMES_BOLD], ['I', TIMES_ITALIC]].forEach(([f, list]) => { WIDTHS[f] = new Map(CODES.map((c, i) => [c, list[i]])); });
-const COLOR = { ink: [0.078, 0.09, 0.122], text: [0.17, 0.184, 0.22], muted: [0.357, 0.384, 0.44], accent: [0.114, 0.227, 0.431], rule: [0.79, 0.81, 0.86], tint: [0.953, 0.961, 0.976] };
-const BASE = { body: 10, small: 8.7, head: 8.6, name: 23, headline: 10.3 };
-let SIZE = Object.assign({}, BASE), gapK = 1;
-const GAP = (n) => n * gapK;
-/** Type at k times its base size; spacing grows (or shrinks) faster, so a short resume breathes instead of leaving a blank page. */
-function scaleTo(k) { SIZE = Object.fromEntries(Object.entries(BASE).map(([key, v]) => [key, v * k])); gapK = k * k * k; }
-const LEAD = 1.32;
+[['R', HELVETICA], ['B', HELVETICA_BOLD], ['I', HELVETICA_OBLIQUE]].forEach(([f, list]) => { WIDTHS[f] = new Map(CODES.map((c, i) => [c, list[i]])); });
+const COLOR = { ink: [0.067, 0.067, 0.067], muted: [0.23, 0.22, 0.2] }; // ResumeFold: ink #111111 (accent "none"), muted
+// ResumeFold's section names; Standard and Combination set them in capitals.
+export const HEADINGS = { summary: 'Summary', experience: 'Work Experience', education: 'Education', skills: 'Skills', projects: 'Projects', certifications: 'Certifications' };
+export const ORDER = ['summary', 'experience', 'education', 'skills', 'projects', 'certifications']; // ResumeFold's default order
+const STYLE = {
+  standard: { name: 2.2, align: 'center', headline: true, upper: true, head: 1, rule: 'line', entryGap: 6, liGap: 1.6, lead: 0, headGap: 9 },
+  student: { name: 2.3, align: 'center', headline: false, upper: false, head: 1.15, rule: 'line', entryGap: 4, liGap: 0.8, lead: -0.04, headGap: 6 },
+  combination: { name: 2.3, align: 'left', headline: true, upper: true, head: 1, rule: 'bar', entryGap: 6, liGap: 1.6, lead: 0, headGap: 6, headRule: 1.6 },
+  senior: { name: 2.5, align: 'left', headline: true, italicHeadline: true, upper: false, head: 1.25, rule: 'line', entryGap: 9, liGap: 1.6, lead: 0.05, headGap: 12 },
+};
 
 // ---------- characters: WinAnsi codes, with stand-ins for what the core fonts lack ----------
 const UNI = { '…': 133, '‘': 145, '’': 146, '“': 147, '”': 148, '•': 149, '–': 150, '—': 151, '·': 183 };
@@ -29,7 +35,7 @@ function codes(s) {
   }
   return out;
 }
-const measure = (s, f, size) => codes(s).reduce((n, c) => n + (WIDTHS[f].get(c) || 250), 0) * size / 1000;
+const measure = (s, f, size) => codes(s).reduce((n, c) => n + (WIDTHS[f].get(c) || 278), 0) * size / 1000;
 const pdfString = (s) => '(' + codes(s).map(c => (c === 40 || c === 41 || c === 92 ? '\\' + String.fromCharCode(c) : c > 126 ? '\\' + c.toString(8).padStart(3, '0') : String.fromCharCode(c))).join('') + ')';
 const n2 = (x) => (Math.round(x * 100) / 100).toString();
 const rgb = (c, op) => `${n2(c[0])} ${n2(c[1])} ${n2(c[2])} ${op}`;
@@ -38,14 +44,14 @@ const rgb = (c, op) => `${n2(c[0])} ${n2(c[1])} ${n2(c[2])} ${op}`;
 function makeDoc() {
   const pages = [[]];
   const doc = {
-    y: PAGE_H - TOP,
+    y: PAGE_H - MARGIN_Y,
     get ops() { return pages[pages.length - 1]; },
     pages,
     /** Room for h more points on this page, or a new page. */
-    need(h) { if (doc.y - h < BOTTOM) { pages.push([]); doc.y = PAGE_H - TOP; } },
+    need(h) { if (doc.y - h < MARGIN_Y) { pages.push([]); doc.y = PAGE_H - MARGIN_Y; } },
     text(x, y, s, f, size, color) { if (s) doc.ops.push(`BT /${FONT[f]} ${n2(size)} Tf ${rgb(COLOR[color], 'rg')} ${n2(x)} ${n2(y)} Td ${pdfString(s)} Tj ET`); },
-    line(x1, y1, x2, y2, w, color) { doc.ops.push(`${rgb(COLOR[color], 'RG')} ${n2(w)} w ${n2(x1)} ${n2(y1)} m ${n2(x2)} ${n2(y2)} l S`); },
-    rect(x, y, w, h, color) { return `${rgb(COLOR[color], 'rg')} ${n2(x)} ${n2(y)} ${n2(w)} ${n2(h)} re f`; },
+    line(x1, y1, x2, y2, w) { doc.ops.push(`${rgb(COLOR.ink, 'RG')} ${n2(w)} w ${n2(x1)} ${n2(y1)} m ${n2(x2)} ${n2(y2)} l S`); },
+    bar(x, y, w, h) { doc.ops.push(`${rgb(COLOR.ink, 'rg')} ${n2(x)} ${n2(y)} ${n2(w)} ${n2(h)} re f`); },
   };
   return doc;
 }
@@ -72,144 +78,119 @@ function wrap(runs, size, maxW) {
   return lines.filter(l => l.length).map(l => Object.assign(l, { width: l.reduce((m, p) => Math.max(m, p.x + measure(p.text, p.f, size)), 0) }));
 }
 
-function drawLines(doc, lines, x, size, align = 'left', x1 = x) {
-  lines.forEach(l => {
-    doc.need(size * LEAD);
-    doc.y -= size * LEAD;
-    const left = align === 'center' ? (x + x1 - l.width) / 2 : x;
-    l.forEach(p => doc.text(left + p.x, doc.y + size * 0.28, p.text, p.f, size, p.color));
+// ---------- one layout pass at a given scale ----------
+function layout(r, t, k) {
+  const st = STYLE[t];
+  const size = 10.5 * k, lead = 1.32 + st.lead, gap = (n) => n * k * k * k; // spacing grows faster than type
+  const small = size * 0.95, x0 = MARGIN_X, x1 = PAGE_W - MARGIN_X;
+  const doc = makeDoc();
+  const lineH = (s) => s * lead;
+  const draw = (lines, s, x = x0, align = 'left') => lines.forEach(l => {
+    doc.need(lineH(s));
+    doc.y -= lineH(s);
+    const left = align === 'center' ? (x0 + x1 - l.width) / 2 : x;
+    l.forEach(p => doc.text(left + p.x, doc.y + s * 0.25, p.text, p.f, s, p.color));
   });
-}
+  const para = (runs, s, align) => draw(wrap(runs, s, x1 - x0), s, x0, align);
 
-// ---------- the resume ----------
-function header(doc, r, template, x0, x1) {
+  /** A row: left runs, and right text (dates, location) aligned right; wraps to two lines if they don't fit with 12pt between. */
+  const row = (left, right) => {
+    const rw = right ? measure(right, 'R', small) : 0;
+    const lines = wrap(left, size, right ? x1 - x0 - rw - 12 : x1 - x0);
+    doc.need(lineH(size) * lines.length);
+    const firstY = doc.y - lineH(size);
+    draw(lines, size);
+    if (right) doc.text(x1 - rw, firstY + size * 0.25, right, 'R', small, 'muted');
+  };
+  const bullets = (list) => (list || []).filter(Boolean).forEach(b => {
+    const lines = wrap([{ text: b, f: 'R', color: 'ink' }], size, x1 - x0 - 12);
+    doc.need(lineH(size));
+    doc.text(x0 + 2, doc.y - lineH(size) + size * 0.25, '•', 'R', size, 'ink');
+    draw(lines, size, x0 + 12);
+    doc.y -= gap(st.liGap);
+  });
+
+  // Header
   const c = r.contact || {};
-  const center = template === 'standard' || template === 'combination';
-  const bar = template === 'student';
-  const tx = bar ? x0 + 11 : x0;
-  const top = doc.y;
-  const nameSize = template === 'senior' ? SIZE.name + 3 : SIZE.name;
-  drawLines(doc, wrap([{ text: c.fullName || 'Your name', f: 'B', color: 'ink' }], nameSize, x1 - tx), tx, nameSize, center ? 'center' : 'left', x1);
-  if (c.headline) { doc.y -= GAP(1); drawLines(doc, wrap([{ text: c.headline, f: 'R', color: 'accent' }], SIZE.headline, x1 - tx), tx, SIZE.headline, center ? 'center' : 'left', x1); }
-  const bits = [c.email, c.phone, c.location, c.linkedin, c.github, c.website].filter(Boolean);
-  const runs = bits.flatMap((b, i) => [i ? { text: '  |  ', f: 'R', color: 'rule' } : null, { text: b.replace(/\s+/g, ' '), f: 'R', color: 'muted' }].filter(Boolean));
-  if (runs.length) { doc.y -= GAP(2); drawLines(doc, wrap(runs, SIZE.small, x1 - tx), tx, SIZE.small, center ? 'center' : 'left', x1); }
-  doc.y -= GAP(8);
-  if (bar) doc.ops.push(doc.rect(x0, doc.y + 4, 3, top - doc.y - 2, 'accent'));
-  else if (template === 'senior') { doc.line(x0, doc.y, x1, doc.y, 0.8, 'accent'); doc.line(x0, doc.y - 2.4, x1, doc.y - 2.4, 0.8, 'accent'); doc.y -= 2.4; }
-  else doc.line(x0, doc.y, x1, doc.y, 1.2, 'accent');
-  doc.y -= GAP(4);
-}
+  draw(wrap([{ text: c.fullName || 'Your name', f: 'B', color: 'ink' }], size * st.name, x1 - x0), size * st.name, x0, st.align);
+  if (st.headline && c.headline) {
+    doc.y -= gap(2);
+    para([{ text: c.headline, f: st.italicHeadline ? 'I' : 'R', color: 'muted' }], size * 1.05, st.align);
+  }
+  const contact = [c.email, c.phone, c.location, c.website, c.linkedin, c.github].filter(Boolean);
+  if (contact.length) {
+    doc.y -= gap(3);
+    para(contact.flatMap((x, i) => [i ? { text: '  ·  ', f: 'R', color: 'ink' } : null, { text: String(x).replace(/\s+/g, ' '), f: 'R', color: 'ink' }].filter(Boolean)), size * 0.92, st.align);
+  }
+  if (st.headRule) { doc.y -= gap(6); doc.line(x0, doc.y, x1, doc.y, st.headRule); }
+  doc.y -= gap(st.headGap) - gap(9); // the first section's 9pt gap below adds the rest
 
-function section(doc, title, x0, x1, first) {
-  doc.need(SIZE.head * 2 + SIZE.body * LEAD * 2); // keep a heading with at least its first lines
-  doc.y -= GAP(first ? 10 : 17);
-  const t = title.toUpperCase(), w = measure(t, 'B', SIZE.head);
-  doc.text(x0, doc.y, t, 'B', SIZE.head, 'accent');
-  doc.line(x0 + w + 7, doc.y + SIZE.head * 0.34, x1, doc.y + SIZE.head * 0.34, 0.55, 'rule');
-  doc.y -= GAP(4);
-}
-
-function bullets(doc, list, x0, x1) {
-  (list || []).filter(Boolean).forEach(b => {
-    const ind = SIZE.body * 1.1;
-    const lines = wrap([{ text: b, f: 'R', color: 'text' }], SIZE.body, x1 - x0 - ind);
-    doc.need(SIZE.body * LEAD);
-    const y0 = doc.y - SIZE.body * LEAD;
-    doc.text(x0 + 2, y0 + SIZE.body * 0.28, '•', 'R', SIZE.body, 'accent');
-    drawLines(doc, lines, x0 + ind, SIZE.body);
-    doc.y -= GAP(0.6);
-  });
-}
-
-function entry(doc, what, where, when, list, x0, x1) {
-  const dateW = when ? measure(when, 'R', SIZE.small) + 12 : 0;
-  const lines = wrap([{ text: what, f: 'B', color: 'ink' }, where ? { text: ', ' + where, f: 'I', color: 'muted' } : null].filter(Boolean), SIZE.body, x1 - x0 - dateW);
-  doc.need(SIZE.body * LEAD * 2);
-  doc.y -= GAP(3);
-  const firstY = doc.y - SIZE.body * LEAD;
-  drawLines(doc, lines, x0, SIZE.body);
-  if (when) doc.text(x1 - measure(when, 'R', SIZE.small), firstY + SIZE.body * 0.28, when, 'R', SIZE.small, 'accent');
-  bullets(doc, list, x0, x1);
-}
-
-function skills(doc, groups, x0, x1, stacked) {
-  const labelW = stacked ? 0 : Math.max(...groups.map(g => measure(g.category, 'B', SIZE.body))) + 12;
-  groups.forEach(g => {
-    const runs = g.items.flatMap((it, i) => [i ? { text: ' · ', f: 'R', color: 'rule' } : null, { text: it.replace(/\s+/g, ' '), f: 'R', color: 'text' }].filter(Boolean));
-    if (stacked) {
-      drawLines(doc, wrap([{ text: g.category, f: 'B', color: 'ink' }], SIZE.body, x1 - x0), x0, SIZE.body);
-      drawLines(doc, wrap(runs, SIZE.body, x1 - x0), x0, SIZE.body);
-      doc.y -= GAP(4);
-    } else {
-      doc.need(SIZE.body * LEAD);
-      doc.text(x0, doc.y - SIZE.body * LEAD + SIZE.body * 0.28, g.category, 'B', SIZE.body, 'ink');
-      drawLines(doc, wrap(runs, SIZE.body, x1 - x0 - labelW), x0 + labelW, SIZE.body);
-      doc.y -= GAP(1);
+  // Sections
+  const heading = (key) => {
+    const s = size * st.head, label = st.upper ? HEADINGS[key].toUpperCase() : HEADINGS[key];
+    doc.need(lineH(s) + lineH(size) * 3); // keep a heading with its first lines
+    doc.y -= gap(9) + lineH(s);
+    doc.text(x0, doc.y + s * 0.25, label, 'B', s, 'ink');
+    if (st.rule === 'line') { doc.y -= gap(2); doc.line(x0, doc.y, x1, doc.y, 0.6); }
+    else { doc.y -= gap(3); doc.bar(x0, doc.y - 2, 26, 2); doc.y -= 2; }
+    doc.y -= gap(5);
+  };
+  const entry = (draw1) => { draw1(); doc.y -= gap(st.entryGap); };
+  ORDER.forEach(key => {
+    if (key === 'summary' && r.summary) { heading(key); para([{ text: r.summary, f: 'R', color: 'ink' }], size); doc.y -= gap(2); }
+    if (key === 'experience' && (r.experience || []).length) {
+      heading(key);
+      r.experience.forEach(e => entry(() => {
+        row([{ text: e.title, f: 'B', color: 'ink' }], dateRange(e));
+        if (e.company || e.location) row([{ text: e.company || '', f: 'I', color: 'ink' }], e.location || '');
+        bullets(e.bullets);
+      }));
+    }
+    if (key === 'education' && (r.education || []).length) {
+      heading(key);
+      r.education.forEach(e => entry(() => {
+        const degree = [[e.degree, e.field].filter(Boolean).join(' in '), e.gpa && `GPA ${e.gpa}`].filter(Boolean).join(', ');
+        row([{ text: e.school || degree, f: 'B', color: 'ink' }], dateRange(e));
+        if (e.school && degree) row([{ text: degree, f: 'I', color: 'ink' }], e.location || '');
+        bullets(e.details);
+      }));
+    }
+    if (key === 'skills' && (r.skills || []).length) {
+      heading(key);
+      r.skills.forEach(g => { para([{ text: `${g.category}: `, f: 'R', color: 'ink' }, { text: (g.items || []).join(', '), f: 'R', color: 'ink' }], size); doc.y -= gap(1.8); });
+    }
+    if (key === 'projects' && (r.projects || []).length) {
+      heading(key);
+      r.projects.forEach(p => entry(() => {
+        row([{ text: [p.name, p.tech].filter(Boolean).join(' | '), f: 'B', color: 'ink' }], dateRange(p));
+        bullets(p.bullets);
+      }));
+    }
+    if (key === 'certifications' && (r.certifications || []).length) {
+      heading(key);
+      r.certifications.forEach(x => { row([{ text: [x.name, x.issuer].filter(Boolean).join(', '), f: 'B', color: 'ink' }], dateRange(x)); doc.y -= gap(2); });
     }
   });
+  doc.used = PAGE_H - MARGIN_Y - doc.y;
+  return doc;
 }
 
-const ORDER = {
-  standard: ['summary', 'skills', 'experience', 'projects', 'education', 'certifications'],
-  student: ['summary', 'education', 'projects', 'skills', 'experience', 'certifications'],
-  combination: ['summary', 'experience', 'projects', 'education'],
-  senior: ['summary', 'experience', 'skills', 'projects', 'education', 'certifications'],
-};
-
-function sections(doc, r, keys, x0, x1, stacked) {
-  let first = true;
-  const sec = (title, draw) => { section(doc, title, x0, x1, first); first = false; draw(); };
-  keys.forEach(k => {
-    if (k === 'summary' && r.summary) sec('Profile', () => drawLines(doc, wrap([{ text: r.summary, f: 'R', color: 'text' }], SIZE.body, x1 - x0), x0, SIZE.body));
-    if (k === 'skills' && (r.skills || []).length) sec('Skills', () => skills(doc, r.skills, x0, x1, stacked));
-    if (k === 'experience' && (r.experience || []).length) sec('Experience', () => r.experience.forEach(e => entry(doc, e.title, [e.company, e.location].filter(Boolean).join(', '), dateRange(e), e.bullets, x0, x1)));
-    if (k === 'projects' && (r.projects || []).length) sec('Projects', () => r.projects.forEach(p => entry(doc, p.name, p.tech, dateRange(p), p.bullets, x0, x1)));
-    if (k === 'education' && (r.education || []).length) sec('Education', () => r.education.forEach(e => entry(doc,
-      [e.degree, e.field].filter(Boolean).join(', ') || e.school, e.degree || e.field ? e.school : '', dateRange(e), [e.gpa && `GPA ${e.gpa}`, ...(e.details || [])], x0, x1)));
-    if (k === 'certifications' && (r.certifications || []).length) sec('Certifications', () => bullets(doc, r.certifications.map(x => [x.name, x.issuer].filter(Boolean).join(' — ')), x0, x1));
-  });
-}
-
-/** The PDF file's bytes. */
+/** The PDF file's bytes. Picks the largest scale (up to about 12pt) that keeps one page; if even 9.7pt doesn't fit, it runs on. */
 export function resumePdf(r, template = 'standard') {
-  const t = ORDER[template] ? template : 'standard';
-  // Fit the page: the largest size (up to 1.25×) that still fits one page; if even 0.9× doesn't, it runs onto a second.
-  const usable = PAGE_H - TOP - BOTTOM;
+  const t = STYLE[template] ? template : 'standard';
+  const usable = PAGE_H - 2 * MARGIN_Y;
   const fits = (k) => { const d = layout(r, t, k); return d.pages.length === 1 && d.used <= usable; };
-  let lo = 0.9, hi = 1.25;
+  let lo = 0.92, hi = 1.15;
   if (fits(hi)) lo = hi;
   else if (fits(lo)) { for (let i = 0; i < 12; i++) { const mid = (lo + hi) / 2; if (fits(mid)) lo = mid; else hi = mid; } }
-  const doc = layout(r, t, lo);
-  scaleTo(1);
-  return assemble(doc.pages, r.contact && r.contact.fullName);
-}
-
-function layout(r, t, k) {
-  scaleTo(k);
-  const doc = makeDoc();
-  const x0 = MARGIN_X, x1 = PAGE_W - MARGIN_X;
-  header(doc, r, t, x0, x1);
-  if (t === 'combination') {
-    // A tinted side column (skills, certifications) beside the main one; the tint is laid under the side's text.
-    const sideW = (x1 - x0) * 0.31, gap = 18, top = doc.y;
-    const at = doc.ops.length;
-    doc.y = top - 6;
-    sections(doc, r, ['skills', 'certifications'], x0 + 9, x0 + sideW - 9, true);
-    const sideBottom = doc.y - 8;
-    doc.ops.splice(at, 0, doc.rect(x0, sideBottom, sideW, top - sideBottom, 'tint'));
-    doc.y = top;
-    sections(doc, r, ORDER.combination, x0 + sideW + gap, x1, false);
-  } else sections(doc, r, ORDER[t], x0, x1, false);
-  doc.used = PAGE_H - TOP - doc.y;
-  return doc;
+  return assemble(layout(r, t, lo).pages, r.contact && r.contact.fullName);
 }
 
 function assemble(pages, author) {
   const objs = [];
   const add = (s) => { objs.push(s); return objs.length; };
   const catalog = add(''), tree = add('');
-  const fonts = ['Times-Roman', 'Times-Bold', 'Times-Italic'].map(b => add(`<< /Type /Font /Subtype /Type1 /BaseFont /${b} /Encoding /WinAnsiEncoding >>`));
+  const fonts = ['Helvetica', 'Helvetica-Bold', 'Helvetica-Oblique'].map(b => add(`<< /Type /Font /Subtype /Type1 /BaseFont /${b} /Encoding /WinAnsiEncoding >>`));
   const kids = pages.map(ops => {
     const body = ops.join('\n');
     const content = add(`<< /Length ${body.length} >>\nstream\n${body}\nendstream`);

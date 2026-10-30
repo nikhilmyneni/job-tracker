@@ -4,7 +4,8 @@
  * preview in ResumeFold's four layouts, and downloads (ResumeFold, PDF, Word, LaTeX). Saved with the job.
  */
 import { h, busy, icon, pageHead, extLink, isHttp, toast, errText } from './ui.js';
-import { TEMPLATES, matchLabel, tailorSuggestions, applySuggestions, tailorScore, highlightJd, termsIn, dateRange, RESUMEFOLD_URL } from './core.js';
+import { HEADINGS, ORDER } from './pdf.js';
+import { TEMPLATES, matchLabel, atsScore, tailorSuggestions, applySuggestions, tailorScore, highlightJd, termsIn, dateRange, RESUMEFOLD_URL } from './core.js';
 
 export function renderTailor(ctx, root, jobId) {
   const { data, act } = ctx;
@@ -31,8 +32,8 @@ export function renderTailor(ctx, root, jobId) {
     const all = [...tailorSuggestions(base, job, data.cv, data.settings.keywords), ...t.extra];
     const accepted = all.filter(s => t.accepted.includes(s.id));
     const { resume, changed } = applySuggestions(base, accepted);
-    const baseScore = tailorScore(base, job, data.settings.keywords).score;
-    const now = tailorScore(resume, job, data.settings.keywords);
+    const baseScore = atsScore(base, job, data.settings.keywords).score;
+    const now = atsScore(resume, job, data.settings.keywords);
     t.resume = resume;
 
     // (a) the job description
@@ -48,12 +49,14 @@ export function renderTailor(ctx, root, jobId) {
     // (b) the score and the edits
     const delta = now.score - baseScore;
     const card = h('div', { class: 'score-card' },
-      h('p', { class: 'score-card-k' }, 'JD match'),
+      h('p', { class: 'score-card-k' }, 'ATS score'),
       h('p', { class: 'score-card-v' }, matchLabel(now.score).label),
       h('p', { class: 'score-card-s' }, matchLabel(now.score).label !== matchLabel(baseScore).label ? `up from ${matchLabel(baseScore).label} on your base CV` : delta > 0 ? 'better than your base CV' : 'on your base CV'),
-      h('div', { class: 'meter-track' }, h('i')));
+      h('div', { class: 'meter-track' }, h('i')),
+      h('p', { class: 'score-card-s' }, now.keywords.total ? `${now.keywords.found} of the job’s ${now.keywords.total} keywords are in your resume.` : 'The job lists no skills to compare.'),
+      h('ul', { class: 'ats-checks' }, ...now.checks.map(x => h('li', { class: x.ok ? 'ok' : 'no' }, h('span', { 'aria-hidden': 'true' }, x.ok ? '✓' : '✗'), h('span', { class: 'visually-hidden' }, x.ok ? 'Done: ' : 'Missing: '), x.text))));
     card.querySelector('.meter-track i').style.width = now.score + '%';
-    const scoreWith = (s) => tailorScore(applySuggestions(base, [...accepted, s]).resume, job, data.settings.keywords).score - now.score;
+    const scoreWith = (s) => atsScore(applySuggestions(base, [...accepted, s]).resume, job, data.settings.keywords).score - now.score;
     const cards = all.map(s => {
       const on = t.accepted.includes(s.id);
       const pts = on ? 0 : scoreWith(s);
@@ -61,7 +64,7 @@ export function renderTailor(ctx, root, jobId) {
       const accept = h('button', { type: 'button', class: on ? 'btn btn-sm btn-quiet' : 'btn btn-sm btn-primary', disabled: !on && s.warn && !t.confirmed.includes(s.id),
         onclick: () => { t.accepted = on ? t.accepted.filter(x => x !== s.id) : [...t.accepted, s.id]; save(); draw(); } }, on ? 'Accepted — undo' : 'Accept');
       return h('li', { class: 'sug' + (on ? ' sug-on' : '') },
-        h('div', { class: 'sug-top' }, h('span', { class: 'pill ' + (s.kind === 'Add skill' ? 'pill-orange' : 'pill-blue') }, s.kind), pts > 0 ? h('span', { class: 'sug-pts' }, 'Raises your match') : ''),
+        h('div', { class: 'sug-top' }, h('span', { class: 'pill ' + (s.kind === 'Add skill' ? 'pill-orange' : 'pill-blue') }, s.kind), pts > 0 ? h('span', { class: 'sug-pts' }, 'Raises your ATS score') : ''),
         h('b', {}, s.title), h('p', {}, s.text),
         s.warn && !on ? h('p', { class: 'sug-warn' }, icon('alert'), h('span', {}, s.warn)) : '',
         s.warn && !on ? h('label', { class: 'inline small' }, ok, ' I can talk about this in an interview') : '',
@@ -148,40 +151,34 @@ function renderPicker(ctx, root) {
       '');
 }
 
-/** The one-page sheet in one of the four layouts. changed marks accepted edits so they stand out. */
+/**
+ * The one-page sheet in one of ResumeFold's four layouts, matching the PDF download (js/pdf.js): ResumeFold's section
+ * names and order, title / dates then company / location rows, "Category: items" skills. changed marks accepted edits.
+ */
 export function renderSheet(r, template, changed = new Set()) {
   const c = r.contact || {};
-  const sec = (title, ...body) => h('section', { class: 'rs-sec' }, h('h3', {}, h('span', {}, title)), ...body);
+  const upper = template === 'standard' || template === 'combination';
+  const sec = (key, ...body) => h('section', { class: 'rs-sec' }, h('h3', {}, upper ? HEADINGS[key].toUpperCase() : HEADINGS[key]), ...body);
   const bullets = (list) => (list || []).filter(Boolean).length ? h('ul', { class: 'rs-bullets' }, ...list.filter(Boolean).map(b => h('li', {}, b))) : '';
-  // One entry's first line: what (bold), where (italic), when (right).
-  const line = (what, where, when) => h('div', { class: 'rs-line' },
-    h('p', { class: 'rs-what' }, h('b', {}, what || ''), where ? h('i', {}, where) : ''), when ? h('span', { class: 'rs-when' }, when) : '');
-  const items = (s) => s.items.flatMap((it, i) => [i ? h('span', { class: 'rs-dot', 'aria-hidden': 'true' }, ' · ') : '', changed.has('skill:' + it.toLowerCase()) ? h('mark', { class: 'chg' }, it) : it]);
+  const row = (left, right, cls = '') => h('div', { class: 'rs-row ' + cls }, h('span', { class: 'rs-l' }, left), right ? h('span', { class: 'rs-r' }, right) : '');
+  const items = (s) => s.items.flatMap((it, i) => [i ? ', ' : '', changed.has('skill:' + it.toLowerCase()) ? h('mark', { class: 'chg' }, it) : it]);
   const parts = {
-    summary: r.summary ? sec('Profile', h('p', { class: 'rs-summary' + (changed.has('summary') ? ' chg' : '') }, r.summary)) : '',
-    skills: (r.skills || []).length ? sec('Skills', h('div', { class: 'rs-skills' + (changed.has('skills') ? ' chg' : '') },
-      ...r.skills.flatMap(s => [h('b', {}, s.category), h('p', {}, ...items(s))]))) : '',
-    experience: (r.experience || []).length ? sec('Experience', ...r.experience.map(e => h('div', { class: 'rs-entry' + (changed.has('bullets:' + e.id) ? ' chg' : '') },
-      line(e.title, [e.company, e.location].filter(Boolean).join(', '), dateRange(e)), bullets(e.bullets)))) : '',
-    projects: (r.projects || []).length ? sec('Projects', ...r.projects.map(p => h('div', { class: 'rs-entry' + (changed.has('project:' + p.id) || changed.has('bullets:' + p.id) ? ' chg' : '') },
-      line(p.name, p.tech, dateRange(p)), bullets(p.bullets)))) : '',
-    education: (r.education || []).length ? sec('Education', ...r.education.map(e => h('div', { class: 'rs-entry' },
-      line([e.degree, e.field].filter(Boolean).join(', ') || e.school, e.degree || e.field ? e.school : '', dateRange(e)),
-      bullets([e.gpa && `GPA ${e.gpa}`, ...(e.details || [])])))) : '',
-    certifications: (r.certifications || []).length ? sec('Certifications', bullets(r.certifications.map(x => [x.name, x.issuer].filter(Boolean).join(' — ')))) : '',
+    summary: r.summary ? sec('summary', h('p', { class: 'rs-summary' + (changed.has('summary') ? ' chg' : '') }, r.summary)) : '',
+    experience: (r.experience || []).length ? sec('experience', ...r.experience.map(e => h('div', { class: 'rs-entry' + (changed.has('bullets:' + e.id) ? ' chg' : '') },
+      row(h('b', {}, e.title || ''), dateRange(e)), e.company || e.location ? row(h('i', {}, e.company || ''), e.location || '') : '', bullets(e.bullets)))) : '',
+    education: (r.education || []).length ? sec('education', ...r.education.map(e => {
+      const degree = [[e.degree, e.field].filter(Boolean).join(' in '), e.gpa && `GPA ${e.gpa}`].filter(Boolean).join(', ');
+      return h('div', { class: 'rs-entry' }, row(h('b', {}, e.school || degree), dateRange(e)), e.school && degree ? row(h('i', {}, degree), e.location || '') : '', bullets(e.details));
+    })) : '',
+    skills: (r.skills || []).length ? sec('skills', h('div', { class: 'rs-skills' + (changed.has('skills') ? ' chg' : '') },
+      ...r.skills.map(s => h('p', {}, `${s.category}: `, ...items(s))))) : '',
+    projects: (r.projects || []).length ? sec('projects', ...r.projects.map(p => h('div', { class: 'rs-entry' + (changed.has('project:' + p.id) || changed.has('bullets:' + p.id) ? ' chg' : '') },
+      row(h('b', {}, [p.name, p.tech].filter(Boolean).join(' | ')), dateRange(p)), bullets(p.bullets)))) : '',
+    certifications: (r.certifications || []).length ? sec('certifications', ...r.certifications.map(x => row(h('b', {}, [x.name, x.issuer].filter(Boolean).join(', ')), dateRange(x), 'rs-cert'))) : '',
   };
-  const ORDER = {
-    standard: ['summary', 'skills', 'experience', 'projects', 'education', 'certifications'],
-    student: ['summary', 'education', 'projects', 'skills', 'experience', 'certifications'],
-    combination: ['summary', 'experience', 'projects', 'education'],
-    senior: ['summary', 'experience', 'skills', 'projects', 'education', 'certifications'],
-  }[template] || [];
-  const contact = [c.email, c.phone, c.location, c.linkedin, c.github, c.website].filter(Boolean);
+  const contact = [c.email, c.phone, c.location, c.website, c.linkedin, c.github].filter(Boolean);
   const head = h('header', { class: 'rs-head' }, h('h2', {}, c.fullName || 'Your name'),
-    c.headline ? h('p', { class: 'rs-headline' + (changed.has('headline') ? ' chg' : '') }, c.headline) : '',
-    h('p', { class: 'rs-contact' }, ...contact.flatMap((x, i) => [i ? h('span', { class: 'rs-sep', 'aria-hidden': 'true' }, '|') : '', h('span', {}, x)])));
-  const body = template === 'combination'
-    ? h('div', { class: 'rs-cols' }, h('aside', { class: 'rs-side' }, parts.skills, parts.certifications), h('div', { class: 'rs-main' }, ...ORDER.map(k => parts[k])))
-    : h('div', { class: 'rs-body' }, ...ORDER.map(k => parts[k]));
-  return h('article', { class: 'sheet t-' + template, 'aria-label': 'Resume preview' }, head, body);
+    template !== 'student' && c.headline ? h('p', { class: 'rs-headline' + (changed.has('headline') ? ' chg' : '') }, c.headline) : '',
+    h('p', { class: 'rs-contact' }, contact.join('  ·  ')));
+  return h('article', { class: 'sheet t-' + template, 'aria-label': 'Resume preview' }, head, h('div', { class: 'rs-body' }, ...ORDER.map(k => parts[k])));
 }

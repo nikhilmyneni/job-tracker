@@ -143,51 +143,48 @@ th[aria-sort="descending"] .th-sort::after { content: " ↓"; }
 .pv-acts { display: flex; flex-wrap: wrap; gap: 8px; }
 .sheet-box { container-type: inline-size; background: var(--track); border-radius: 12px; padding: 12px; }
 
-/* The resume sheet: A4, drawn at the column's width (the type scales with it). Its own fixed palette: a resume is
-   printed on white whatever the app's theme. Navy accent used sparingly: the headline, the section rules, the dates. */
-.sheet { --r-ink: #14171f; --r-text: #2b2f38; --r-muted: #5b6270; --r-accent: #1d3a6e; --r-rule: #c9cfdb; --r-tint: #f3f5f9;
-  aspect-ratio: 210 / 297; min-height: max-content; background: #fff; color: var(--r-text); box-shadow: var(--shadow-lift);
-  font: 400 1.76cqw/1.42 var(--serif); font-feature-settings: "kern", "liga", "onum"; padding: 6.5% 7.5%;
-  display: grid; align-content: start; gap: 1.1em; overflow: hidden; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+/* The resume sheet: ResumeFold's layouts on A4, drawn at the column's width (1cqw = 1% of the page width, so 10.5pt
+   on a 595pt page is 1.765cqw). Matches the PDF download (js/pdf.js): Helvetica, ink #111, ResumeFold's spacing. */
+.sheet { --r-ink: #111111; --r-muted: #3b3934; --pt: calc(100cqw / 595.28);
+  aspect-ratio: 210 / 297; min-height: max-content; background: #fff; color: var(--r-ink); box-shadow: var(--shadow-lift);
+  font: 400 calc(10.5 * var(--pt)) / 1.32 Helvetica, Arial, sans-serif; padding: calc(36 * var(--pt)) calc(44.64 * var(--pt));
+  overflow: hidden; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 .sheet h2, .sheet h3, .sheet p, .sheet ul { margin: 0; }
-.rs-head { text-align: center; display: grid; gap: 0.3em; padding-bottom: 0.9em; border-bottom: 1.5px solid var(--r-accent); }
-.rs-head h2 { font: 600 2.35em/1.05 var(--serif); color: var(--r-ink); }
-.rs-headline { font: 500 0.98em/1.3 var(--serif); color: var(--r-accent); font-variant: small-caps; }
-.rs-contact { font-size: 0.86em; color: var(--r-muted); display: flex; flex-wrap: wrap; justify-content: center; gap: 0.15em 0.6em; overflow-wrap: anywhere; }
-.rs-sep { color: var(--r-rule); }
-.rs-body, .rs-main { display: grid; gap: 1em; align-content: start; }
-.rs-sec { display: grid; gap: 0.5em; }
-/* No letter-spacing on the sheet: in a PDF it splits words apart for the systems that read resumes ("P ROFI LE"). */
-.rs-sec h3 { display: flex; align-items: center; gap: 0.7em; font: 700 0.84em/1 var(--serif); text-transform: uppercase; color: var(--r-accent); }
-.rs-sec h3::after { content: ""; flex: 1; height: 0; border-top: 0.75px solid var(--r-rule); }
-.rs-summary { color: var(--r-text); }
-.rs-entry { display: grid; gap: 0.2em; break-inside: avoid; }
-.rs-entry + .rs-entry { margin-top: 0.35em; }
-.rs-line { display: flex; justify-content: space-between; align-items: baseline; gap: 1em; }
-.rs-what { min-width: 0; }
-.rs-what b { font-weight: 600; color: var(--r-ink); }
-.rs-what i { color: var(--r-muted); }
-.rs-what b + i::before { content: ", "; font-style: normal; }
-.rs-when { flex: none; white-space: nowrap; font-size: 0.86em; color: var(--r-accent); font-variant-numeric: tabular-nums lining-nums; }
-/* Real list markers, not positioned dots: positioned boxes are written last into a PDF, so the bullets' text would end
-   up after everything else for an applicant tracking system. */
-.rs-bullets { list-style: disc outside; padding-left: 1.15em; display: grid; gap: 0.15em; }
-.rs-bullets li::marker { color: var(--r-accent); font-size: 0.85em; }
-.rs-skills { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 0.25em 1em; }
-.rs-skills b { font-weight: 600; color: var(--r-ink); }
-.rs-dot { color: var(--r-rule); }
-/* Student: name to the left with an accent bar; education leads. */
-.t-student .rs-head { text-align: left; border-bottom: 0; border-left: 0.32em solid var(--r-accent); padding: 0.1em 0 0.1em 0.9em; }
-.t-student .rs-contact { justify-content: flex-start; }
-/* Combination: a tinted side column for skills and certifications. */
-.rs-cols { display: grid; grid-template-columns: 31% minmax(0, 1fr); gap: 1.5em; }
-.rs-side { background: var(--r-tint); border-radius: 0.4em; padding: 0.9em 0.85em; display: grid; gap: 1em; align-content: start; }
-.rs-side .rs-skills { grid-template-columns: minmax(0, 1fr); gap: 0.1em; }
-.rs-side .rs-skills p { margin-bottom: 0.45em; }
-/* Senior: a larger name, left-aligned, a double rule; experience leads. */
-.t-senior .rs-head { text-align: left; border-bottom: 3px double var(--r-accent); }
-.t-senior .rs-head h2 { font-size: 2.7em; }
-.t-senior .rs-contact { justify-content: flex-start; }
+.rs-head { text-align: center; margin-bottom: calc(9 * var(--pt)); }
+.rs-head h2 { font-size: 2.2em; font-weight: 700; line-height: 1.1; color: var(--r-ink); }
+.rs-headline { font-size: 1.05em; margin-top: calc(2 * var(--pt)); color: var(--r-muted); }
+.rs-contact { font-size: 0.92em; margin-top: calc(3 * var(--pt)); white-space: pre-wrap; overflow-wrap: anywhere; }
+.rs-sec { margin-top: calc(9 * var(--pt)); }
+.rs-sec h3 { font-size: 1em; font-weight: 700; color: var(--r-ink); border-bottom: calc(0.6 * var(--pt)) solid var(--r-ink); padding-bottom: calc(2 * var(--pt)); margin-bottom: calc(5 * var(--pt)); }
+.rs-entry { margin-bottom: calc(6 * var(--pt)); break-inside: avoid; }
+.rs-row { display: flex; justify-content: space-between; align-items: baseline; gap: calc(12 * var(--pt)); }
+.rs-l { min-width: 0; }
+.rs-r { white-space: nowrap; font-size: 0.95em; color: var(--r-muted); }
+.rs-bullets { list-style: none; padding: 0; }
+.rs-bullets li { padding-left: calc(12 * var(--pt)); margin-bottom: calc(1.6 * var(--pt)); text-indent: calc(-10 * var(--pt)); }
+.rs-bullets li::before { content: "•"; display: inline-block; width: calc(10 * var(--pt)); text-indent: 0; }
+.rs-skills p { margin-bottom: calc(1.8 * var(--pt)); }
+.rs-cert { margin-bottom: calc(2 * var(--pt)); }
+/* Student: centred, a larger name, no headline, larger title-case headings, tighter entries. */
+.t-student { line-height: 1.28; }
+.t-student .rs-head { margin-bottom: calc(6 * var(--pt)); }
+.t-student .rs-head h2 { font-size: 2.3em; }
+.t-student .rs-sec h3 { font-size: 1.15em; }
+.t-student .rs-entry { margin-bottom: calc(4 * var(--pt)); }
+.t-student .rs-bullets li { margin-bottom: calc(0.8 * var(--pt)); }
+/* Combination: left-aligned header over a heavy rule; headings with a short bar instead of a line. */
+.t-combination .rs-head { text-align: left; border-bottom: calc(1.6 * var(--pt)) solid var(--r-ink); padding-bottom: calc(6 * var(--pt)); margin-bottom: calc(6 * var(--pt)); }
+.t-combination .rs-head h2 { font-size: 2.3em; }
+.t-combination .rs-sec h3 { border: 0; padding: 0; }
+.t-combination .rs-sec h3::after { content: ""; display: block; width: calc(26 * var(--pt)); height: calc(2 * var(--pt)); background: var(--r-ink); margin-top: calc(3 * var(--pt)); }
+/* Senior: left-aligned, the largest name, an italic headline, title-case headings, roomier entries. */
+.t-senior { line-height: 1.37; }
+.t-senior .rs-head { text-align: left; margin-bottom: calc(12 * var(--pt)); }
+.t-senior .rs-head h2 { font-size: 2.5em; }
+.t-senior .rs-headline { font-style: italic; }
+.t-senior .rs-sec h3 { font-size: 1.25em; }
+.t-senior .rs-entry { margin-bottom: calc(9 * var(--pt)); }
+.t-standard .rs-sec h3, .t-combination .rs-sec h3 { text-transform: none; } /* capitals come from the text itself */
 .sheet .chg { background: #e8eefc; box-shadow: 0 0 0 2px #e8eefc; border-radius: 2px; }
 .sheet mark.chg { color: inherit; }
 
@@ -460,9 +457,9 @@ input[type=time] { min-height: var(--tap); padding: 0 10px; border: 1px solid va
 .filters-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(0, 1.2fr); gap: 16px; align-items: end; }
 .filters-row select { min-height: var(--tap); width: 100%; }
 .filters-toggles { display: grid; gap: 2px; }
-.min-row { display: flex; align-items: center; gap: 12px; min-height: var(--tap); }
-.min-row input[type=range] { flex: 1; accent-color: var(--blue); min-height: 32px; }
-.min-val { font: 500 14px var(--mono); color: var(--ink); min-width: 3.5ch; text-align: right; }
+.min-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; min-height: var(--tap); }
+.min-row input[type=range] { flex: 1 1 120px; accent-color: var(--blue); min-height: 32px; }
+.min-val { font: 600 14px var(--sans); color: var(--ink); white-space: nowrap; }
 @media (max-width: 1100px) { .filters-row { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 600px) { .filters-row { grid-template-columns: minmax(0, 1fr); } }
 
@@ -573,3 +570,11 @@ input.switch:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px
 .lvl-mid { background: var(--blue-soft); color: var(--blue-text); }
 .lvl-low { background: var(--orange-soft); color: var(--orange-text); }
 .lvl-card { min-width: 84px; min-height: 34px; border-radius: 10px; flex: none; }
+
+/* ATS score card: what an applicant tracking system looks for, done or missing. */
+.ats-checks { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 4px; font-size: 13.5px; }
+.ats-checks li { display: flex; gap: 8px; align-items: baseline; }
+.ats-checks li > span:first-child { width: 1em; flex: none; font-weight: 700; }
+.ats-checks .ok > span:first-child { color: var(--green); }
+.ats-checks .no { color: var(--night-text); opacity: 0.75; }
+.ats-checks .no > span:first-child { color: var(--orange-text); }

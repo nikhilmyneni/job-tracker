@@ -95,3 +95,15 @@ test('a pasted job description becomes a saved job; the role falls back to its f
   assert.equal(C.pastedJob({ role: 'X', jd: 'too short' }, '2026-10-30'), null);
   assert.equal(C.pastedJob({ jd, link: 'javascript:alert(1)' }, '2026-10-30').link, '');
 });
+
+test('ATS score: keywords plus format checks; tailoring raises it', () => {
+  const base = C.atsScore(DEMO_FOLD, job, []);
+  assert.ok(base.score > 0 && base.score <= 100);
+  assert.ok(base.keywords.total >= base.keywords.found);
+  assert.equal(base.checks.length, 6);
+  assert.ok(base.checks.find(x => /Email and phone/.test(x.text)).ok);
+  const sugg = C.tailorSuggestions(DEMO_FOLD, job, cv);
+  const better = C.atsScore(C.applySuggestions(DEMO_FOLD, sugg.filter(s => s.id === 'headline' || s.id.startsWith('add:'))).resume, job, []);
+  assert.ok(better.score > base.score, `${better.score} > ${base.score}`);
+  assert.ok(better.checks.find(x => /job title/.test(x.text)).ok, 'the headline names the role');
+});

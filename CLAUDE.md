@@ -45,6 +45,7 @@ and counts toward the 100-user cap. Without Gmail, users add applications by han
   daily) → `boardCandidates` (`rejectReason`: role / senior / internOnly / fullTimeOnly / skipList / location; Stretch range skips the role
   check) → `vetPostings` (reads the 3×n best postings; `postingProblem` drops 2+ years, unpaid, fees, "Dear Candidate" invites) →
   `pickByScore` on the real descriptions: at least half Core when there are good Core jobs (`roleKind`), Stretch only with ≤1 skill missing.
+- **Scores are shown in words**, never numbers: `matchLabel` (Excellent 80+, Good 65+, Fair 50+, Ambitious 35+, Poor).
 - **Rules first, AI second.** Matching never needs the AI: `matchScore` is a weighted keyword overlap (title ×2,
   your keywords ×1.5, a fifth from the title's fit with your roles) over `SKILL_VOCAB` + aliases, your skills
   (`mySkills`: CV skills + added − removed) and your keywords. If the AI is down, over today's allowance or not set
@@ -90,10 +91,12 @@ and counts toward the 100-user cap. Without Gmail, users add applications by han
   `listingsFromBoard`, `matchesPrefs`, `boardCandidates`; `INDIA_BOARDS` is the built-in list of ~40 start-ups and MNCs on Greenhouse/Lever/Ashby/
   SmartRecruiters/Workday, searched unless `autoCompanies` is off; `searchCompanies(settings)` = followed + built-in), the ResumeFold hand-off
   (`resumeFoldPrompt`, `cleanResumeFold`, `resumeFoldFor`), the resume tailor (`TEMPLATES`, `pastedJob` for a pasted description, `resumeFromCv` by rules,
-  `tailorSuggestions` / `applySuggestions` / `tailorScore`, `highlightJd`, `honestRewrite` for AI summaries, `resumeLatex`),
+  `tailorSuggestions` / `applySuggestions` / `tailorScore`, `atsScore` (job keywords ¾ + format checks ¼, shown in the tailor), `highlightJd`, `honestRewrite` for AI summaries, `resumeLatex`),
   and the dashboard numbers.
-- `js/pdf.js` (+ generated `js/pdf-fonts.js`, Times widths from vendored pdf.js): **pure** resume → real-text PDF (`resumePdf(resume, template)`),
-  downloaded as `Name_Resume_Company_Role.pdf` (`resumeFileBase`); same four layouts and navy accent as the on-screen sheet. No print dialog.
+- `js/pdf.js` (+ generated `js/pdf-fonts.js`, core-font widths from vendored pdf.js): **pure** resume → real-text PDF (`resumePdf(resume, template)`)
+  in **ResumeFold's layouts** (Standard / Student / Combination / Senior as ResumeFold's own PDF export draws them: its `HEADINGS`, `ORDER`,
+  rows, rules, Helvetica for its Source Sans), scaled to fill one page; downloaded as `Name_Resume_Company_Role.pdf`. The on-screen sheet
+  (`renderSheet`) matches it. No print dialog. Tailoring follows ResumeFold strictly: don't invent a different resume design.
 - `js/sources.js`: fetches job boards and full job descriptions. `js/docx.js`: **pure** ZIP + DOCX → text, and the resume as a .docx (`resumeDocx`).
 - `js/ai.js`: `PROVIDERS`, `askWith()` (shared with the server, so no DOM in this file), `useSharedAi()` / `ask()` for the page, `parseJsonLoose()`.
 - `js/google.js`: sign-in, Gmail, Drive app data (`job-tracker.json`, `cv-original.*`).
