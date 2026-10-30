@@ -141,7 +141,7 @@ export function prefsText(s) {
 
 // ---------- Data file ----------
 export function emptyData() {
-  return { version: 2, settings: defaultSettings(), applications: [], jobs: [], seen: [], log: [], cv: '', cvFile: null, cvFold: null, cvFoldHash: '', review: [], reviewDone: [], skillsAdded: [], skillsRemoved: [], lastRunAt: '', gmailRunAt: '', gmailScan: GMAIL_SCAN, gmailRescan: false, jobsRunAt: '' };
+  return { version: 2, settings: defaultSettings(), applications: [], jobs: [], seen: [], log: [], cv: '', cvFile: null, cvFold: null, cvFoldHash: '', review: [], reviewDone: [], skillsAdded: [], skillsRemoved: [], lastRunAt: '', gmailRunAt: '', gmailScan: GMAIL_SCAN, gmailRescan: false, jobsRunAt: '', startedOn: '' };
 }
 
 export function normalizeData(raw) {
@@ -168,6 +168,7 @@ export function normalizeData(raw) {
     jobsRunAt: typeof r.jobsRunAt === 'string' ? r.jobsRunAt : (typeof r.lastRunAt === 'string' ? r.lastRunAt : ''),
     // GMAIL_SCAN: how Gmail is read now. Older data reads its application emails again once, with the better search and rules.
     gmailScan: r.gmailScan === GMAIL_SCAN ? GMAIL_SCAN : 1,
+    startedOn: isYmd(r.startedOn) ? r.startedOn : '', // the day you finished setup
     gmailRescan: r.gmailRescan === true, // a re-read is under way (its seen ids were cleared once)
     // When Gmail was last read. Older files read Gmail on every run, so their lastRunAt counts.
     gmailRunAt: typeof r.gmailRunAt === 'string' ? r.gmailRunAt : (typeof r.lastRunAt === 'string' && !('gmailRunAt' in r) ? r.lastRunAt : ''),
@@ -186,6 +187,7 @@ export function addLog(data, msg, now) {
   data.log.unshift({ at: (now || new Date()).toISOString(), msg: String(msg) });
 }
 
+export const FIRST_DAY_GAP_H = 2; // on the day you sign up, the job search runs this often until you have a day's matches
 export const MIN_UPDATE_GAP_MIN = 10; // automatic syncs that fail aren't retried sooner than this
 
 /** The latest scheduled time at or before now (on a chosen day), or null. at is "HH:MM" on this device's clock. */
@@ -201,6 +203,8 @@ export function lastSlot(days, at, now) {
 /**
  * Which parts of a sync are due now: {gmail, jobs}. Each is due when it hasn't run since its latest scheduled time,
  * so a time missed while the page was closed runs on the next open. The very first run is always due.
+ * On the day you sign up (startedOn), the job search also runs every FIRST_DAY_GAP_H hours until it has found
+ * jobsPerUpdate matches that day, so you don't wait for tomorrow's time to see any.
  */
 export function scheduleDue(data, now) {
   const s = data.settings, sc = s.schedule;
@@ -211,7 +215,11 @@ export function scheduleDue(data, now) {
     const slot = lastSlot(sc.days, at, now);
     return !!slot && new Date(last) < slot;
   };
-  return { gmail: due(data.gmailRunAt, sc.gmailAt), jobs: s.jobsPerUpdate > 0 && due(data.jobsRunAt, sc.jobsAt) };
+  const today = ymd(now);
+  const foundToday = data.jobs.filter(j => j.found_on === today && j.source !== 'Pasted').length;
+  const firstDay = sc.on && data.startedOn === today && foundToday < s.jobsPerUpdate &&
+    now.getTime() - new Date(data.jobsRunAt).getTime() >= FIRST_DAY_GAP_H * 3600e3;
+  return { gmail: due(data.gmailRunAt, sc.gmailAt), jobs: s.jobsPerUpdate > 0 && (due(data.jobsRunAt, sc.jobsAt) || firstDay) };
 }
 
 // ---------- Gmail message bodies ----------

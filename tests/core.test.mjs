@@ -481,3 +481,17 @@ test('an older email, or one from before your own change, never moves an applica
   C.upsertApplication(apps, { company: 'Acme', role: 'SOC Analyst', stage: 'Offer', date: '2026-10-28' }, r);
   assert.equal(apps[0].status, 'Offer');
 });
+
+test('signup day: the job search runs every 2 hours until a day of matches is in', () => {
+  const d = C.emptyData();
+  const at = (hh) => new Date(2026, 9, 30, hh, 0);
+  Object.assign(d.settings, { onboarded: true, jobsPerUpdate: 3 });
+  d.settings.schedule = { on: true, days: [0, 1, 2, 3, 4, 5, 6], gmailAt: '07:00', jobsAt: '09:00' };
+  d.startedOn = '2026-10-30'; d.gmailRunAt = at(11).toISOString(); d.jobsRunAt = at(11).toISOString();
+  assert.equal(C.scheduleDue(d, at(12)).jobs, false); // an hour after setup
+  assert.equal(C.scheduleDue(d, at(13)).jobs, true); // two hours after
+  d.jobs = [1, 2, 3].map(i => ({ id: 'j' + i, found_on: '2026-10-30', source: 'Lever' }));
+  assert.equal(C.scheduleDue(d, at(13)).jobs, false); // a day's matches are in
+  d.jobs = []; d.startedOn = '2026-10-29';
+  assert.equal(C.scheduleDue(d, at(13)).jobs, false); // not the signup day
+});

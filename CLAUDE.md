@@ -54,7 +54,7 @@ and counts toward the 100-user cap. Without Gmail, users add applications by han
   needs a click, because popups need a user gesture. `G.preload()` loads GIS early for the same reason.
 - Syncs only happen while the page is open (there's no server holding Gmail access, by design). The routine
   (`settings.schedule`: on, days, `gmailAt`, `jobsAt`, on the device's clock) says when: `scheduleDue()` runs each part
-  once after its latest time on a chosen day, so a time missed while the page was closed runs on the next open. Checked on
+  once after its latest time on a chosen day, so a time missed while the page was closed runs on the next open. On the signup day (`startedOn`) the job search also runs every `FIRST_DAY_GAP_H` hours until that day's `jobsPerUpdate` matches are in. Checked on
   open and every minute; a failed automatic try waits `MIN_UPDATE_GAP_MIN`. **Sync now** runs both. `navigator.locks` keeps it to one tab.
 - Gmail search (`appSearch`): application phrasings, Social left out, Promotions searched only for job sites and application systems (`APPLY_SENDERS`). A job site's email is filed under the employer it names (`jobSiteParts`), never the job site; none named → "needs a look". Emails missing from the AI's answer go through `ruleClassify`.
 - Gmail API: `messages.list` (every page, up to `MAX_LISTED`) + `messages.get` (`format=full`) for unread ones only, 4 at a time. Up to `MAX_EMAILS` per sync, oldest first; the rest wait for the next sync (`gmailRunAt` only moves once none are left). Gmail limits reads per user per minute:
@@ -92,7 +92,7 @@ and counts toward the 100-user cap. Without Gmail, users add applications by han
 - `docs/SETUP.md`: users and owner (Google Cloud + Vercel). Keep it in sync with behaviour changes. `docs/ROADMAP.md`: ideas.
 
 ## Data (one Drive app-data file per user, `job-tracker.json`)
-`{version: 2, settings, applications[], jobs[], seen[] (≤5000), log[] (newest first, ≤300), cv, cvFile, cvFold, cvFoldHash, review[] (≤50), reviewDone[], lastRunAt, gmailRunAt, gmailScan, gmailRescan, jobsRunAt}`.
+`{version: 2, settings, applications[], jobs[], seen[] (≤5000), log[] (newest first, ≤300), cv, cvFile, cvFold, cvFoldHash, review[] (≤50), reviewDone[], lastRunAt, gmailRunAt, gmailScan, gmailRescan, jobsRunAt, startedOn}`.
 `gmailRunAt` is when Gmail was last read (so connecting it later still looks back `sinceDays`); it only moves once every matching email is read. `gmailScan` = `GMAIL_SCAN` marks data read the current way; older data reads its application emails again once over `sinceDays` (`gmailRescan` while that runs). An email older than an application's last update, or from on/before your own last change, never moves its status.
 - `settings`: onboarded, name, city, prefs {roles[], level, jobType, paidOnly, minPay,
   locations[], relocate, roleRange (core/related: `roleFits`), avoid[]}, schedule {on, days[] (0 = Sun), gmailAt, jobsAt}, jobsPerUpdate (per day), sinceDays, notify, keywords[], minMatch (0–90),

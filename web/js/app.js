@@ -390,6 +390,7 @@ async function finishWizard(d) {
   ctx.data.settings = C.normalizeSettings(Object.assign(d, { onboarded: true }));
   if (cvUpload && !DEMO) ctx.data.cvFile = await guarded(() => G.saveCvFile(cvUpload, ctx.data.cvFile && ctx.data.cvFile.id));
   ctx.data.cv = String(cv || '').slice(0, C.MAX_CV);
+  if (!ctx.data.startedOn) ctx.data.startedOn = C.ymd(new Date());
   C.addLog(ctx.data, 'Set up Job Hunter');
   await persist();
   show('app'); render();

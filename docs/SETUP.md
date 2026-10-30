@@ -26,7 +26,8 @@ There's nothing else to set up: the AI is built in and free.
 - **Syncing:** set your routine in setup or **Settings → Routine**: the days, when Gmail is read, and when new jobs
   should be ready (on your device's clock), plus the role range and how many new jobs a day. There's no background
   server, so Job Hunter syncs while it's open: if it was closed at those times, it catches up as soon as you open it.
-  **Sync now** runs everything straight away.
+  **Sync now** runs everything straight away. On the day you sign up, Job Hunter also looks for jobs every two hours
+  while it's open, until you have that day's matches.
 - **Applications:** Board, Table or Timeline. Drag a card to another column, or tap it to fix the status,
   role, next step or interview time. "N emails need a look" lists emails it couldn't match.
 - **Job matches:** openings from your job-alert emails and the companies you follow, scored by how much of
