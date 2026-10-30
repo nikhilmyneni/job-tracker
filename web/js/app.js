@@ -448,6 +448,7 @@ async function loadAccount() {
   const me = await G.profile();
   if (ctx.me && ctx.data && me.email !== ctx.me.email) { location.reload(); return false; } // switched account: start clean
   ctx.me = me;
+  G.setHint(me.email);
   if (!ctx.data) ctx.data = C.normalizeData(await G.loadData());
   return true;
 }
@@ -455,7 +456,7 @@ async function loadAccount() {
 async function signInFlow(btn) {
   const status = $('signin-status');
   await busy(btn, 'Signing in…', async () => {
-    await G.signIn(GOOGLE_CLIENT_ID, { hint: ctx.me && ctx.me.email });
+    await G.signIn(GOOGLE_CLIENT_ID, { hint: (ctx.me && ctx.me.email) || G.lastHint() });
     if (!await loadAccount()) return;
     showReconnect(false);
     if ($('screen-app').hidden) await enter();
@@ -517,6 +518,8 @@ async function boot() {
     try { if (await loadAccount()) { await enter(); return; } } catch (e) { /* fall through to the sign-in screen */ }
   }
   show('signin');
+  // Signed in earlier in this tab: say why it's asking again (Google's sign-ins last about an hour). One click carries on.
+  if (G.lastHint()) $('signin-status').textContent = `Your sign-in ended (they last about an hour). Sign in again to carry on as ${G.lastHint()}.`;
 }
 
 boot();

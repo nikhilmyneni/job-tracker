@@ -35,7 +35,7 @@ and counts toward the 100-user cap. Without Gmail, users add applications by han
   Drive app folder) and, for AI tasks, through `api/ai.js` to Groq/Gemini. That function passes text straight
   through: no storage, no logs. Job boards and `api/workday.js` only ever get a company's board name and a role. No analytics, no telemetry, no CDNs: fonts and pdf.js are vendored in
   `web/vendor/`. The CSP in each HTML page is the allow-list: keep it tight when adding an origin.
-- **Secrets:** the access token lives in memory plus this tab's sessionStorage (so a reload keeps you
+- **Secrets:** the access token (and, for signing in again without the account picker, the account email) lives in memory plus this tab's sessionStorage (so a reload keeps you
   signed in; gone when the tab closes or after about an hour). The AI keys are the owner's, only in Vercel
   environment variables (`.env.local` locally, gitignored). Nothing personal goes in localStorage.
 - **Resume honesty.** Resumes use only facts from the user's CV text. Never invent experience,

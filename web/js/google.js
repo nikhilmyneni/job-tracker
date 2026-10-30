@@ -22,6 +22,12 @@ function remember() {
   try { if (token) sessionStorage.setItem(SESSION_KEY, JSON.stringify({ token, tokenExp, gmail })); else sessionStorage.removeItem(SESSION_KEY); } catch (e) { /* storage blocked: memory only */ }
 }
 
+// The account you signed in with, kept in this tab after the token expires, so signing in again skips the account
+// picker. sessionStorage only: gone when the tab closes, like the token.
+const HINT_KEY = 'jh-hint';
+export function setHint(email) { try { if (email) sessionStorage.setItem(HINT_KEY, String(email)); else sessionStorage.removeItem(HINT_KEY); } catch (e) { /* fine */ } }
+export function lastHint() { try { return sessionStorage.getItem(HINT_KEY) || ''; } catch (e) { return ''; } }
+
 /** After a reload: picks the token back up from this tab, if it's still valid. No popup. */
 export function resumeSession() {
   try {
@@ -104,7 +110,7 @@ export function accessToken() { if (!signedIn()) throw new NeedSignIn('Your Goog
 
 export async function signOut() {
   const t = token;
-  token = ''; tokenExp = 0; gmail = false; remember();
+  token = ''; tokenExp = 0; gmail = false; remember(); setHint('');
   if (t) { try { (await gis()).revoke(t, () => {}); } catch (e) {} }
 }
 
