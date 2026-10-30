@@ -1087,6 +1087,23 @@ export function pickByScore(candidates, data, n, today) {
     }));
 }
 
+/**
+ * A job from a description you pasted (to tailor your resume for it). The role falls back to the description's
+ * first short line. Scores are added by the caller. Returns null when there's no description.
+ */
+export function pastedJob({ role = '', company = '', jd = '', link = '' }, today) {
+  const text = String(jd || '').replace(/\r/g, '').trim();
+  if (text.length < 40) return null;
+  const firstLine = text.split('\n').map(l => l.trim()).find(l => l && l.length <= 80) || '';
+  const r = String(role || '').trim().slice(0, 120) || firstLine.replace(/^(job title|role|position)\s*[:\-]\s*/i, '').slice(0, 120) || 'Pasted job';
+  const c = String(company || '').trim().slice(0, 80);
+  return {
+    id: newId(), found_on: today, posted: '', company: c, role: r, location: '', pay: '', why: '', apply_by: '',
+    link: isHttpUrl(link) ? link : '', details: clip(text, 600), jd: clip(text, 8000), status: 'Saved',
+    key: `${c}|${r}`.toLowerCase(), source: 'Pasted', ref: null,
+  };
+}
+
 // ---------- The CV in sections ----------
 const SECTION_OF = [
   ['summary', /^(career objective|objective|summary|professional summary|profile|about me)$/],

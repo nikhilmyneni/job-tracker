@@ -72,8 +72,10 @@ export function renderTailor(ctx, root, jobId) {
       if (!s) { toast('The AI’s wording added things your CV doesn’t say, so it was left out.'); return; }
       t.extra = [...t.extra, s]; save(); draw();
     }) }, 'Suggest a reworded summary (AI)') : '';
+    const safe = all.filter(s => !s.warn && !t.accepted.includes(s.id));
+    const acceptAll = safe.length > 1 ? h('button', { type: 'button', class: 'btn btn-sm btn-primary', onclick: () => { t.accepted = [...t.accepted, ...safe.map(s => s.id)]; save(); draw(); } }, `Accept all ${safe.length} safe edits`) : '';
     midCol.replaceChildren(card,
-      h('h2', { class: 'panel-title' }, 'Suggested edits'),
+      h('div', { class: 'pv-head' }, h('h2', { class: 'panel-title' }, 'Suggested edits'), acceptAll),
       h('p', { class: 'panel-sub' }, 'Only reordering, rewording, or bringing forward what your CV already says.'),
       cards.length ? h('ul', { class: 'sugs' }, ...cards) : h('p', { class: 'empty' }, 'Nothing to change: your CV already lines up with this job.'),
       aiBtn);
@@ -89,11 +91,14 @@ export function renderTailor(ctx, root, jobId) {
       h('div', { class: 'sheet-box' }, sheet),
       h('div', { class: 'pv-acts' },
         h('button', { type: 'button', class: 'btn btn-primary btn-sm', onclick: (e) => busy(e.currentTarget, 'Preparing…', async () => {
+          status.className = 'status'; status.textContent = 'In the print window, set Destination to “Save as PDF”.';
+          await act.printResume(job, sheet);
+        }, status) }, icon('file'), h('span', {}, 'Download PDF')),
+        h('button', { type: 'button', class: 'btn btn-quiet btn-sm', onclick: (e) => busy(e.currentTarget, 'Preparing…', async () => {
           await act.exportResumeFold(job, resume, t.template);
           status.className = 'status ok';
           status.replaceChildren('Downloaded. In ResumeFold, open Review → Import JSON and pick the file. ', extLink(RESUMEFOLD_URL, 'Open ResumeFold'));
         }, status) }, icon('external'), h('span', {}, 'Open in ResumeFold')),
-        btn('PDF', 'file', async () => act.printResume(job, sheet)),
         btn('Word', 'file', async () => act.downloadResume(job, resume, 'docx')),
         btn('LaTeX', 'file', async () => act.downloadResume(job, resume, 'tex'))),
       status,
@@ -102,7 +107,7 @@ export function renderTailor(ctx, root, jobId) {
 
   root.replaceChildren(
     pageHead(job.role, [job.company, job.location].filter(Boolean).join(' · '),
-      h('a', { class: 'btn btn-quiet', href: '/app/matches' }, 'Back to matches')),
+      h('a', { class: 'btn btn-quiet', href: '/app/tailor' }, job.source === 'Pasted' ? 'Paste another' : 'Other jobs')),
     act.baseIsRough() ? h('div', { class: 'notice' }, icon('file'),
       h('p', {}, h('b', {}, 'Your CV was read with simple rules.'), ' Some sections may be split oddly. The AI can read it into proper sections.'),
       h('button', { type: 'button', class: 'btn btn-sm btn-primary', onclick: (e) => busy(e.currentTarget, 'Reading…', async () => { await act.readCvWithAi(); renderTailor(ctx, root, jobId); }) }, 'Read it with AI')) : '',
@@ -111,14 +116,37 @@ export function renderTailor(ctx, root, jobId) {
   if (!job.jd) act.loadJobDetails(job).then(() => { if (job.jd) draw(); }).catch(() => {});
 }
 
+/** Paste any job description to tailor your resume for it (it's kept as a Saved job). */
+function pasteForm(ctx) {
+  const role = h('input', { type: 'text', placeholder: 'e.g. SOC Analyst', autocomplete: 'off' });
+  const company = h('input', { type: 'text', placeholder: 'Optional', autocomplete: 'off' });
+  const jd = h('textarea', { rows: 8, spellcheck: false, placeholder: 'Paste the whole job description here.' });
+  const status = h('div', { class: 'status', role: 'status' });
+  const go = h('button', { type: 'button', class: 'btn btn-primary', onclick: () => busy(go, 'Reading…', () => ctx.act.tailorPasted({ role: role.value, company: company.value, jd: jd.value }), status) }, 'Tailor my resume');
+  const field = (label, control) => h('label', { class: 'field' }, h('span', { class: 'field-lbl' }, label), control);
+  return h('section', { class: 'panel stack', 'aria-labelledby': 'paste-h' },
+    h('div', {}, h('h2', { class: 'panel-title', id: 'paste-h' }, 'Paste a job description'),
+      h('p', { class: 'panel-sub' }, 'From anywhere: a company site, LinkedIn, a WhatsApp forward. You get your resume tailored to it, as a PDF.')),
+    h('div', { class: 'two' }, field('Role', role), field('Company', company)),
+    field('Job description', jd),
+    h('div', { class: 'save-bar' }, go, status));
+}
+
 function renderPicker(ctx, root) {
   const { data } = ctx;
   const jobs = data.jobs.filter(j => j.status !== 'Skipped' && j.status !== 'Expired')
     .sort((a, b) => Number(!!b.tailored) - Number(!!a.tailored) || (b.score ?? 0) - (a.score ?? 0)).slice(0, 12);
-  root.replaceChildren(pageHead('Resume tailor', 'Pick a job to tailor your resume for it'),
+  if (!data.cv) {
+    root.replaceChildren(pageHead('Resume tailor', ''),
+      h('div', { class: 'empty-block' }, h('h2', {}, 'Add your CV first'), h('p', {}, 'Tailoring starts from your CV. Add it in Profile and CV, then come back.')));
+    return;
+  }
+  root.replaceChildren(pageHead('Resume tailor', 'Paste a job description, or pick one of your matches'),
+    pasteForm(ctx),
+    jobs.length ? h('h2', { class: 'panel-title' }, 'Or pick a job') : '',
     jobs.length ? h('ul', { class: 'pick' }, ...jobs.map(j => h('li', {}, h('a', { href: `/app/tailor/${encodeURIComponent(j.id)}` },
       h('b', {}, j.role), h('span', {}, [j.company, j.tailored ? 'tailored' : (j.score != null ? j.score + '% match' : '')].filter(Boolean).join(' · ')))))) :
-      h('div', { class: 'empty-block' }, h('h2', {}, 'No jobs to tailor for yet'), h('p', {}, 'Open Job matches after your next sync, then choose Tailor resume on any job.')));
+      '');
 }
 
 /** The one-page sheet in one of the four layouts. changed marks accepted edits so they stand out. */

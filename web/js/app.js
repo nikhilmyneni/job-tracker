@@ -170,6 +170,16 @@ Object.assign(ctx.act, {
     if (!C.honestRewrite(text, d.cv, d.settings.keywords).ok) return null;
     return { id: 'summary', kind: 'Reword', title: 'A summary for this job', text, patch: { op: 'summary', value: text } };
   },
+  /** Saves a pasted job description as a job (status Saved) and opens the tailor for it. */
+  async tailorPasted(input) {
+    const job = C.pastedJob(input, C.ymd(new Date()));
+    if (!job) throw new Error('Paste the job description first (a few lines at least).');
+    Object.assign(job, scoreOf(job));
+    ctx.data.jobs.push(job);
+    C.addLog(ctx.data, `Pasted a job to tailor for: ${job.role}${job.company ? ' at ' + job.company : ''}`);
+    await persist();
+    go('/app/tailor/' + encodeURIComponent(job.id));
+  },
   /** Tailoring choices are saved with the job (the resume itself is rebuilt from them). */
   async saveTailored(job, t) {
     const ids = (v) => (Array.isArray(v) ? v.map(String).slice(0, 40) : []);

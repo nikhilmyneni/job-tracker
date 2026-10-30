@@ -75,7 +75,7 @@ and counts toward the 100-user cap. Without Gmail, users add applications by han
   the classifier, applications, job prompts, matching (`termsIn`, `mySkills`, `matchScore`, `pickByScore`,
   `filterJobs`), CV sections (`cvSections`), job boards (`parseCareerUrl`,
   `listingsFromBoard`, `matchesPrefs`, `boardCandidates`), the ResumeFold hand-off
-  (`resumeFoldPrompt`, `cleanResumeFold`, `resumeFoldFor`), the resume tailor (`TEMPLATES`, `resumeFromCv` by rules,
+  (`resumeFoldPrompt`, `cleanResumeFold`, `resumeFoldFor`), the resume tailor (`TEMPLATES`, `pastedJob` for a pasted description, `resumeFromCv` by rules,
   `tailorSuggestions` / `applySuggestions` / `tailorScore`, `highlightJd`, `honestRewrite` for AI summaries, `resumeLatex`),
   and the dashboard numbers.
 - `js/sources.js`: fetches job boards and full job descriptions. `js/docx.js`: **pure** ZIP + DOCX → text, and the resume as a .docx (`resumeDocx`).
@@ -104,7 +104,7 @@ and counts toward the 100-user cap. Without Gmail, users add applications by han
 - **review:** emails that look like an application update but couldn't be matched ("N emails need a look"); `addReview()`.
 - **Job:** id, found_on, posted, score (0–100), fit (score/20), matched[], missing[], company, role, location, pay, why,
   skill_gap, apply_by, link, details, jd (full description, fetched when opened), status (New/Saved/Applied/Skipped/Expired),
-  key, source, ref (board + id, for the full description), resumefold_at, tailored {accepted[], confirmed[], template, extra[] (an AI summary that
+  key, source ('Pasted' for one pasted into the tailor), ref (board + id, for the full description), resumefold_at, tailored {accepted[], confirmed[], template, extra[] (an AI summary that
   passed `honestRewrite`), at} (the tailored resume is rebuilt from these).
 - `skillsAdded[]`, `skillsRemoved[]`: your edits to the skills read from the CV (Profile).
 - `cvFold`: the CV as ResumeFold's Resume JSON, made once per CV (`cvFoldHash`).

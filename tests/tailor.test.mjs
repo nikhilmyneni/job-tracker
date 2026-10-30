@@ -82,3 +82,16 @@ test('Word export is a real .docx that reads back as the resume', async () => {
   assert.match(text, /Security Intern/);
   assert.match(text, /Home SOC lab/);
 });
+
+test('a pasted job description becomes a saved job; the role falls back to its first short line', () => {
+  const jd = 'Junior SOC Analyst\nWe need someone to watch SIEM alerts in Splunk, triage incidents and write clear notes.';
+  const j = C.pastedJob({ company: ' Kestrel ', jd }, '2026-10-30');
+  assert.equal(j.role, 'Junior SOC Analyst');
+  assert.equal(j.company, 'Kestrel');
+  assert.equal(j.status, 'Saved');
+  assert.equal(j.source, 'Pasted');
+  assert.equal(j.jd, jd);
+  assert.equal(C.pastedJob({ role: 'SOC Analyst', jd }, '2026-10-30').role, 'SOC Analyst');
+  assert.equal(C.pastedJob({ role: 'X', jd: 'too short' }, '2026-10-30'), null);
+  assert.equal(C.pastedJob({ jd, link: 'javascript:alert(1)' }, '2026-10-30').link, '');
+});
