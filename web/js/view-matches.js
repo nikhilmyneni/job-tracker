@@ -1,12 +1,16 @@
 /**
  * Job matches: openings from job-alert emails and company boards, scored against your CV and keywords
- * (core.matchScore). A filter card on top, the list on the left, the selected job's details on the right
- * (a dialog on phones).
+ * (core.matchScore). A filter card on top, then either a table (desktop: one row per job, with apply and a ready
+ * tailored resume) or the list with the selected job's details beside it (a dialog on phones).
  */
 import { h, busy, icon, pageHead, ago, extLink, isHttp, chipInput, openDialog, toast, errText } from './ui.js';
-import { filterJobs, MIN_MATCHES } from './core.js';
+import { filterJobs, MIN_MATCHES, roleFits, tailorSuggestions, applySuggestions } from './core.js';
+import { renderSheet } from './view-tailor.js';
 
 let show = 'New', selectedId = null;
+// Table or cards on desktop: a display preference, kept on this device.
+let layout = (() => { try { return localStorage.getItem('jh-matches') || 'table'; } catch (e) { return 'table'; } })();
+const JOB_STATUS = { New: 'New', Saved: 'Saved', Applied: 'Applied', Skipped: 'Not for me', Expired: 'Expired' };
 const SHOWS = { New: ['New'], Saved: ['Saved'], Applied: ['Applied'], Hidden: ['Skipped', 'Expired'] };
 const isPhone = () => matchMedia('(max-width: 900px)').matches;
 
@@ -34,6 +38,10 @@ export function renderMatches(ctx, root) {
     onchange: () => save({}, null, MIN_MATCHES.includes(Number(min.value)) ? Number(min.value) : s.minMatch) });
   const tabs = h('div', { class: 'seg', role: 'radiogroup', 'aria-label': 'Show' }, ...Object.keys(SHOWS).map(k =>
     h('button', { type: 'button', role: 'radio', 'aria-checked': String(show === k), onclick: () => { show = k; renderMatches(ctx, root); } }, k)));
+  const views = isPhone() ? '' : h('div', { class: 'seg', role: 'radiogroup', 'aria-label': 'Layout' }, ...[['table', 'Table'], ['cards', 'Cards']].map(([k, l]) =>
+    h('button', { type: 'button', role: 'radio', 'aria-checked': String(layout === k), onclick: () => {
+      layout = k; try { localStorage.setItem('jh-matches', k); } catch (e) { /* fine */ } renderMatches(ctx, root);
+    } }, l)));
   const filters = h('section', { class: 'panel filters', 'aria-label': 'Filters' },
     h('div', { class: 'filters-kw' }, h('span', { class: 'field-lbl' }, 'Keywords'), keywords.el,
       h('p', { class: 'hint' }, 'Words you want in a job. They count as skills you have, and weigh more.')),
@@ -63,14 +71,15 @@ export function renderMatches(ctx, root) {
   const list = h('ul', { class: 'job-list' }, ...rows.map(j => h('li', {}, jobCard(j, select, j.id === selectedId))));
 
   const empty = (title, text) => h('div', { class: 'empty-block' }, h('h2', {}, title), h('p', {}, text));
-  const body = rows.length ? h('div', { class: 'matches' }, list, detail)
+  const asTable = layout === 'table' && !isPhone();
+  const body = rows.length ? (asTable ? jobsTable(ctx, rows, () => renderMatches(ctx, root)) : h('div', { class: 'matches' }, list, detail))
     : all.length && show === 'New' ? empty(`No matches at ${s.minMatch}% or more`, 'Lower the minimum match, change the filters, or add keywords you’re strong in.')
       : show !== 'New' ? empty(`Nothing ${show.toLowerCase()} yet`, show === 'Saved' ? 'Save a match to come back to it here.' : 'Jobs you mark show up here.')
         : !data.cv ? empty('Add your CV first', 'Matches are scored against the skills in your CV. Add it in Profile and CV, then sync.')
           : empty('No matches yet', 'New openings arrive with each sync: from job-alert emails (with Gmail connected) and the companies you follow.');
 
-  root.replaceChildren(pageHead('Job matches', `${data.jobs.filter(j => j.status === 'New').length} new · scored against your CV and keywords`, tabs), filters, body);
-  if (rows.length && !isPhone()) { drawDetail(); const j = rows.find(x => x.id === selectedId); if (j) act.loadJobDetails(j).then(() => { if (selectedId === j.id) drawDetail(); }).catch(() => {}); }
+  root.replaceChildren(pageHead('Job matches', `${data.jobs.filter(j => j.status === 'New').length} new · scored against your CV and keywords`, tabs, views), filters, body);
+  if (rows.length && !isPhone() && !asTable) { drawDetail(); const j = rows.find(x => x.id === selectedId); if (j) act.loadJobDetails(j).then(() => { if (selectedId === j.id) drawDetail(); }).catch(() => {}); }
 }
 
 function jobCard(j, select, current) {
@@ -112,4 +121,53 @@ function jobDetail(ctx, j, redraw, inDialog) {
       j.status !== 'Skipped' ? h('button', { type: 'button', class: 'btn btn-quiet', onclick: set('Skipped', 'Hidden') }, 'Not for me') : ''),
     h('p', { class: 'hint' }, credit(j)),
   ].map(x => { if (x && x.classList && x.classList.contains('meter')) x.querySelector('i').style.width = sc + '%'; return x; });
+}
+
+/** Your resume tailored to this job: your saved choices in the tailor, or else every safe edit (never "Add skill"). */
+function readyResume(ctx, j) {
+  const { data, act } = ctx;
+  const base = act.baseResume();
+  const all = tailorSuggestions(base, j, data.cv, data.settings.keywords);
+  const t = j.tailored || {};
+  const accepted = Array.isArray(t.accepted) ? all.filter(s => t.accepted.includes(s.id)) : all.filter(s => !s.warn);
+  return { resume: applySuggestions(base, accepted).resume, template: t.template || 'standard' };
+}
+
+/** The table layout: one row per job, with what fits, what to pick up, and apply / resume / tailor at hand. */
+function jobsTable(ctx, rows, redraw) {
+  const { data, act } = ctx;
+  const roles = data.settings.prefs.roles;
+  const th = (t, cls) => h('th', { scope: 'col', class: cls || '' }, t);
+  const head = h('tr', {}, th('Fit', 'num'), th('Match', 'num'), th('Type'), th('Company'), th('Role'), th('Location'), th('Pay'),
+    th('Why it fits', 'col-wide'), th('Skill to pick up'), th('Apply by'), th('Status'), h('th', {}, h('span', { class: 'visually-hidden' }, 'Actions')));
+  const body = rows.map(j => {
+    const sc = scoreOf(j), fit = Math.max(1, Math.round(sc / 20));
+    const status = h('select', { class: 'select-sm', 'aria-label': `Status for ${j.role} at ${j.company}`, onchange: async () => {
+      status.disabled = true;
+      try { await act.setJobStatus(j, status.value); toast(status.value === 'Applied' ? 'Added to your applications' : 'Saved'); redraw(); } catch (e) { toast(errText(e), true); status.disabled = false; }
+    } }, ...Object.entries(JOB_STATUS).map(([v, l]) => h('option', { value: v, selected: v === j.status }, l)));
+    const pdf = h('button', { type: 'button', class: 'btn btn-quiet btn-sm', onclick: () => busy(pdf, 'Preparing…', async () => {
+      if (!data.cv) throw new Error('Add your CV in Profile and CV first.');
+      const { resume, template } = readyResume(ctx, j);
+      await act.printResume(j, renderSheet(resume, template));
+    }) }, h('span', {}, 'Resume PDF'), icon('download'));
+    const core = roles.length && roleFits(j.role, roles, 'core');
+    return h('tr', {},
+      h('td', { class: 'num' }, h('span', { class: 'fit fit-' + fit, title: `Fit ${fit} of 5` }, fit)),
+      h('td', { class: 'num' }, h('span', { class: 'score score-sm' + (sc >= 80 ? ' score-hi' : ''), 'aria-label': `${sc}% match` }, sc + '%')),
+      h('td', {}, h('span', { class: 'pill ' + (core ? 'pill-blue' : '') }, core ? 'Core' : 'Related')),
+      h('td', {}, h('b', {}, j.company)),
+      h('td', { class: 'col-role' }, isHttp(j.link) ? h('a', { href: j.link, target: '_blank', rel: 'noopener noreferrer' }, j.role) : j.role),
+      h('td', {}, j.location || '—'),
+      h('td', { class: 'muted' }, j.pay || 'Not listed'),
+      h('td', { class: 'col-wide' }, j.why || ((j.matched || []).length ? 'On your CV: ' + j.matched.slice(0, 4).join(', ') + '.' : '—')),
+      h('td', {}, j.skill_gap && j.skill_gap !== 'None' ? j.skill_gap : (j.missing || [])[0] || 'None'),
+      h('td', { class: 'num' }, j.apply_by || '—'),
+      h('td', {}, status),
+      h('td', {}, h('div', { class: 'row-acts' },
+        isHttp(j.link) ? h('a', { class: 'btn btn-primary btn-sm', href: j.link, target: '_blank', rel: 'noopener noreferrer' }, h('span', {}, 'Apply'), icon('external')) : '',
+        pdf,
+        h('a', { class: 'link small', href: `/app/tailor/${encodeURIComponent(j.id)}` }, j.tailored ? 'Edit tailored resume' : 'Tailor'))));
+  });
+  return h('div', { class: 'table-wrap' }, h('div', { class: 'table-box panel jobs-table' }, h('table', { class: 'table' }, h('thead', {}, head), h('tbody', {}, ...body))));
 }

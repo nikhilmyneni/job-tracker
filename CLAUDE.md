@@ -93,7 +93,7 @@ and counts toward the 100-user cap. Without Gmail, users add applications by han
 - `js/google.js`: sign-in, Gmail, Drive app data (`job-tracker.json`, `cv-original.*`).
 - `js/update.js`: `runUpdate()` and `cvForResumeFold()`. `js/files.js`: CV import (pdf.js / DOCX / TXT), downloads.
 - `js/notify.js`: browser notifications after a sync (status changes, new matches), only while the app is open; `notificationsFor()` is pure.
-- `js/app.js`: boot, routing, sync, actions. Screens: `view-applications.js` (+ `view-board.js`: board, timeline, edit dialog), `view-matches.js`,
+- `js/app.js`: boot, routing, sync, actions. Screens: `view-applications.js` (+ `view-board.js`: board, timeline, edit dialog), `view-matches.js` (desktop table: fit, match %, Core/Related, why, skill to pick up, status, Apply / Resume PDF (saved tailoring or all safe edits) / Tailor; cards on phones; `jh-matches` display pref),
   `view-tailor.js`, `view-settings.js` (Profile and Settings). `onboarding.js`: the wizard plus the shared
   field blocks. `ui.js`: `h()`, `busy`, `holdButton`, `setLabel`, `icon`, `pageHead`, chips, dialogs. `demo.js`.
 - `tests/`: Node tests: `core`, `match`, `files` (PDF lines), `notify`, `api` (the AI function), `google` (rate-limit retries, paging), `tailor` (suggestions, LaTeX, .docx) `alerts` (the email alerts, with a fake store, Brevo and board) and `store` (RESP against a fake Redis server), with fetch faked. `npm test` and `npm run check` must pass before any push.

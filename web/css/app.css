@@ -537,3 +537,17 @@ input.switch:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px
 .table .cell-pick { width: 36px; padding-right: 0; }
 .table .cell-pick input { margin: 0; vertical-align: middle; }
 .table tr.row-picked td { background: var(--blue-soft); }
+
+/* ---------- job matches: table layout ---------- */
+.jobs-table .table { font-size: 14px; }
+.jobs-table td { vertical-align: top; }
+.jobs-table .col-wide { min-width: 240px; max-width: 340px; color: var(--text); }
+.jobs-table .col-role { min-width: 150px; font-weight: 500; }
+.jobs-table .col-role a { color: var(--ink); }
+.jobs-table .col-role a:hover { color: var(--link); }
+.score-sm { width: auto; height: 28px; padding: 0 8px; border-radius: 8px; font-size: 13px; }
+.fit { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 8px; font: 700 13px/1 var(--display); background: var(--hover); color: var(--ink); }
+.fit-4, .fit-5 { background: var(--green-soft); color: var(--green); }
+.row-acts { display: grid; gap: 6px; justify-items: stretch; min-width: 132px; }
+.row-acts .btn { justify-content: center; gap: 6px; }
+.row-acts .link { justify-self: center; min-height: 24px; }
