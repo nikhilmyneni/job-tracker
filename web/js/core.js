@@ -9,7 +9,7 @@ export const STATUSES = ['Applied', 'Screening', 'Interview', 'Offer', 'Rejected
 export const JOB_STATUSES = ['New', 'Applied', 'Skipped', 'Expired'];
 export const JOBS_PER_UPDATE = [0, 3, 5, 10, 15];
 export const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']; // Date.getDay() order
-export const ROLE_RANGES = { core: 'Just my roles', related: 'My roles + related ones I’d fit', stretch: 'Also stretch roles (one skill away)' };
+export const ROLE_RANGES = { core: 'Only my roles', related: 'My roles and close ones', stretch: 'Also a stretch (one new skill)' };
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 export const SINCE_DAYS = [30, 60, 120];
 export const ARCHIVE_DAYS = [0, 14, 30, 60]; // 0 = never archive by itself
@@ -216,6 +216,41 @@ export function matchLabel(score) {
   const s = Number(score) || 0;
   const [, label, tone] = MATCH_LEVELS.find(([min]) => s >= min);
   return { label, tone };
+}
+
+/**
+ * "Show" on the jobs screen, instead of a minimum-match slider: All / Fair and better / Good and better. A saved
+ * minimum below Fair counts as All. showOf(minMatch) → key; SHOW_LEVELS[key].min → the minimum to save.
+ */
+export const SHOW_LEVELS = { all: { label: 'All jobs', min: 0 }, fair: { label: 'Fair fits and better', min: 50 }, good: { label: 'Good fits and better', min: 65 } };
+export const showOf = (min) => (min >= 65 ? 'good' : min >= 50 ? 'fair' : 'all');
+
+/** How a job relates to your roles, in words (nothing for your own field). */
+export const fieldHint = (kind) => ({ Related: 'Close to your field', Stretch: 'A stretch' }[kind] || '');
+
+/** What a tailoring edit does, in plain words. */
+export const EDIT_KIND = { Reorder: 'Move up', Surface: 'Show this skill', Reword: 'Better wording', 'Add skill': 'Add a skill (only if true)' };
+
+/**
+ * Home: what to do next, from data the app already has. now is a Date.
+ * - newJobs: the best New jobs (up to 3) and how many there are
+ * - comingUp: interviews and test deadlines from today on (up to 5), soonest first
+ * - didYouApply: jobs where you clicked Apply but haven't said you applied (up to 5)
+ * - waiting: applications in play (not archived); review: emails we couldn't read
+ */
+export function homeFeed(data, now = new Date()) {
+  const today = ymd(now);
+  const fresh = data.jobs.filter(j => j.status === 'New' && !j.apply_clicked).sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+  const comingUp = data.applications
+    .filter(a => !a.archived && isNextAt(a.next_at) && String(a.next_at).slice(0, 10) >= today && ['Rejected', 'Withdrawn', 'Offer'].indexOf(a.status) < 0)
+    .sort((a, b) => String(a.next_at).localeCompare(String(b.next_at))).slice(0, 5);
+  const didYouApply = data.jobs.filter(j => j.apply_clicked && ['Applied', 'Skipped', 'Expired'].indexOf(j.status) < 0)
+    .sort((a, b) => String(b.apply_clicked).localeCompare(String(a.apply_clicked))).slice(0, 5);
+  return {
+    newJobs: fresh.slice(0, 3), newCount: fresh.length, comingUp, didYouApply,
+    waiting: data.applications.filter(a => !a.archived && inPlay(a)).length,
+    review: (data.review || []).length,
+  };
 }
 
 export const MIN_UPDATE_GAP_MIN = 10; // automatic syncs that fail aren't retried sooner than this
@@ -582,14 +617,14 @@ export function parsePastedEmail(text) {
 
 // ---------- Board, next steps, timeline ----------
 /** How a status is shown. "Screening" is stored, "Assessment" is what people call it. */
-export const STATUS_LABEL = { Applied: 'Applied', Screening: 'Assessment', Interview: 'Interview', Offer: 'Offer', Rejected: 'Rejected', Withdrawn: 'Withdrawn', Ghosted: 'No reply' };
+export const STATUS_LABEL = { Applied: 'Applied', Screening: 'Test / assessment', Interview: 'Interview', Offer: 'Offer', Rejected: 'Not selected', Withdrawn: 'Withdrawn', Ghosted: 'No reply yet' };
 /** Board columns and the statuses each one holds; dropping a card on a column sets its first status. */
 export const BOARD = [
   { id: 'Applied', label: 'Applied', statuses: ['Applied', 'Ghosted'] },
-  { id: 'Screening', label: 'Assessment', statuses: ['Screening'] },
+  { id: 'Screening', label: 'Test / assessment', statuses: ['Screening'] },
   { id: 'Interview', label: 'Interview', statuses: ['Interview'] },
   { id: 'Offer', label: 'Offer', statuses: ['Offer'] },
-  { id: 'Rejected', label: 'Rejected', statuses: ['Rejected', 'Withdrawn'] },
+  { id: 'Rejected', label: 'Not selected', statuses: ['Rejected', 'Withdrawn'] },
 ];
 export const boardColumn = (status) => (BOARD.find(c => c.statuses.indexOf(status) >= 0) || BOARD[0]).id;
 
@@ -629,7 +664,7 @@ export function timeline(apps) {
   return out.sort((x, y) => y.on.localeCompare(x.on));
 }
 
-/** Emails that look like an application update but couldn't be matched; shown under "N emails need a look". */
+/** Emails that look like an application update but couldn't be matched; shown as "We need your help with N emails". */
 export const MAX_REVIEW = 200;
 export function addReview(data, e, guess) {
   if (data.review.some(r => r.id === e.id) || (data.reviewDone || []).indexOf(e.id) >= 0) return false;
@@ -1547,7 +1582,7 @@ export function resumeText(r) {
   return x.filter(Boolean).join('\n');
 }
 
-/** How well a resume covers what the job asks for (the same matchScore as Job matches). */
+/** How well a resume covers what the job asks for (the same matchScore as Jobs for you). */
 export function tailorScore(r, job, keywords = []) {
   return matchScore({ role: job.role, details: job.jd || job.details }, [...termsIn(resumeText(r), keywords)], keywords, []);
 }

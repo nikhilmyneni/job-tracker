@@ -13,8 +13,8 @@ export function renderApplications(ctx, root) {
   const { data, act } = ctx;
   const all = data.applications, sum = summary(all);
   const archived = all.filter(a => a.archived), apps = all.filter(a => !a.archived);
-  const sync = h('button', { type: 'button', class: 'btn btn-primary', id: 'sync-now', onclick: () => act.updateNow() }, icon('refresh'), h('span', {}, 'Sync now'));
-  const add = h('button', { type: 'button', class: 'btn btn-quiet', onclick: () => addDialog(ctx) }, icon('plus'), h('span', {}, 'Add manually'));
+  const sync = h('button', { type: 'button', class: 'btn btn-primary', id: 'sync-now', onclick: () => act.updateNow() }, icon('refresh'), h('span', {}, gmailOnLabel(act)));
+  const add = h('button', { type: 'button', class: 'btn btn-quiet', onclick: () => addDialog(ctx) }, icon('plus'), h('span', {}, 'Type it in'));
   const paste = h('button', { type: 'button', class: 'btn btn-quiet', onclick: () => pasteDialog(ctx) }, icon('mail'), h('span', {}, 'Paste an email'));
   const gmail = act.gmailOn();
   const body = h('div', { class: 'apps-body' });
@@ -29,8 +29,8 @@ export function renderApplications(ctx, root) {
     const list = matching();
     if (!apps.length) {
       body.replaceChildren(h('div', { class: 'empty-block' }, h('h2', {}, gmail && data.gmailRunAt ? 'No applications found yet' : 'Your applications will appear here'),
-        h('p', {}, !gmail ? 'Connect Gmail and they’ll be found for you, or paste an application email, or add one by hand.'
-          : data.gmailRunAt ? 'Nothing in your Gmail looked like an application. Add one by hand, or sync again after you apply somewhere.' : 'Sync now reads your Gmail (read-only) and sorts every application email it finds.')));
+        h('p', {}, !gmail ? 'Connect Gmail and we’ll find them for you. Or paste an application email, or type one in.'
+          : data.gmailRunAt ? 'Nothing in your Gmail looked like an application. Type one in, or check again after you apply somewhere.' : '“Check my emails” reads your Gmail (read-only) and finds every application email.')));
       return;
     }
     if (showArchive) { body.replaceChildren(archiveList(ctx, archived.filter(a => !query.trim() || matchingOne(a)))); return; }
@@ -44,7 +44,7 @@ export function renderApplications(ctx, root) {
       renderApplications(ctx, root);
     },
   }, v)), h('button', { type: 'button', role: 'tab', class: 'tab-archive', 'aria-selected': String(showArchive), onclick: () => { showArchive = true; renderApplications(ctx, root); } },
-    icon('archive'), h('span', {}, `Archive (${archived.length})`)));
+    icon('archive'), h('span', {}, `Old applications (${archived.length})`)));
   drawBody();
 
   const stats = h('section', { class: 'stats', 'aria-label': 'Totals' }, ...[
@@ -53,11 +53,11 @@ export function renderApplications(ctx, root) {
   ].map(([k, v, s]) => h('div', { class: 'stat' }, h('p', { class: 'stat-k' }, k), h('p', { class: 'stat-v' }, v), h('p', { class: 'stat-s' }, s))));
 
   const review = data.review.length ? h('div', { class: 'notice notice-orange' }, icon('alert'),
-    h('p', {}, h('b', {}, `${data.review.length} email${data.review.length === 1 ? '' : 's'} need${data.review.length === 1 ? 's' : ''} a look.`), ' They seem to be about an application, but the company or stage wasn’t clear.'),
-    h('button', { type: 'button', class: 'btn btn-sm btn-quiet', onclick: () => reviewDialog(ctx) }, 'Review')) : '';
+    h('p', {}, h('b', {}, `We need your help with ${data.review.length} email${data.review.length === 1 ? '' : 's'}.`), ' They seem to be about an application, but we couldn’t tell which company or what happened.'),
+    h('button', { type: 'button', class: 'btn btn-sm btn-quiet', onclick: () => reviewDialog(ctx) }, 'Help sort them')) : '';
 
   const askNotify = notifySupported() && !(data.settings.notify && notifyAllowed()) && !ctx.demo && !dismissedNotify() ? h('div', { class: 'notice' }, icon('bell'),
-    h('p', {}, h('b', {}, 'Get notified when a status changes.'), ' And when new matches arrive, while Job Hunter is open.'),
+    h('p', {}, h('b', {}, 'Get notified when a status changes.'), ' And when new jobs arrive, while Job Hunter is open.'),
     h('button', { type: 'button', class: 'btn btn-sm btn-primary', onclick: (e) => busy(e.currentTarget, 'Asking…', () => act.enableNotifications()) }, 'Turn on'),
     h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Not now', onclick: () => { try { localStorage.setItem('jh-notify-later', '1'); } catch (e) { /* fine */ } askNotify.remove(); } }, icon('x'))) : '';
 
@@ -67,16 +67,17 @@ export function renderApplications(ctx, root) {
 
   const src = bySource(apps);
   root.replaceChildren(
-    pageHead('Applications', !gmail ? 'Gmail not connected' : data.gmailRunAt ? `Last synced from Gmail ${ago(data.gmailRunAt)}` : 'Not synced yet', search, sync, paste, add),
+    pageHead('My applications', !gmail ? 'Gmail not connected' : data.gmailRunAt ? `Emails checked ${ago(data.gmailRunAt)}` : 'Emails not checked yet', search, sync, paste, add),
     connect, review, askNotify, stats,
     h('section', { class: 'apps', 'aria-label': 'Your applications' }, tabs, body),
     src.length ? h('section', { class: 'panel panel-narrow', 'aria-labelledby': 'src-title' },
-      h('h2', { id: 'src-title', class: 'panel-title' }, 'Which channels get replies'),
+      h('h2', { id: 'src-title', class: 'panel-title' }, 'Where your replies come from'),
       h('div', { class: 'table-box' }, h('table', { class: 'table' },
-        h('thead', {}, h('tr', {}, h('th', {}, 'Channel'), h('th', { class: 'num' }, 'Sent'), h('th', { class: 'num' }, 'Replies'), h('th', { class: 'num' }, 'Reply rate'))),
+        h('thead', {}, h('tr', {}, h('th', {}, 'Where you applied'), h('th', { class: 'num' }, 'Sent'), h('th', { class: 'num' }, 'Replies'), h('th', { class: 'num' }, 'Replied'))),
         h('tbody', {}, ...src.map(r => h('tr', {}, h('td', {}, r.channel), h('td', { class: 'num' }, r.sent), h('td', { class: 'num' }, r.replies), h('td', { class: 'num' }, r.rate + '%'))))))) : '');
 }
 
+const gmailOnLabel = (act) => (act.gmailOn() ? 'Check my emails' : 'Look for new jobs');
 const dismissedNotify = () => { try { return localStorage.getItem('jh-notify-later') === '1'; } catch (e) { return false; } };
 
 function table(ctx, list) {
@@ -94,9 +95,9 @@ function table(ctx, list) {
     h('span', {}, chosen.length ? `${chosen.length} selected` : 'Tick applications to remove several at once.'),
     playing.some(a => !picked.has(a.id)) ? h('button', { type: 'button', class: 'btn btn-quiet btn-sm', onclick: () => { playing.forEach(a => picked.add(a.id)); redraw(); } }, `Select all in play (${playing.length})`) : '',
     chosen.length ? h('button', { type: 'button', class: 'btn btn-quiet btn-sm', onclick: () => { picked.clear(); redraw(); } }, 'Clear') : '',
-    chosen.length ? h('button', { type: 'button', class: 'btn btn-quiet btn-sm', onclick: (e) => busy(e.currentTarget, 'Archiving…', () => act.archiveApplications(chosen, true).then(() => picked.clear())) }, `Archive ${chosen.length}`) : '',
+    chosen.length ? h('button', { type: 'button', class: 'btn btn-quiet btn-sm', onclick: (e) => busy(e.currentTarget, 'Moving…', () => act.archiveApplications(chosen, true).then(() => picked.clear())) }, `Move ${chosen.length} to old`) : '',
     chosen.length ? removeBtn(() => act.deleteApplications(chosen).then(() => picked.clear()), `Remove ${chosen.length}`, `Remove ${chosen.length} application${chosen.length === 1 ? '' : 's'}?`) : '');
-  const head = h('tr', {}, h('th', { class: 'cell-pick' }, all), ...[['company', 'Company'], ['role', 'Role'], ['channel', 'Channel'], ['applied_on', 'Applied'], ['status', 'Status'], ['next_step', 'Next step']]
+  const head = h('tr', {}, h('th', { class: 'cell-pick' }, all), ...[['company', 'Company'], ['role', 'Role'], ['channel', 'Where'], ['applied_on', 'Applied'], ['status', 'Status'], ['next_step', 'Next step']]
     .map(([k, l]) => h('th', { scope: 'col', 'aria-sort': k === sortCol ? (sortDir > 0 ? 'ascending' : 'descending') : null },
       h('button', { type: 'button', class: 'th-sort', onclick: (e) => { if (k === sortCol) sortDir = -sortDir; else { sortCol = k; sortDir = k === 'applied_on' ? -1 : 1; } e.currentTarget.closest('.table-wrap').replaceWith(table(ctx, list)); } }, l))),
     h('th', {}, h('span', { class: 'visually-hidden' }, 'Edit')));
@@ -158,7 +159,7 @@ function reviewDialog(ctx) {
           isHttp(r.link) ? h('a', { href: r.link, target: '_blank', rel: 'noopener noreferrer', class: 'icon-btn', 'aria-label': 'Open in Gmail' }, icon('external')) : ''));
     }));
   };
-  const close = openDialog('Emails that need a look', list);
+  const close = openDialog('Help us sort these emails', list);
   draw();
 }
 
@@ -191,15 +192,15 @@ function pasteDialog(ctx) {
   text.focus();
 }
 
-/** The Archive: applications with no change for a while (or archived by hand). Any new email brings one back. */
+/** Old applications (the archive): applications with no change for a while (or archived by hand). Any new email brings one back. */
 function archiveList(ctx, list) {
   const days = ctx.data.settings.archiveDays;
   const intro = h('p', { class: 'hint' }, days ? `Applications with no change for ${days} days move here by themselves, off the board. A new email about one brings it back; or bring it back yourself.`
-    : 'Applications you archive move here. A new email about one brings it back. (Archiving by itself is off: Settings → Routine.)');
-  if (!list.length) return h('div', { class: 'stack' }, intro, h('div', { class: 'empty-block' }, h('h2', {}, 'Nothing in the Archive'), h('p', {}, 'Quiet applications will show up here.')));
+    : 'Applications you move here stay off the board. A new email about one brings it back. (Moving quiet ones here by itself is off: Settings → Routine.)');
+  if (!list.length) return h('div', { class: 'stack' }, intro, h('div', { class: 'empty-block' }, h('h2', {}, 'No old applications'), h('p', {}, 'Applications with no news for a while show up here.')));
   const rows = list.slice().sort((a, b) => String(b.last_update || '').localeCompare(String(a.last_update || ''))).map(a => h('li', { class: 'arch-row' },
     h('span', { class: 'ini' }, (a.company || '?').charAt(0).toUpperCase()),
     h('span', { class: 'arch-text' }, h('b', {}, a.company), h('span', {}, [a.role || 'Role not stated', STATUS_LABEL[a.status], a.last_update ? 'last change ' + a.last_update : ''].filter(Boolean).join(' · '))),
-    h('button', { type: 'button', class: 'btn btn-quiet btn-sm', onclick: (e) => busy(e.currentTarget, 'Bringing back…', () => ctx.act.archiveApplications([a], false)) }, 'Unarchive')));
+    h('button', { type: 'button', class: 'btn btn-quiet btn-sm', onclick: (e) => busy(e.currentTarget, 'Bringing back…', () => ctx.act.archiveApplications([a], false)) }, 'Bring back')));
   return h('div', { class: 'stack' }, intro, h('ul', { class: 'arch-list panel' }, ...rows));
 }

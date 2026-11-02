@@ -28,24 +28,28 @@ There's nothing else to set up: the AI is built in and free.
 - **Syncing:** set your routine in setup or **Settings → Routine**: the days, when Gmail is read, and when new jobs
   should be ready (on your device's clock), plus the role range and how many new jobs a day. There's no background
   server, so Job Hunter syncs while it's open: if it was closed at those times, it catches up as soon as you open it.
-  **Sync now** runs everything straight away. Each job search reads the best postings in full and leaves out ones that
+  **Check my emails** runs everything straight away. Each job search reads the best postings in full and leaves out ones that
   need 2+ years, are unpaid, ask for a fee, or are bulk "Dear Candidate" invites; at least half your picks are your core
-  roles when there are good ones. **Role range** can also be *Stretch*: other roles where you'd only need one more skill. On the day you sign up, Job Hunter also looks for jobs every two hours
+  roles when there are good ones. **Which jobs to show** can also be *Also a stretch*: other roles where you'd only need one more skill. On the day you sign up, Job Hunter also looks for jobs every two hours
   while it's open, until you have that day's matches.
 - **Email alerts (optional):** turn on *Email me when new jobs are ready* in setup or **Settings → Routine**. At your
   "New jobs ready by" time, Job Hunter looks through the companies you follow even while it's closed and emails you the
-  new matches (and they're waiting in Job matches next time you open it). It keeps only what matching needs, never your
+  new jobs (and they're waiting in Jobs for you next time you open it). It keeps only what matching needs, never your
   CV or Gmail; turning it off, or *Stop these emails* in an alert, deletes it.
-- **Archive:** applications with no change for 30 days (Settings → Routine: 14, 30, 60 days or never) move to the
-  **Archive** tab, off the board. A new email about one brings it back, or click **Unarchive**. You can archive by hand too.
-- **Applications:** Board, Table or Timeline. Drag a card to another column, or tap it to fix the status,
-  role, next step or interview time. "N emails need a look" lists emails it couldn't match.
-- **Job matches:** openings from your job-alert emails and the companies you follow, scored by how much of
-  what they ask for is on your CV. Filter by place, experience, internships and minimum match; add your own keywords;
-  open a job to see what matches and what's missing. **Tailor resume** (on any match, or paste any job description on the Tailor screen) shows the job's keywords against your CV, suggests edits
-  you accept or undo (reordering and rewording only; adding a skill your CV doesn't show needs you to confirm), and previews a
-  one-page resume in four layouts. **Accept all safe edits** takes every edit except adding skills. Download it as PDF (saved straight away as Your_Name_Resume_Company_Role.pdf), Word or LaTeX, or open it in ResumeFold. Your choices are saved with the job.
-- **Notifications:** turn them on to hear about status changes and new matches while Job Hunter is open.
+- **Home:** what to do next: new jobs to apply to, "Did you apply?" for job pages you opened, interviews and tests coming up,
+  and how many applications are waiting.
+- **Applying:** press **Apply** on any job. Step 1 downloads your resume made for that job, step 2 opens the job page, and
+  step 3 asks "Done applying?": say yes and it goes on My applications. Nothing is ever sent for you.
+- **Old applications:** applications with no change for 30 days (Settings → Routine: 14, 30, 60 days or never) move to
+  **Old applications**, off the board. A new email about one brings it back, or click **Bring back**. You can move one there by hand too.
+- **My applications:** Board, Table or Timeline. Drag a card to another column, or tap it to fix the status,
+  role, next step or interview time. "We need your help with N emails" lists emails it couldn't match.
+- **Jobs for you:** openings from your job-alert emails and the companies you follow, with how well each fits your CV
+  in words. **Filter** sets the place, which fits to show, internships, experience and your must-have words; tap a job
+  to read it. **Resume for a job** (⋯ → Make my resume fit, or paste any job ad) shows how well your resume fits, and
+  **Make the safe changes** moves up and shows what your CV already says. *See each change* lets you undo any one (adding a
+  skill your CV doesn't show needs you to confirm it's true); *Show the job ad* highlights its skills against your CV. Four layouts. Download it as PDF (saved straight away as Your_Name_Resume_Company_Role.pdf); Word, LaTeX and ResumeFold are under More formats. Your choices are saved with the job.
+- **Notifications:** turn them on to hear about status changes and new jobs while Job Hunter is open.
 - **Profile and CV:** check the skills read from your CV (add or remove any) and what was read under each heading.
 - **Profile and CV / Settings:** change any answer from setup, upload a new CV, follow companies, or manage your data.
 

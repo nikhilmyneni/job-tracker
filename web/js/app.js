@@ -8,6 +8,7 @@ import { hasAi, useSharedAi, AiError, ask } from './ai.js';
 import { $, h, busy, toast, errText, setLabel } from './ui.js';
 import { runWizard } from './onboarding.js';
 import { renderApplications } from './view-applications.js';
+import { renderHome } from './view-home.js';
 import { renderMatches } from './view-matches.js';
 import { renderTailor } from './view-tailor.js';
 import { renderProfile, renderSettings } from './view-settings.js';
@@ -32,7 +33,8 @@ function show(name) {
 }
 
 const ROUTES = [
-  [/^\/app\/?$/, 'applications', renderApplications],
+  [/^\/app\/?$/, 'home', renderHome],
+  [/^\/app\/applications\/?$/, 'applications', renderApplications],
   [/^\/app\/matches\/?$/, 'matches', renderMatches],
   [/^\/app\/tailor(?:\/([^/]+))?\/?$/, 'tailor', renderTailor],
   [/^\/app\/profile\/?$/, 'profile', renderProfile],
@@ -283,6 +285,9 @@ Object.assign(ctx.act, {
     await persist(); render(true);
     if (ctx.data.settings.emailAlerts) syncAlerts(true).catch(() => {});
   },
+  /** You opened a job's page from the Apply panel: remembered, so Home can ask "Did you apply?". */
+  async markApplyClicked(job) { job.apply_clicked = new Date().toISOString(); await persist(); },
+  async forgetApplyClick(job) { delete job.apply_clicked; await persist(); render(true); },
   async setJobStatus(job, status) {
     job.status = status;
     if (status === 'Applied') C.upsertApplication(ctx.data.applications, { company: job.company, role: job.role, stage: 'Applied', date: today(), channel: job.source || 'Recommended job', posting: job.link }, C.newResult());
@@ -389,30 +394,30 @@ function syncBanner(on, title, detail, frac) {
 async function updateNow(parts = { gmail: true, jobs: true }) {
   const btn = () => $('sync-now');
   const work = async () => {
-    if (btn()) { btn().disabled = true; setLabel(btn().lastChild, 'Syncing…'); }
+    if (btn()) { btn().disabled = true; setLabel(btn().lastChild, 'Checking…'); }
     const first = !ctx.data.lastRunAt;
     const gmail = parts.gmail && G.gmailConnected();
-    syncBanner(true, !gmail ? 'Looking for new jobs' : !ctx.data.gmailRunAt ? 'Loading your applications' : 'Syncing with Gmail', 'Starting…', 0.03);
+    syncBanner(true, !gmail ? 'Looking for new jobs' : !ctx.data.gmailRunAt ? 'Loading your applications' : 'Checking your emails', 'Starting…', 0.03);
     try {
-      if (DEMO) { for (const [t, f] of [['Reading your application emails…', 0.3], ['Sorting emails 1–20 of 20…', 0.7], ['Checking company job boards…', 0.9]]) { syncBanner(true, null, t, f); await sleep(600); } toast('Demo sync done. Sign in to run it on your own Gmail.'); return; }
+      if (DEMO) { for (const [t, f] of [['Reading your application emails…', 0.3], ['Sorting emails 1–20 of 20…', 0.7], ['Checking company job boards…', 0.9]]) { syncBanner(true, null, t, f); await sleep(600); } toast('Demo check done. Sign in to check your own Gmail.'); return; }
       const before = new Set(ctx.data.jobs.map(j => j.id));
       const out = await guarded(() => runUpdate(ctx.data, ctx.me.email, (t, f) => syncBanner(true, null, t, f), () => render(true), { gmail, jobs: parts.jobs, alerts: G.gmailConnected() }));
       await persist();
       render(true);
       if (!first) notifySync(ctx.data.settings, out.result, ctx.data.jobs.filter(j => !before.has(j.id)));
       const n = out.result.appsChanged.length, j = out.result.jobsNew.length;
-      toast(`Synced. ${n} application update${n === 1 ? '' : 's'}, ${j} new match${j === 1 ? '' : 'es'}.` + (out.result.notes.length ? ' ' + out.result.notes[out.result.notes.length - 1] : ''));
+      toast(`Up to date. ${n} application update${n === 1 ? '' : 's'}, ${j} new job${j === 1 ? '' : 's'}.` + (out.result.notes.length ? ' ' + out.result.notes[out.result.notes.length - 1] : ''));
     } catch (e) {
-      toast('Sync stopped: ' + errText(e), true);
+      toast('Stopped: ' + errText(e), true);
       C.addLog(ctx.data, 'Error: ' + errText(e));
     } finally {
       syncBanner(false);
-      if (btn()) { btn().disabled = false; setLabel(btn().lastChild, 'Sync now'); }
+      if (btn()) { btn().disabled = false; setLabel(btn().lastChild, gmailOn() ? 'Check my emails' : 'Look for new jobs'); }
     }
   };
   if (navigator.locks) {
     await navigator.locks.request('job-hunter-sync', { ifAvailable: true }, async (lock) => {
-      if (!lock) { toast('A sync is already running in another tab.'); return; }
+      if (!lock) { toast('Already checking in another tab.'); return; }
       await work();
     });
   } else await work();

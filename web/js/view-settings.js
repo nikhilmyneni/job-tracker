@@ -30,7 +30,7 @@ export function renderProfile(ctx, root) {
     await act.saveCv(d.cv, d.cvUpload);
     cvStatus.className = 'status ok'; cvStatus.textContent = 'CV saved';
   }, cvStatus) }, 'Save CV');
-  root.replaceChildren(pageHead('Profile and CV', 'Used to score openings and to tailor resumes'),
+  root.replaceChildren(pageHead('Profile and CV', 'Used to pick jobs for you and to make your resumes'),
     h('div', { class: 'cols' },
       panel('About you and the jobs you want', '', ...blocks.map(b => b.el), saveBar('Save preferences', (d) => blocks.forEach(b => b.collect(d)), ctx)),
       h('div', { class: 'stack-lg' },
@@ -74,7 +74,7 @@ function notifyPanel(ctx) {
     act.alertsStatus().then(r => { alerts.textContent = r.on ? `Email alerts: on, to ${r.email}${r.lastRun ? `. Last looked on ${r.lastRun}` : ''}.` : 'Email alerts: off.'; }).catch(() => {});
   } else alerts.textContent = 'Email alerts: off. Turn them on in Routine.';
   return panel('Notifications', notifySupported()
-    ? (on ? 'On. You’ll get one when an application changes status or new matches arrive, while Job Hunter is open.' : 'Get one when an application changes status or new matches arrive, while Job Hunter is open (a tab, or the installed app).')
+    ? (on ? 'On. You’ll get one when an application changes status or new jobs arrive, while Job Hunter is open.' : 'Get one when an application changes status or new jobs arrive, while Job Hunter is open (a tab, or the installed app).')
     : 'This browser can’t show notifications.', notifySupported() ? h('div', { class: 'save-bar' }, btn, status) : '', alerts);
 }
 

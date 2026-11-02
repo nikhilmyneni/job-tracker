@@ -10,13 +10,24 @@ the owner's free Groq + Gemini keys from environment variables) and `workday.js`
 `_auth.js` is the signed-in check and daily allowance (Vercel doesn't serve files starting with `_`).
 
 - `/`: the landing page (`index.html`, readable by search engines).
-- `/app`, `/app/matches`, `/app/tailor[/<jobId>]`, `/app/profile`, `/app/settings`: the app
+- `/app` (Home), `/app/matches` (Jobs for you), `/app/applications` (My applications), `/app/tailor[/<jobId>]` (Resume for a job), `/app/profile`, `/app/settings`: the app
   (`app.html`; Vercel rewrites `/app/*` to it, and `scripts/serve.js` does the same locally).
 
 Flow: sign in → first-run **setup wizard**, CV first (drop a file or paste; `profileFromCv` then fills in name,
 city, roles, level and locations), then roles, level, job type, pay, locations (city search from the first letter,
-`placeMatches`), skip list, **Connect Gmail (optional)**, companies to follow, routine → Applications (Board / Table / Timeline). Everything from setup can be changed in
+`placeMatches`), skip list, **Connect Gmail (optional)**, companies to follow, routine → **Home**. Everything from setup can be changed in
 Profile and CV or Settings.
+
+Home (`view-home.js`, built from the pure `homeFeed`): the top 3 new jobs with Apply, "Did you apply?" (jobs whose page you opened),
+Coming up (`next_at`), counts of applications waiting and emails we need help with, and set-up cards (CV, Gmail, job emails) until done.
+**Applying** is one guided panel everywhere (`apply.js` `openApply`): 1. download the resume made for this job (`readyResume`: saved choices,
+else every safe change), 2. open the job page (sets `job.apply_clicked`), 3. "Done applying?" → `setJobStatus(job, 'Applied')`. Coming back to
+the tab asks step 3 again; an unanswered one shows on Home.
+
+**Plain words** on screen, never the internal names: Check my emails (sync), Jobs for you (matches), Resume for a job (tailor),
+How well your resume fits (ATS score), Show (minimum match: `SHOW_LEVELS`), Close to your field / A stretch (`fieldHint`),
+Which jobs to show (role range), Must-have words (keywords), Test / assessment, Not selected, No reply yet (`STATUS_LABEL`),
+Old applications (archive), We need your help with N emails (review), Move up / Show this skill / Better wording (`EDIT_KIND`).
 
 The Google OAuth app is published but unverified. **Sign-in asks only for non-sensitive scopes** (openid, email,
 profile, drive.appdata), so it shows no warning once the brand is verified. Gmail is a separate, optional step
@@ -64,7 +75,7 @@ and counts toward the 100-user cap. Without Gmail, users add applications by han
 - Syncs only happen while the page is open (there's no server holding Gmail access, by design). The routine
   (`settings.schedule`: on, days, `gmailAt`, `jobsAt`, on the device's clock) says when: `scheduleDue()` runs each part
   once after its latest time on a chosen day, so a time missed while the page was closed runs on the next open. On the signup day (`startedOn`) the job search also runs every `FIRST_DAY_GAP_H` hours until that day's `jobsPerUpdate` matches are in. Checked on
-  open and every minute; a failed automatic try waits `MIN_UPDATE_GAP_MIN`. **Sync now** runs both. `navigator.locks` keeps it to one tab.
+  open and every minute; a failed automatic try waits `MIN_UPDATE_GAP_MIN`. **Check my emails** (Sync now) runs both. `navigator.locks` keeps it to one tab.
 - Gmail search (`appSearch`): application phrasings, Social left out, Promotions searched only for job sites and application systems (`APPLY_SENDERS`). A job site's email is filed under the employer it names (`jobSiteParts`), never the job site; none named → "needs a look". Emails missing from the AI's answer go through `ruleClassify`. Only what has happened moves a stage: `factualText` drops conditional or
   future sentences ("if you are selected for an interview…", "shortlisted candidates will be contacted") and the AI prompt says the same.
 - Gmail API: `messages.list` (every page, up to `MAX_LISTED`) + `messages.get` (`format=full`) for unread ones only, 4 at a time. Up to `MAX_EMAILS` per sync, oldest first; the rest wait for the next sync (`gmailRunAt` only moves once none are left). Gmail limits reads per user per minute:
@@ -105,9 +116,11 @@ and counts toward the 100-user cap. Without Gmail, users add applications by han
 - `js/google.js`: sign-in, Gmail, Drive app data (`job-tracker.json`, `cv-original.*`).
 - `js/update.js`: `runUpdate()` and `cvForResumeFold()`. `js/files.js`: CV import (pdf.js / DOCX / TXT), downloads.
 - `js/notify.js`: browser notifications after a sync (status changes, new matches), only while the app is open; `notificationsFor()` is pure.
-- `js/app.js`: boot, routing, sync, actions. Screens: `view-applications.js` (+ `view-board.js`: board, timeline, edit dialog), `view-matches.js` (desktop table: fit, match %, Core/Related, why, skill to pick up, status, Apply / Resume PDF (saved tailoring or all safe edits) / Tailor; cards on phones; `jh-matches` display pref),
-  `view-tailor.js`, `view-settings.js` (Profile and Settings). `onboarding.js`: the wizard plus the shared
-  field blocks. `ui.js`: `h()`, `busy`, `holdButton`, `setLabel`, `icon`, `pageHead`, chips, dialogs. `demo.js`.
+- `js/app.js`: boot, routing, sync, actions. Screens: `view-home.js` (Home), `view-applications.js` (+ `view-board.js`: board, timeline, edit dialog), `view-matches.js` (one column of job cards,
+  max 720px: For you / Saved / Applied, one Filter sheet, a detail drawer, Apply / Save / ⋯; Hidden jobs and a Compact view table under ⋯, `jh-matches` display pref),
+  `view-tailor.js` (one column, max 760px: the fit in words + Make the safe changes, toggles for each change / why this score / the job ad,
+  layout choices, the preview, a sticky Download PDF / Apply / More formats bar), `apply.js` (the Apply panel), `view-settings.js` (Profile and Settings). `onboarding.js`: the wizard plus the shared
+  field blocks. `ui.js`: `h()`, `busy`, `holdButton`, `setLabel`, `icon`, `pageHead`, chips, dialogs (`.dialog-sheet` / `.dialog-drawer` go full screen on phones), `<details class="menu">` menus. `demo.js`.
 - `tests/`: Node tests: `core`, `match`, `files` (PDF lines), `notify`, `api` (the AI function), `google` (rate-limit retries, paging), `tailor` (suggestions, LaTeX, .docx), `pdf` (the resume PDF), `alerts` (the email alerts, with a fake store, Brevo and board) and `store` (RESP against a fake Redis server), with fetch faked. `npm test` and `npm run check` must pass before any push.
 - `scripts/serve.js` (local server on :5173, with the /app rewrites and /api functions), `scripts/check.js`.
 - `docs/SETUP.md`: users and owner (Google Cloud + Vercel). Keep it in sync with behaviour changes. `docs/ROADMAP.md`: ideas.
@@ -126,10 +139,10 @@ and counts toward the 100-user cap. Without Gmail, users add applications by han
   `nextLabel()` makes the card pill. **Archive:** `archiveQuiet` moves applications with no change for `settings.archiveDays`
   (default 30, 0 = never) off the board; any new email (`upsertApplication`), a status change or Unarchive (`setArchived`, sets
   `kept_on`) brings one back. Archived ones count in Total, not Active.
-- **review:** emails that look like an application update but couldn't be matched ("N emails need a look"); `addReview()`.
+- **review:** emails that look like an application update but couldn't be matched ("We need your help with N emails"); `addReview()`.
 - **Job:** id, found_on, posted, score (0–100), fit (score/20), matched[], missing[], company, role, location, pay, why,
   skill_gap, apply_by, link, details, jd (full description, fetched when opened), status (New/Saved/Applied/Skipped/Expired),
-  key, source ('Pasted' for one pasted into the tailor), ref (board + id, for the full description), resumefold_at, tailored {accepted[], confirmed[], template, extra[] (an AI summary that
+  apply_clicked (when you opened the job page from Apply; drives "Did you apply?"), key, source ('Pasted' for one pasted into the tailor), ref (board + id, for the full description), resumefold_at, tailored {accepted[], confirmed[], template, extra[] (an AI summary that
   passed `honestRewrite`), at} (the tailored resume is rebuilt from these).
 - `skillsAdded[]`, `skillsRemoved[]`: your edits to the skills read from the CV (Profile).
 - `cvFold`: the CV as ResumeFold's Resume JSON, made once per CV (`cvFoldHash`).

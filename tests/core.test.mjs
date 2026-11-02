@@ -547,3 +547,33 @@ test('quiet applications move to the Archive; a new email or you bring them back
   assert.equal(C.archiveQuiet(data.applications, new Date('2026-11-20T12:00:00'), 30), 0); // kept_on counts as a change
   assert.equal(C.archiveQuiet(data.applications, new Date('2026-12-20T12:00:00'), 0), 0); // 0 = off
 });
+
+test('home feed: top new jobs, coming up, did you apply, waiting', () => {
+  const job = (id, score, extra = {}) => Object.assign({ id, role: 'R' + id, company: 'C' + id, status: 'New', score }, extra);
+  const data = {
+    jobs: [job('a', 60), job('b', 90), job('c', 70), job('d', 80), job('e', 85, { apply_clicked: '2026-11-01T10:00:00Z' }),
+      job('f', 50, { status: 'Applied', apply_clicked: '2026-11-01T09:00:00Z' }), job('g', 40, { status: 'Saved', apply_clicked: '2026-11-01T11:00:00Z' })],
+    applications: [
+      { id: '1', company: 'X', status: 'Interview', next_at: '2026-11-05T10:00' },
+      { id: '2', company: 'Y', status: 'Screening', next_at: '2026-11-03' },
+      { id: '3', company: 'Z', status: 'Interview', next_at: '2026-10-30' }, // past
+      { id: '4', company: 'W', status: 'Rejected', next_at: '2026-11-06' }, // closed
+      { id: '5', company: 'V', status: 'Applied', archived: true, next_at: '2026-11-07' }, // old
+    ],
+    review: [{}, {}],
+  };
+  const f = C.homeFeed(data, new Date('2026-11-02T12:00:00'));
+  assert.deepEqual(f.newJobs.map(j => j.id), ['b', 'd', 'c']); // best first, opened ones left out
+  assert.equal(f.newCount, 4);
+  assert.deepEqual(f.comingUp.map(a => a.id), ['2', '1']);
+  assert.deepEqual(f.didYouApply.map(j => j.id), ['g', 'e']); // opened, not yet marked applied; newest first
+  assert.equal(f.waiting, 3); // 1, 2, 3 are in play; rejected and old ones aren't
+  assert.equal(f.review, 2);
+});
+
+test('the Show filter maps to a minimum fit and back', () => {
+  assert.equal(C.showOf(0), 'all'); assert.equal(C.showOf(40), 'all');
+  assert.equal(C.showOf(50), 'fair'); assert.equal(C.showOf(65), 'good'); assert.equal(C.showOf(80), 'good');
+  for (const k of Object.keys(C.SHOW_LEVELS)) assert.equal(C.showOf(C.SHOW_LEVELS[k].min), k);
+  assert.equal(C.fieldHint('Core'), ''); assert.equal(C.fieldHint('Related'), 'Close to your field'); assert.equal(C.fieldHint('Stretch'), 'A stretch');
+});

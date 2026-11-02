@@ -27,13 +27,13 @@ export function notificationsFor(result, jobs) {
   const ch = result.changes.filter(c => c.from); // new rows from the first sync aren't news
   if (ch.length === 1) {
     const c = ch[0];
-    out.push({ title: `${c.company}: ${STATUS_LABEL[c.to] || c.to}`, body: c.role ? `${c.role} moved from ${STATUS_LABEL[c.from] || c.from} to ${STATUS_LABEL[c.to] || c.to}.` : `Moved from ${STATUS_LABEL[c.from] || c.from} to ${STATUS_LABEL[c.to] || c.to}.`, url: '/app', tag: 'status' });
+    out.push({ title: `${c.company}: ${STATUS_LABEL[c.to] || c.to}`, body: c.role ? `${c.role} moved from ${STATUS_LABEL[c.from] || c.from} to ${STATUS_LABEL[c.to] || c.to}.` : `Moved from ${STATUS_LABEL[c.from] || c.from} to ${STATUS_LABEL[c.to] || c.to}.`, url: '/app/applications', tag: 'status' });
   } else if (ch.length > 1) {
-    out.push({ title: `${ch.length} applications changed`, body: ch.slice(0, 3).map(c => `${c.company}: ${STATUS_LABEL[c.to] || c.to}`).join(' · ') + (ch.length > 3 ? ' …' : ''), url: '/app', tag: 'status' });
+    out.push({ title: `${ch.length} applications changed`, body: ch.slice(0, 3).map(c => `${c.company}: ${STATUS_LABEL[c.to] || c.to}`).join(' · ') + (ch.length > 3 ? ' …' : ''), url: '/app/applications', tag: 'status' });
   }
   if (jobs.length) {
     const best = jobs.slice().sort((a, b) => b.fit - a.fit)[0];
-    out.push({ title: `${jobs.length} new job match${jobs.length === 1 ? '' : 'es'}`, body: `Best: ${best.role} at ${best.company} (${matchLabel(best.score ?? best.fit * 20).label} match)`, url: '/app/matches', tag: 'jobs' });
+    out.push({ title: `${jobs.length} new job${jobs.length === 1 ? '' : 's'} for you`, body: `Best: ${best.role} at ${best.company} (${matchLabel(best.score ?? best.fit * 20).label} fit)`, url: '/app/matches', tag: 'jobs' });
   }
   return out;
 }

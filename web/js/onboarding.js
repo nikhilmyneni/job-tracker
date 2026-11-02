@@ -12,7 +12,7 @@ const AVOID_SUGGESTIONS = ['Sales', 'Telecalling', 'Unpaid internships', 'Traini
 const WEEK = [1, 2, 3, 4, 5, 6, 0]; // Mon first
 /** "Every day at 07:00", "Mon–Fri at 07:00"… for the summary. */
 export function scheduleLabel(sc) {
-  if (!sc.on || !sc.days.length) return 'Only when I click Sync now';
+  if (!sc.on || !sc.days.length) return 'Only when I click Check my emails';
   const days = sc.days.length === 7 ? 'Every day' : sc.days.join() === '1,2,3,4,5' ? 'Weekdays' : WEEK.filter(n => sc.days.includes(n)).map(n => DAYS[n]).join(', ');
   return `${days}: Gmail at ${sc.gmailAt}, new jobs by ${sc.jobsAt}`;
 }
@@ -80,7 +80,7 @@ export function routineBlock(s, { email = '' } = {}) {
     h('p', { class: 'hint' }, 'On this device’s clock. Job Hunter works inside this page, so if it’s closed at that time, it catches up as soon as you open it.'));
   const showTimed = () => { onText.textContent = on.checked ? 'On' : 'Off'; timed.hidden = !on.checked; };
   on.addEventListener('change', showTimed); showTimed();
-  const range = segmented(ROLE_RANGES, s.prefs.roleRange, 'Role range');
+  const range = segmented(ROLE_RANGES, s.prefs.roleRange, 'Which jobs to show');
   const jobs = segmented(Object.fromEntries(JOBS_PER_UPDATE.map(n => [n, n ? String(n) : 'Off'])), s.jobsPerUpdate, 'New jobs per day');
   const since = segmented(Object.fromEntries(SINCE_DAYS.map(n => [n, `${n} days`])), s.sinceDays, 'First search');
   const archive = segmented(Object.fromEntries(ARCHIVE_DAYS.map(n => [n, n ? `${n} days` : 'Never'])), s.archiveDays, 'Archive after');
@@ -93,7 +93,7 @@ export function routineBlock(s, { email = '' } = {}) {
         h('span', { class: 'hint' }, `Job Hunter looks for jobs at your “ready by” time even when it’s closed, and emails them${email ? ' to ' + email : ''}. `,
           'For this it keeps your roles, places, skill names and followed companies on its server (never your CV or Gmail). ',
           h('a', { href: '/privacy.html#alerts', target: '_blank', rel: 'noopener' }, 'What’s kept'))),
-      group('Role range', range.el, 'Which job titles count as a match for the roles you picked.'),
+      group('Which jobs to show', range.el, 'Only jobs named like your roles, or close ones too.'),
       group('New jobs per day', jobs.el),
       group('First time, look back through Gmail for', since.el),
       group('Move to the Archive after no change for', archive.el, 'Quiet applications leave the board. A new email brings one back.')),
@@ -177,7 +177,7 @@ export function companiesBlock(list, opts = {}) {
   const auto = h('input', { type: 'checkbox', class: 'switch', role: 'switch', checked: opts.auto !== false, 'aria-label': 'Also search Job Hunter’s company list' });
   const autoRow = h('div', { class: 'field' },
     h('label', { class: 'switch-row' }, h('span', { class: 'field-lbl' }, `Also search ${INDIA_BOARDS.length} companies hiring in India`), auto),
-    h('span', { class: 'hint' }, 'On by default, so you get matches without following anyone: ' + INDIA_BOARDS.slice(0, 8).map(c => c.name).join(', ') + ' and more. Add any others below.'));
+    h('span', { class: 'hint' }, 'On by default, so you get jobs without following anyone: ' + INDIA_BOARDS.slice(0, 8).map(c => c.name).join(', ') + ' and more. Add any others below.'));
   const box = h('ul', { class: 'fade-list', 'aria-label': 'Companies you follow' });
   const sugg = h('div', { class: 'chip-sugg' });
   const input = h('input', { type: 'url', placeholder: 'Paste a careers page link, e.g. jobs.lever.co/cred', 'aria-label': 'Careers page link', 'aria-describedby': 'co-hint' });
@@ -186,7 +186,7 @@ export function companiesBlock(list, opts = {}) {
     box.replaceChildren(...(cur.length ? cur.map((c, i) => h('li', {},
       h('span', { class: 'ini' }, c.name.charAt(0).toUpperCase()), h('span', { class: 'co-name' }, h('b', {}, c.name), h('small', {}, ATS[c.ats])),
       h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Stop following ' + c.name, onclick: () => { cur.splice(i, 1); draw(); } }, icon('x')))) :
-      [h('li', { class: 'muted' }, 'None of your own yet. The list above and your job-alert emails still bring in matches.')]));
+      [h('li', { class: 'muted' }, 'None of your own yet. The list above and your job-alert emails still bring in jobs.')]));
     const have = new Set(cur.map(companyKey));
     sugg.replaceChildren(...COMPANY_SUGGESTIONS.filter(c => !have.has(companyKey(c))).map(c =>
       h('button', { type: 'button', class: 'chip-add', onclick: () => { cur.push(normalizeCompany(c)); draw(); } }, '+ ' + c.name)));
@@ -228,7 +228,7 @@ export function gmailBlock(ctx) {
     h('ul', { class: 'ticks-list' },
       h('li', {}, 'It looks for application and job-alert emails and reads only those.'),
       h('li', {}, 'Read-only: it can’t send, delete, label or change anything.'),
-      h('li', {}, 'Skip it and you can still get job matches, tailor resumes, and add or paste applications yourself.')),
+      h('li', {}, 'Skip it and you still get jobs for you, a resume for each, and you can add or paste applications yourself.')),
     warn = h('div', { class: 'heads-up' },
       h('p', {}, h('b', {}, 'Google will show a warning.'), ' Reading Gmail needs a permission Google only fully verifies after a paid review, which a free tool can’t afford. When you see “Google hasn’t verified this app”:'),
       h('ol', {}, h('li', {}, 'Choose ', h('b', {}, 'Advanced'), ', then ', h('b', {}, 'Go to Job Hunter'), '.'), h('li', {}, 'Tick the box to let it read your email.'), h('li', {}, 'Choose ', h('b', {}, 'Continue'), '.'))),
@@ -240,7 +240,7 @@ export function gmailBlock(ctx) {
 // ---------- the wizard ----------
 const FROM_CV = 'Filled in from your CV. Change anything that isn’t right.';
 const STEPS = [
-  { id: 'cv', title: 'Start with your CV', intro: 'Job Hunter reads it to fill in the next questions, score openings and tailor resumes.', block: (d, ctx, w) => cvBlock(d.cv, d.cvFile, { onRead: w.onCvRead }) },
+  { id: 'cv', title: 'Start with your CV', intro: 'We read it to fill in the next questions, pick jobs that fit you and make a resume for each.', block: (d, ctx, w) => cvBlock(d.cv, d.cvFile, { onRead: w.onCvRead }) },
   { id: 'you', title: 'About you', intro: (d, w) => (!w.fromCv ? 'You can change any answer later.' : w.profile.found.name && w.profile.found.city ? FROM_CV
     : w.profile.found.name ? 'Your name is from your CV. Add the city you live in now.' : 'Your name wasn’t clear in the CV, so please check it.'), block: (d) => youBlock(d) },
   { id: 'want', title: 'What are you looking for?', intro: (d, w) => (w.fromCv ? (w.profile.roles.length ? 'Roles that match your CV. Add or remove any.' : 'Your CV didn’t point clearly to a role, so pick a few.') : ''), block: (d, ctx, w) => wantBlock(d, w.profile.roles) },

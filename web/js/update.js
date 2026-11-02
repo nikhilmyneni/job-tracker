@@ -186,7 +186,7 @@ async function findJobs(data, me, afterStr, seen, result, report, note, gmail) {
   });
   const left = Object.entries(dropped).map(([k, v]) => `${v} ${C.PROBLEM_TEXT[k]}`);
   if (left.length) note(`Left out after reading the postings: ${left.join(', ')}.`);
-  if (best && !result.jobsNew.length) note(`Some fitting jobs were below your minimum match (${C.matchLabel(s.minMatch).label}; the best was ${C.matchLabel(best).label}). Lower it in Job matches to see them.`);
+  if (best && !result.jobsNew.length) note(`Some fitting jobs were below your minimum match (${C.matchLabel(s.minMatch).label}; the best was ${C.matchLabel(best).label}). Choose “Show: All jobs” under Filter in Jobs for you to see them.`);
 }
 
 /** The CV as ResumeFold's Resume JSON (not tailored: ResumeFold does that). Made once per CV and kept. */
