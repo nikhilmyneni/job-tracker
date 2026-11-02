@@ -95,3 +95,10 @@ img, svg { display: block; }
   .btn-quiet:hover { --btn-bg: var(--blue-soft); }
   ::selection { background: #24345E; color: #fff; }
 }
+
+/* a button at work: same size, a small spinner and a short label that never spills out */
+.btn.is-busy { overflow: hidden; cursor: progress; }
+.btn.is-busy .busy-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.spin { flex: none; width: 15px; height: 15px; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent; opacity: .8; animation: spin 700ms linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spin { animation: none; border-right-color: currentColor; opacity: .5; } }

@@ -28,18 +28,30 @@ export function setLabel(btn, text) {
   btn.textContent = text;
   if (reduce || !from || !btn.animate) return;
   const to = btn.getBoundingClientRect().width;
-  if (Math.abs(to - from) > 1) btn.animate([{ width: from + 'px' }, { width: to + 'px' }], { duration: 220, easing: 'cubic-bezier(.23,1,.32,1)' });
+  // overflow stays hidden while the width moves, so the new label never spills out of the box
+  if (Math.abs(to - from) > 1) btn.animate([{ width: from + 'px', overflow: 'hidden' }, { width: to + 'px', overflow: 'hidden' }], { duration: 220, easing: 'cubic-bezier(.23,1,.32,1)' });
 }
 
-/** Disables a button and shows a label while work runs; errors go to statusEl or a toast. */
+/**
+ * Disables a button and shows a spinner and a short label while work runs; errors go to statusEl or a toast.
+ * The button keeps its size (the label is cut short if it must), and its own content, icon included, comes back after.
+ */
 export async function busy(btn, label, work, statusEl) {
-  const old = btn.textContent;
-  btn.disabled = true; btn.setAttribute('aria-busy', 'true'); setLabel(btn, label);
+  const kids = [...btn.childNodes];
+  const w = btn.getBoundingClientRect().width;
+  const fixed = btn.classList.contains('btn') && w > 0;
+  if (fixed) { btn.style.width = w + 'px'; btn.classList.add('is-busy'); btn.replaceChildren(h('span', { class: 'spin', 'aria-hidden': 'true' }), h('span', { class: 'busy-label' }, label)); }
+  else btn.textContent = label;
+  btn.disabled = true; btn.setAttribute('aria-busy', 'true');
   if (statusEl) { statusEl.className = 'status'; statusEl.textContent = ''; }
   try { return await work(); } catch (e) {
     if (statusEl) { statusEl.className = 'status err'; statusEl.textContent = errText(e); } else toast(errText(e), true);
     return undefined;
-  } finally { btn.disabled = false; btn.removeAttribute('aria-busy'); setLabel(btn, old); }
+  } finally {
+    btn.disabled = false; btn.removeAttribute('aria-busy');
+    btn.replaceChildren(...kids);
+    if (fixed) { btn.style.width = ''; btn.classList.remove('is-busy'); }
+  }
 }
 
 /**
