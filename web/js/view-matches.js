@@ -4,7 +4,7 @@
  * Filters open in a sheet; a job's details open in a drawer. The old table survives as "Compact view" under ⋯.
  */
 import { h, busy, icon, pageHead, ago, extLink, isHttp, chipInput, openDialog, toast, errText } from './ui.js';
-import { filterJobs, roleKind, fieldHint, matchLabel, SHOW_LEVELS, showOf, sourceLabel, jobMatchesQuery } from './core.js';
+import { filterJobs, roleKind, fieldHint, matchLabel, SHOW_LEVELS, showOf, sourceLabel, jobMatchesQuery, payText } from './core.js';
 import { openApply, readyResume } from './apply.js';
 
 let show = 'New', query = '';
@@ -17,7 +17,9 @@ const isPhone = () => matchMedia('(max-width: 900px)').matches;
 const scoreOf = (j) => (j.score ?? Math.round((Number(j.fit) || 0) * 20));
 const level = (sc) => { const m = matchLabel(sc); return h('span', { class: `lvl lvl-${m.tone}` }, `${m.label} fit`); };
 const posted = (j) => (j.posted ? 'posted ' + ago(j.posted + 'T09:00:00') : j.found_on ? 'found ' + ago(j.found_on + 'T09:00:00') : '');
-const pay = (j) => (j.pay && !/not listed/i.test(j.pay) ? j.pay : '');
+const pay = (j) => payText(j.pay);
+/** Pay, right next to the fit: green when the posting says, grey "not mentioned" when it doesn't. */
+export const payChip = (j) => (pay(j) ? h('span', { class: 'pay-chip' }, 'Pay: ', h('b', {}, pay(j))) : h('span', { class: 'pay-chip pay-none' }, 'Pay: not mentioned'));
 const gapOf = (j) => (j.skill_gap && j.skill_gap !== 'None' ? j.skill_gap : (j.missing || [])[0] || '');
 const whyOf = (j) => j.why || ((j.matched || []).length ? 'On your CV: ' + j.matched.slice(0, 4).join(', ') + '.' : '');
 
@@ -47,7 +49,7 @@ export function renderMatches(ctx, root) {
   const listId = 'job-search-list';
   const choices = [...new Set([...data.jobs.map(sourceLabel), 'Company site', ...data.jobs.map(j => j.company)].filter(Boolean))];
   const search = h('input', { type: 'search', class: 'search job-search', value: query, list: listId, autocomplete: 'off',
-    placeholder: 'Search company or source, e.g. Indeed', 'aria-label': 'Search by company or source',
+    placeholder: 'Company or source, e.g. Indeed', 'aria-label': 'Search by company or source',
     oninput: () => { query = search.value; drawList(); } });
   const searchBox = h('div', { class: 'search-wrap' }, icon('search'), search, h('datalist', { id: listId }, ...choices.map(c => h('option', { value: c }))));
 
@@ -80,8 +82,8 @@ function jobCard(ctx, j, redraw) {
   const open = () => jobDrawer(ctx, j, redraw);
   return h('article', { class: 'job' },
     h('button', { type: 'button', class: 'job-open', 'aria-label': `${j.role} at ${j.company}: details`, onclick: open }),
-    h('div', { class: 'job-head' }, h('h3', {}, j.role), level(scoreOf(j))),
-    h('p', { class: 'job-co' }, h('b', {}, j.company), ' · ', [j.location, pay(j), posted(j), 'via ' + sourceLabel(j)].filter(Boolean).join(' · ')),
+    h('div', { class: 'job-head' }, h('h3', {}, j.role), h('div', { class: 'job-tags' }, level(scoreOf(j)), payChip(j))),
+    h('p', { class: 'job-co' }, h('b', {}, j.company), ' · ', [j.location, posted(j), 'via ' + sourceLabel(j)].filter(Boolean).join(' · ')),
     whyOf(j) || hint ? h('p', { class: 'job-why' }, hint ? h('span', { class: 'hint-chip' }, hint) : '', whyOf(j)) : '',
     h('div', { class: 'job-acts' },
       j.status === 'Applied' ? h('span', { class: 'pill pill-green' }, icon('check'), ' Applied')
@@ -102,8 +104,8 @@ function jobDrawer(ctx, j, redraw) {
   const draw = () => {
     const text = j.jd || j.details || '';
     return [
-      h('p', { class: 'job-co' }, h('b', {}, j.company), ' · ', [j.location, pay(j), posted(j), 'via ' + sourceLabel(j)].filter(Boolean).join(' · ')),
-      h('div', { class: 'drawer-fit' }, level(scoreOf(j)), whyOf(j) ? h('p', {}, whyOf(j)) : ''),
+      h('p', { class: 'job-co' }, h('b', {}, j.company), ' · ', [j.location, posted(j), 'via ' + sourceLabel(j)].filter(Boolean).join(' · ')),
+      h('div', { class: 'drawer-fit' }, h('div', { class: 'job-tags' }, level(scoreOf(j)), payChip(j)), whyOf(j) ? h('p', {}, whyOf(j)) : ''),
       gapOf(j) ? h('p', { class: 'hint' }, `Skill to learn for this job: ${gapOf(j)}`) : '',
       h('div', { class: 'row' },
         h('button', { type: 'button', class: 'btn btn-primary', onclick: () => { close(); openApply(ctx, j, redraw); } }, 'Apply'),
@@ -168,7 +170,7 @@ function jobsTable(ctx, rows, redraw) {
       h('td', { class: 'col-role' }, j.role),
       h('td', {}, h('b', {}, j.company)),
       h('td', {}, j.location || '—'),
-      h('td', { class: 'muted' }, pay(j) || '—'),
+      h('td', {}, payChip(j)),
       h('td', { class: 'muted' }, sourceLabel(j)),
       h('td', { class: 'col-wide' }, whyOf(j) || '—'),
       h('td', {}, gapOf(j) || '—'),

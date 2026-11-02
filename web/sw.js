@@ -1,5 +1,5 @@
 // Caches only this site's own files so the app opens fast and offline. Never caches Google, AI, job-board or /api responses.
-const CACHE = 'job-hunter-v41';
+const CACHE = 'job-hunter-v42';
 const SHELL = ['/', '/app', '/privacy.html', '/config.js', '/icon.svg', '/manifest.webmanifest',
   '/css/tokens.css', '/css/app.css', '/css/landing.css',
   '/vendor/fonts/bricolage.woff2', '/vendor/fonts/instrument-sans.woff2', '/vendor/fonts/jetbrains-mono.woff2',

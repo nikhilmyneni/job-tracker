@@ -403,6 +403,12 @@ export function sourceLabel(job) {
   if (!s || s === 'Job alert email') return siteOf(job && job.link) || 'Job alert email';
   return s;
 }
+/** A job's pay as shown next to its fit, or '' when the posting doesn't say ("not listed", "N/A", "not disclosed", "-"). */
+export function payText(pay) {
+  const p = String(pay || '').replace(/\s+/g, ' ').trim();
+  return !p || /^(n\/?a|na|nil|none|-+|—|tbd|tba|not (listed|mentioned|disclosed|specified|stated|given)|undisclosed|unspecified|competitive|as per (company|industry) (norms|standards))\.?$/i.test(p) ? '' : p;
+}
+
 /** Jobs for you search: company, role, place or source ("indeed", "career site", "company site", "linkedin", "greenhouse"). */
 export function jobMatchesQuery(job, q) {
   const words = String(q || '').toLowerCase().split(/\s+/).filter(Boolean);

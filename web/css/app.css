@@ -725,3 +725,11 @@ details.more > summary, .rf-more > summary { cursor: pointer; min-height: var(--
 .rf-pick { display: grid; gap: 24px; align-items: start; }
 .rf-pick .pick { grid-template-columns: minmax(0, 1fr); }
 @media (min-width: 1100px) { .rf-pick { grid-template-columns: minmax(0, 1.2fr) minmax(320px, 1fr); gap: 28px; } .rf-pick-one { grid-template-columns: minmax(0, 860px); } }
+
+/* pay, right next to the fit */
+.job-tags { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 6px; flex: none; max-width: 60%; }
+.drawer-fit .job-tags, .home-job-why .pay-chip { justify-content: flex-start; max-width: none; }
+.pay-chip { display: inline-flex; align-items: center; gap: 4px; min-height: 26px; padding: 0 10px; border-radius: 999px; background: var(--green-soft); color: var(--green); font: 500 12.5px/1 var(--sans); white-space: nowrap; flex: none; }
+.pay-chip b { font-weight: 700; }
+.pay-chip.pay-none { background: var(--track); color: var(--muted); }
+@media (max-width: 480px) { .job-head { flex-wrap: wrap; } .job-head .job-tags { max-width: none; justify-content: flex-start; order: 2; flex-basis: 100%; } }

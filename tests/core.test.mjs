@@ -605,3 +605,10 @@ test('job sources in plain words, and the company-or-source search', () => {
   assert.ok(!C.jobMatchesQuery(gh, 'indeed'));
   assert.ok(C.jobMatchesQuery(ind, 'indeed')); assert.ok(C.jobMatchesQuery(ind, 'acme indeed')); assert.ok(!C.jobMatchesQuery(ind, 'career site'));
 });
+
+test('pay is shown as the posting says it, or as not mentioned', () => {
+  assert.equal(C.payText('₹25k/month'), '₹25k/month');
+  assert.equal(C.payText('  ₹5–7  LPA '), '₹5–7 LPA');
+  assert.equal(C.payText('Unpaid'), 'Unpaid');
+  for (const none of ['', null, undefined, 'Not listed', 'not mentioned', 'N/A', 'NA', '-', 'Not disclosed', 'Competitive', 'As per company norms']) assert.equal(C.payText(none), '', String(none));
+});

@@ -5,6 +5,7 @@
  */
 import { h, busy, icon, pageHead, ago } from './ui.js';
 import { homeFeed, matchLabel, nextLabel, roleKind, fieldHint } from './core.js';
+import { payChip } from './view-matches.js';
 import { openApply, answerApplied } from './apply.js';
 
 export function renderHome(ctx, root) {
@@ -18,8 +19,8 @@ export function renderHome(ctx, root) {
   // 1. New jobs
   const jobCard = (j) => h('li', { class: 'home-job' },
     h('div', { class: 'home-job-text' },
-      h('b', {}, j.role), h('span', {}, [j.company, j.location, j.pay && !/not listed/i.test(j.pay) ? j.pay : ''].filter(Boolean).join(' · ')),
-      h('span', { class: 'home-job-why' }, level(j.score), fieldHint(roleKind(j.role, data.settings.prefs.roles)) ? h('span', { class: 'hint-chip' }, fieldHint(roleKind(j.role, data.settings.prefs.roles))) : '',
+      h('b', {}, j.role), h('span', {}, [j.company, j.location].filter(Boolean).join(' · ')),
+      h('span', { class: 'home-job-why' }, level(j.score), payChip(j), fieldHint(roleKind(j.role, data.settings.prefs.roles)) ? h('span', { class: 'hint-chip' }, fieldHint(roleKind(j.role, data.settings.prefs.roles))) : '',
         j.why ? h('span', { class: 'clip' }, j.why) : '')),
     h('div', { class: 'home-job-acts' },
       h('button', { type: 'button', class: 'btn btn-primary', onclick: () => openApply(ctx, j, redraw) }, 'Apply'),
