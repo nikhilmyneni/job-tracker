@@ -44,7 +44,7 @@ There's nothing else to set up: the AI is built in and free.
 - **My applications:** Board, Table or Timeline. Drag a card to another column, or tap it to fix the status,
   role, next step or interview time. "We need your help with N emails" lists emails it couldn't match.
 - **Jobs for you:** openings from your job-alert emails and the companies you follow, with how well each fits your CV
-  in words. **Filter** sets the place, which fits to show, internships, experience and your must-have words; tap a job
+  in words and where it came from (a company's site, LinkedIn, Indeed, Naukri…). Search by company or source; **Filter** sets the place, which fits to show, internships, experience and your must-have words; tap a job
   to read it. **Resume for a job** (⋯ → Make my resume fit, or paste any job ad) shows how well your resume fits, and
   **Make the safe changes** moves up and shows what your CV already says. *See each change* lets you undo any one (adding a
   skill your CV doesn't show needs you to confirm it's true); *Show the job ad* highlights its skills against your CV. Four layouts. Download it as PDF (saved straight away as Your_Name_Resume_Company_Role.pdf); Word, LaTeX and ResumeFold are under More formats. Your choices are saved with the job.

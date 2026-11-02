@@ -26,7 +26,7 @@ export function renderTailor(ctx, root, jobId) {
   const base = act.baseResume();
   const save = () => act.saveTailored(job, t).catch(e => toast(errText(e), true));
   const opened = { changes: false, why: false, jd: false }; // which toggles are open, kept across redraws
-  const page = h('div', { class: 'rf' });
+  const page = h('div', { class: 'rf rf-job' });
 
   const draw = () => {
     const kw = data.settings.keywords;
@@ -119,7 +119,7 @@ export function renderTailor(ctx, root, jobId) {
   root.replaceChildren(
     pageHead(job.role, [job.company, job.location].filter(Boolean).join(' · '),
       h('a', { class: 'btn btn-quiet', href: '/app/tailor' }, job.source === 'Pasted' ? 'Paste another job' : 'Other jobs')),
-    act.baseIsRough() ? h('div', { class: 'notice rf-notice' }, icon('file'),
+    act.baseIsRough() ? h('div', { class: 'notice' }, icon('file'),
       h('p', {}, h('b', {}, 'Some parts of your CV may be split oddly.'), ' We can read it again more carefully, into proper sections.'),
       h('button', { type: 'button', class: 'btn btn-sm btn-primary', onclick: (e) => busy(e.currentTarget, 'Reading…', async () => { await act.readCvWithAi(); renderTailor(ctx, root, jobId); }) }, 'Improve how we read my CV')) : '',
     page);
@@ -153,8 +153,8 @@ function renderPicker(ctx, root) {
   const ul = h('ul', { class: 'pick' }, ...jobs.slice(0, 5).map(item));
   const more = jobs.length > 5 ? h('button', { type: 'button', class: 'link', onclick: () => { ul.replaceChildren(...jobs.map(item)); more.remove(); } }, `Show ${jobs.length - 5} more`) : '';
   root.replaceChildren(pageHead('Resume for a job', 'Paste a job ad, or pick one of your jobs. We make your resume fit it, from your CV.'),
-    h('div', { class: 'rf' }, pasteForm(ctx),
-      jobs.length ? h('h2', { class: 'panel-title' }, 'Or pick one of your jobs') : '', jobs.length ? ul : '', more));
+    h('div', { class: 'rf-pick' + (jobs.length ? '' : ' rf-pick-one') }, pasteForm(ctx),
+      jobs.length ? h('section', { class: 'stack', 'aria-labelledby': 'pick-h' }, h('h2', { class: 'panel-title', id: 'pick-h' }, 'Or pick one of your jobs'), ul, more) : ''));
 }
 
 /**

@@ -386,6 +386,33 @@ const COMPANY_RES = [
   new RegExp('(?:role|position|job|internship|opening)\\s+at\\s+' + NAME + '(?=\\s*(?:[.!,\\n]|$| has | is | was ))'),
   new RegExp('^' + NAME + '\\s+(?:has\\s+)?(?:received|viewed|reviewed|shortlisted)\\s+your\\s+application', 'm'),
 ];
+const SITE_NAMES = [['linkedin', 'LinkedIn'], ['naukri', 'Naukri'], ['internshala', 'Internshala'], ['indeed', 'Indeed'], ['foundit', 'Foundit'],
+  ['monsterindia', 'Foundit'], ['instahyre', 'Instahyre'], ['wellfound', 'Wellfound'], ['glassdoor', 'Glassdoor'], ['apna.co', 'Apna'], ['unstop', 'Unstop'],
+  ['cutshort', 'Cutshort'], ['hirist', 'Hirist'], ['shine.com', 'Shine'], ['timesjobs', 'TimesJobs'], ['superset', 'Superset']];
+/** The job site named in a sender or a link ("LinkedIn Job Alerts <jobalerts-noreply@linkedin.com>" → "LinkedIn"), or ''. */
+export function siteOf(...texts) {
+  const t = texts.map(x => String(x || '')).join(' ').toLowerCase();
+  const hit = SITE_NAMES.find(([k]) => t.includes(k));
+  return hit ? hit[1] : '';
+}
+/** Where a job came from, in plain words: "Company site" (its careers page), "LinkedIn", "Indeed", "Job alert email", "Pasted by you". */
+export function sourceLabel(job) {
+  const s = String((job && job.source) || '');
+  if (Object.values(ATS).includes(s)) return 'Company site';
+  if (s === 'Pasted') return 'Pasted by you';
+  if (!s || s === 'Job alert email') return siteOf(job && job.link) || 'Job alert email';
+  return s;
+}
+/** Jobs for you search: company, role, place or source ("indeed", "career site", "company site", "linkedin", "greenhouse"). */
+export function jobMatchesQuery(job, q) {
+  const words = String(q || '').toLowerCase().split(/\s+/).filter(Boolean);
+  if (!words.length) return true;
+  const label = sourceLabel(job);
+  const hay = [job.company, job.role, job.location, job.source, label, label === 'Company site' ? 'career site careers page company website' : 'job alert email']
+    .map(x => String(x || '').toLowerCase()).join(' | ');
+  return words.every(w => hay.includes(w));
+}
+
 /**
  * The employer (and role, when it says) named in a job site's email: "Your application was sent to Acme",
  * "You applied to SOC Analyst at Acme". Returns {company, role}; company is '' when none is named.
@@ -677,7 +704,7 @@ export function addReview(data, e, guess) {
 // ---------- Recommended jobs ----------
 export function extractPrompt(batch) {
   return 'Extract every individual job or internship listing from these job-alert emails. Return a JSON array of ' +
-    '{"company":"","role":"","location":"","pay":"","link":"<the listing URL from the email, or empty>","details":"<one or two lines from the email about the job>"}. ' +
+    '{"alert":<the Alert number it came from>,"company":"","role":"","location":"","pay":"","link":"<the listing URL from the email, or empty>","details":"<one or two lines from the email about the job>"}. ' +
     'Skip ads, courses and anything that is not a specific opening.\n\n' +
     batch.map((a, j) => `### Alert ${j}\nFrom: ${a.from}\nSubject: ${a.subject}\n${a.body}`).join('\n\n');
 }

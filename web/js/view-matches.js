@@ -4,10 +4,10 @@
  * Filters open in a sheet; a job's details open in a drawer. The old table survives as "Compact view" under ⋯.
  */
 import { h, busy, icon, pageHead, ago, extLink, isHttp, chipInput, openDialog, toast, errText } from './ui.js';
-import { filterJobs, roleKind, fieldHint, matchLabel, SHOW_LEVELS, showOf } from './core.js';
+import { filterJobs, roleKind, fieldHint, matchLabel, SHOW_LEVELS, showOf, sourceLabel, jobMatchesQuery } from './core.js';
 import { openApply, readyResume } from './apply.js';
 
-let show = 'New';
+let show = 'New', query = '';
 // Compact view (the table): a display preference on this device, off by default.
 let compact = (() => { try { return localStorage.getItem('jh-matches') === 'table'; } catch (e) { return false; } })();
 const SHOWS = { New: ['New'], Saved: ['Saved'], Applied: ['Applied'], Hidden: ['Skipped', 'Expired'] };
@@ -43,18 +43,33 @@ export function renderMatches(ctx, root) {
   const sub = show === 'Hidden' ? h('span', {}, 'Jobs you hid. ', h('button', { type: 'button', class: 'link', onclick: () => { show = 'New'; redraw(); } }, 'Back to jobs for you'))
     : `${newCount} job${newCount === 1 ? '' : 's'} picked for you from your CV`;
 
-  // ---------- the list ----------
-  const empty = (title, text, action) => h('div', { class: 'empty-block' }, h('h2', {}, title), h('p', {}, text), action || '');
-  const body = rows.length
-    ? (compact && !isPhone() ? jobsTable(ctx, rows, redraw) : h('ul', { class: 'jobs' }, ...rows.map(j => h('li', {}, jobCard(ctx, j, redraw)))))
-    : all.length && show === 'New' ? empty('No jobs with these filters', 'Show all jobs, or change the place.', h('button', { type: 'button', class: 'btn btn-quiet', onclick: () => filterSheet(ctx, redraw) }, 'Change filters'))
-      : show === 'Saved' ? empty('Nothing saved yet', 'Tap Save on a job to keep it here for later.')
-        : show === 'Applied' ? empty('No applied jobs yet', 'When you apply to a job here, it shows up in this list and in My applications.')
-          : show === 'Hidden' ? empty('No hidden jobs', 'Jobs you mark “Not for me” go here.')
-            : !data.cv ? empty('Add your CV first', 'We find jobs that fit the skills in your CV.', h('a', { class: 'btn btn-primary', href: '/app/profile' }, 'Add my CV'))
-              : empty('No jobs yet', 'We look for new jobs every day. They’ll show up here.');
+  // ---------- search: company or source, in one box ----------
+  const listId = 'job-search-list';
+  const choices = [...new Set([...data.jobs.map(sourceLabel), 'Company site', ...data.jobs.map(j => j.company)].filter(Boolean))];
+  const search = h('input', { type: 'search', class: 'search job-search', value: query, list: listId, autocomplete: 'off',
+    placeholder: 'Search company or source, e.g. Indeed', 'aria-label': 'Search by company or source',
+    oninput: () => { query = search.value; drawList(); } });
+  const searchBox = h('div', { class: 'search-wrap' }, icon('search'), search, h('datalist', { id: listId }, ...choices.map(c => h('option', { value: c }))));
 
-  root.replaceChildren(pageHead('Jobs for you', sub, filterBtn, more), h('div', { class: 'jobs-top' }, tabs), body);
+  // ---------- the list ----------
+  const body = h('div', { class: 'jobs-body' });
+  const empty = (title, text, action) => h('div', { class: 'empty-block' }, h('h2', {}, title), h('p', {}, text), action || '');
+  const drawList = () => {
+    const found = rows.filter(j => jobMatchesQuery(j, query));
+    body.replaceChildren(found.length
+      ? (compact && !isPhone() ? jobsTable(ctx, found, redraw) : h('ul', { class: 'jobs' }, ...found.map(j => h('li', {}, jobCard(ctx, j, redraw)))))
+      : rows.length ? empty(`Nothing matches “${query.trim()}”`, 'Try a company name, or a source like Indeed, LinkedIn or company site.',
+        h('button', { type: 'button', class: 'btn btn-quiet', onclick: () => { query = ''; search.value = ''; drawList(); } }, 'Clear the search'))
+      : all.length && show === 'New' ? empty('No jobs with these filters', 'Show all jobs, or change the place.', h('button', { type: 'button', class: 'btn btn-quiet', onclick: () => filterSheet(ctx, redraw) }, 'Change filters'))
+        : show === 'Saved' ? empty('Nothing saved yet', 'Tap Save on a job to keep it here for later.')
+          : show === 'Applied' ? empty('No applied jobs yet', 'When you apply to a job here, it shows up in this list and in My applications.')
+            : show === 'Hidden' ? empty('No hidden jobs', 'Jobs you mark “Not for me” go here.')
+              : !data.cv ? empty('Add your CV first', 'We find jobs that fit the skills in your CV.', h('a', { class: 'btn btn-primary', href: '/app/profile' }, 'Add my CV'))
+                : empty('No jobs yet', 'We look for new jobs every day. They’ll show up here.'));
+  };
+  drawList();
+
+  root.replaceChildren(pageHead('Jobs for you', sub, filterBtn, more), h('div', { class: 'jobs-top' }, tabs, searchBox), body);
 }
 
 /** One job: role and company, place · pay · posted, the fit and why, then Apply, Save and ⋯. Tap it for details. */
@@ -66,7 +81,7 @@ function jobCard(ctx, j, redraw) {
   return h('article', { class: 'job' },
     h('button', { type: 'button', class: 'job-open', 'aria-label': `${j.role} at ${j.company}: details`, onclick: open }),
     h('div', { class: 'job-head' }, h('h3', {}, j.role), level(scoreOf(j))),
-    h('p', { class: 'job-co' }, h('b', {}, j.company), ' · ', [j.location, pay(j), posted(j)].filter(Boolean).join(' · ')),
+    h('p', { class: 'job-co' }, h('b', {}, j.company), ' · ', [j.location, pay(j), posted(j), 'via ' + sourceLabel(j)].filter(Boolean).join(' · ')),
     whyOf(j) || hint ? h('p', { class: 'job-why' }, hint ? h('span', { class: 'hint-chip' }, hint) : '', whyOf(j)) : '',
     h('div', { class: 'job-acts' },
       j.status === 'Applied' ? h('span', { class: 'pill pill-green' }, icon('check'), ' Applied')
@@ -87,7 +102,7 @@ function jobDrawer(ctx, j, redraw) {
   const draw = () => {
     const text = j.jd || j.details || '';
     return [
-      h('p', { class: 'job-co' }, h('b', {}, j.company), ' · ', [j.location, pay(j), posted(j)].filter(Boolean).join(' · ')),
+      h('p', { class: 'job-co' }, h('b', {}, j.company), ' · ', [j.location, pay(j), posted(j), 'via ' + sourceLabel(j)].filter(Boolean).join(' · ')),
       h('div', { class: 'drawer-fit' }, level(scoreOf(j)), whyOf(j) ? h('p', {}, whyOf(j)) : ''),
       gapOf(j) ? h('p', { class: 'hint' }, `Skill to learn for this job: ${gapOf(j)}`) : '',
       h('div', { class: 'row' },
@@ -141,7 +156,7 @@ function filterSheet(ctx, redraw) {
 function jobsTable(ctx, rows, redraw) {
   const { data, act } = ctx;
   const th = (t, cls) => h('th', { scope: 'col', class: cls || '' }, t);
-  const head = h('tr', {}, th('Fit'), th('Role'), th('Company'), th('Place'), th('Pay'), th('Why it fits', 'col-wide'), th('Skill to learn'), h('th', {}, h('span', { class: 'visually-hidden' }, 'Actions')));
+  const head = h('tr', {}, th('Fit'), th('Role'), th('Company'), th('Place'), th('Pay'), th('Source'), th('Why it fits', 'col-wide'), th('Skill to learn'), h('th', {}, h('span', { class: 'visually-hidden' }, 'Actions')));
   const body = rows.map(j => {
     const pdf = h('button', { type: 'button', class: 'btn btn-quiet btn-sm', onclick: () => busy(pdf, 'Preparing…', async () => {
       if (!data.cv) throw new Error('Add your CV in Profile first.');
@@ -154,6 +169,7 @@ function jobsTable(ctx, rows, redraw) {
       h('td', {}, h('b', {}, j.company)),
       h('td', {}, j.location || '—'),
       h('td', { class: 'muted' }, pay(j) || '—'),
+      h('td', { class: 'muted' }, sourceLabel(j)),
       h('td', { class: 'col-wide' }, whyOf(j) || '—'),
       h('td', {}, gapOf(j) || '—'),
       h('td', {}, h('div', { class: 'row-acts' },

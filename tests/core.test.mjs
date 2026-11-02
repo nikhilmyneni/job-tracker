@@ -587,3 +587,21 @@ test('places to look default to your own city, then Remote and anywhere in India
   assert.deepEqual(d.prefs.locations, ['Chennai', 'Remote', 'Anywhere in India']);
   assert.equal(d.emailAlerts, false); // job emails are asked for in setup, never on by default
 });
+
+test('job sources in plain words, and the company-or-source search', () => {
+  assert.equal(C.siteOf('LinkedIn Job Alerts <jobalerts-noreply@linkedin.com>'), 'LinkedIn');
+  assert.equal(C.siteOf('', 'https://in.indeed.com/viewjob?jk=1'), 'Indeed');
+  assert.equal(C.siteOf('Acme HR <hr@acme.com>'), '');
+  assert.equal(C.sourceLabel({ source: 'Greenhouse' }), 'Company site');
+  assert.equal(C.sourceLabel({ source: 'Workday' }), 'Company site');
+  assert.equal(C.sourceLabel({ source: 'Naukri' }), 'Naukri');
+  assert.equal(C.sourceLabel({ source: 'Job alert email', link: 'https://www.naukri.com/job-1' }), 'Naukri');
+  assert.equal(C.sourceLabel({ source: 'Job alert email' }), 'Job alert email');
+  assert.equal(C.sourceLabel({ source: 'Pasted' }), 'Pasted by you');
+  const gh = { company: 'Razorpay', role: 'SOC Analyst', location: 'Bengaluru', source: 'Greenhouse' };
+  const ind = { company: 'Acme', role: 'Intern', location: 'Pune', source: 'Indeed' };
+  assert.ok(C.jobMatchesQuery(gh, '')); assert.ok(C.jobMatchesQuery(gh, 'razor'));
+  assert.ok(C.jobMatchesQuery(gh, 'career site')); assert.ok(C.jobMatchesQuery(gh, 'Company site')); assert.ok(C.jobMatchesQuery(gh, 'greenhouse'));
+  assert.ok(!C.jobMatchesQuery(gh, 'indeed'));
+  assert.ok(C.jobMatchesQuery(ind, 'indeed')); assert.ok(C.jobMatchesQuery(ind, 'acme indeed')); assert.ok(!C.jobMatchesQuery(ind, 'career site'));
+});

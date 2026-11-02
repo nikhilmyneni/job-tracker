@@ -147,7 +147,7 @@ async function findJobs(data, me, afterStr, seen, result, report, note, gmail) {
     report(`Finding openings in job alerts ${i + 1}–${i + batch.length} of ${alerts.length}…`, 0.84);
     try {
       const out = await ask(s, C.extractPrompt(batch), true, () => {}, 'extract');
-      if (Array.isArray(out)) listings = listings.concat(out.map(l => Object.assign({}, l, { source: 'Job alert email' })));
+      if (Array.isArray(out)) listings = listings.concat(out.map(l => { const a = batch[Number(l && l.alert)]; return Object.assign({}, l, { source: C.siteOf(a && a.from, l && l.link) || 'Job alert email' }); }));
       batch.forEach(a => seen.add(a.id));
     } catch (e) {
       note(`AI couldn't read some job alerts (${e.message}). They'll be tried again next time.`);

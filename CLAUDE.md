@@ -117,9 +117,9 @@ and counts toward the 100-user cap. Without Gmail, users add applications by han
 - `js/google.js`: sign-in, Gmail, Drive app data (`job-tracker.json`, `cv-original.*`).
 - `js/update.js`: `runUpdate()` and `cvForResumeFold()`. `js/files.js`: CV import (pdf.js / DOCX / TXT), downloads.
 - `js/notify.js`: browser notifications after a sync (status changes, new matches), only while the app is open; `notificationsFor()` is pure.
-- `js/app.js`: boot, routing, sync, actions. Screens: `view-home.js` (Home), `view-applications.js` (+ `view-board.js`: board, timeline, edit dialog), `view-matches.js` (one column of job cards,
-  max 720px: For you / Saved / Applied, one Filter sheet, a detail drawer, Apply / Save / ⋯; Hidden jobs and a Compact view table under ⋯, `jh-matches` display pref),
-  `view-tailor.js` (one column, max 760px: the fit in words + Make the safe changes, toggles for each change / why this score / the job ad,
+- `js/app.js`: boot, routing, sync, actions. Screens: `view-home.js` (Home), `view-applications.js` (+ `view-board.js`: board, timeline, edit dialog), `view-matches.js` (a grid of job cards, up to 3 across: For you / Saved / Applied, one search box for company or source
+  (`jobMatchesQuery`; sources in plain words by `sourceLabel`: Company site, LinkedIn, Indeed, Naukri…, from `siteOf` the alert's sender or link), one Filter sheet, a detail drawer, Apply / Save / ⋯; Hidden jobs and a Compact view table under ⋯, `jh-matches` display pref),
+  `view-tailor.js` (one column on phones, controls left and the resume right on wide screens: the fit in words + Make the safe changes, toggles for each change / why this score / the job ad,
   layout choices, the preview, a sticky Download PDF / Apply / More formats bar), `apply.js` (the Apply panel), `view-settings.js` (Profile and Settings). `onboarding.js`: the wizard plus the shared
   field blocks. `ui.js`: `h()`, `busy`, `holdButton`, `setLabel`, `icon`, `pageHead`, chips, dialogs (`.dialog-sheet` / `.dialog-drawer` go full screen on phones), `<details class="menu">` menus. `demo.js`.
 - `tests/`: Node tests: `core`, `match`, `files` (PDF lines), `notify`, `api` (the AI function), `google` (rate-limit retries, paging), `tailor` (suggestions, LaTeX, .docx), `pdf` (the resume PDF), `alerts` (the email alerts, with a fake store, Brevo and board) and `store` (RESP against a fake Redis server), with fetch faked. `npm test` and `npm run check` must pass before any push.
@@ -143,7 +143,7 @@ and counts toward the 100-user cap. Without Gmail, users add applications by han
 - **review:** emails that look like an application update but couldn't be matched ("We need your help with N emails"); `addReview()`.
 - **Job:** id, found_on, posted, score (0–100), fit (score/20), matched[], missing[], company, role, location, pay, why,
   skill_gap, apply_by, link, details, jd (full description, fetched when opened), status (New/Saved/Applied/Skipped/Expired),
-  apply_clicked (when you opened the job page from Apply; drives "Did you apply?"), key, source ('Pasted' for one pasted into the tailor), ref (board + id, for the full description), resumefold_at, tailored {accepted[], confirmed[], template, extra[] (an AI summary that
+  apply_clicked (when you opened the job page from Apply; drives "Did you apply?"), key, source (the ATS name for a careers page, the job site for an alert email, else 'Job alert email'; 'Pasted' for one pasted into the tailor), ref (board + id, for the full description), resumefold_at, tailored {accepted[], confirmed[], template, extra[] (an AI summary that
   passed `honestRewrite`), at} (the tailored resume is rebuilt from these).
 - `skillsAdded[]`, `skillsRemoved[]`: your edits to the skills read from the CV (Profile).
 - `cvFold`: the CV as ResumeFold's Resume JSON, made once per CV (`cvFoldHash`).

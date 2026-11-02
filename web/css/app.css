@@ -630,7 +630,9 @@ details.more > summary, .rf-more > summary { cursor: pointer; min-height: var(--
 .ap-ask .ap-num { background: var(--blue); color: var(--on-accent); }
 
 /* ---------- Home ---------- */
-.home { display: grid; gap: 28px; max-width: 760px; }
+.home { display: grid; gap: 28px; align-items: start; }
+.home-col { display: grid; gap: 28px; min-width: 0; align-content: start; }
+@media (min-width: 1180px) { .home { grid-template-columns: minmax(0, 1.65fr) minmax(320px, 1fr); gap: 32px; } .home-one { grid-template-columns: minmax(0, 1fr); } }
 .home-sec { display: grid; gap: 12px; }
 .home-sec-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 16px; }
 .home-sec-head h2 { font-size: 20px; letter-spacing: -0.015em; }
@@ -648,7 +650,7 @@ details.more > summary, .rf-more > summary { cursor: pointer; min-height: var(--
 .home-list-text { display: grid; gap: 2px; flex: 1 1 220px; min-width: 0; }
 .home-list-text b { color: var(--ink); overflow-wrap: anywhere; }
 .home-list-text span { color: var(--muted); font-size: 14px; overflow-wrap: anywhere; }
-.home-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+.home-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
 .home-tile { display: grid; gap: 2px; padding: 16px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-card); text-decoration: none; color: var(--text); }
 .home-tile:hover { border-color: var(--line-strong); }
 .home-tile b { font: 800 30px/1.1 var(--display); color: var(--ink); letter-spacing: -0.02em; }
@@ -664,9 +666,14 @@ details.more > summary, .rf-more > summary { cursor: pointer; min-height: var(--
 @media (max-width: 600px) { .home-job-acts { width: 100%; } .home-job-acts .btn { flex: 1; } }
 
 /* ---------- Jobs for you: one calm column of cards ---------- */
-.jobs-top { max-width: 720px; }
-.jobs { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; max-width: 720px; }
-.job { position: relative; display: grid; gap: 6px; padding: 16px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-card); transition: border-color 160ms var(--ease); }
+.jobs-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 16px; }
+.search-wrap { position: relative; flex: 0 1 420px; min-width: 0; }
+.search-wrap > .ic { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
+.search-wrap .job-search { width: 100%; padding-left: 40px; }
+@media (max-width: 700px) { .search-wrap { flex: 1 1 100%; } }
+.jobs { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(min(100%, max(380px, calc((100% - 28px) / 3))), 1fr)); align-items: stretch; }
+.jobs > li { display: grid; min-width: 0; }
+.job { position: relative; display: grid; grid-template-rows: auto auto 1fr auto; align-content: start; gap: 6px; padding: 16px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-card); transition: border-color 160ms var(--ease); }
 .job:hover { border-color: var(--line-strong); }
 .job-open { position: absolute; inset: 0; z-index: 0; border: 0; background: none; border-radius: inherit; cursor: pointer; }
 .job-open:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
@@ -682,6 +689,13 @@ details.more > summary, .rf-more > summary { cursor: pointer; min-height: var(--
 
 /* ---------- Resume for a job: one focused column ---------- */
 .rf { display: grid; gap: 16px; max-width: 760px; }
+.rf-job { max-width: none; }
+@media (min-width: 1180px) {
+  .rf-job { grid-template-columns: minmax(340px, 0.85fr) minmax(0, 1.15fr); grid-template-rows: auto auto 1fr; grid-template-areas: "fit sheet" "acts sheet" "more sheet"; gap: 16px 28px; align-items: start; }
+  .rf-job > .rf-fit { grid-area: fit; } .rf-job > .rf-acts { grid-area: acts; position: static; border-top: 0; padding: 0; background: none; }
+  .rf-job > .rf-toggles { grid-area: more; } .rf-job > .rf-sheet { grid-area: sheet; }
+  .rf-job .rf-layouts { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
 .rf-fit { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px 20px; padding: 20px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-card); }
 .rf-fit-text { display: grid; gap: 6px; flex: 1 1 320px; min-width: 0; }
 .rf-fit-text p { margin: 0; }
@@ -706,4 +720,8 @@ details.more > summary, .rf-more > summary { cursor: pointer; min-height: var(--
   .rf-acts { bottom: calc(64px + env(safe-area-inset-bottom)); padding: 10px 0; }
   .rf-acts > .btn { flex: 1; }
 }
-.rf-notice { max-width: 760px; }
+
+/* Resume picker: paste a job ad on the left, your jobs on the right (wide screens) */
+.rf-pick { display: grid; gap: 24px; align-items: start; }
+.rf-pick .pick { grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 1100px) { .rf-pick { grid-template-columns: minmax(0, 1.2fr) minmax(320px, 1fr); gap: 28px; } .rf-pick-one { grid-template-columns: minmax(0, 860px); } }

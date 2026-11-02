@@ -66,5 +66,8 @@ export function renderHome(ctx, root) {
 
   root.replaceChildren(
     pageHead(first ? `Hi ${first}` : 'Home', data.lastRunAt ? `Up to date · checked ${ago(data.lastRunAt)}` : 'Here’s what to do next'),
-    h('div', { class: 'home' }, jobs, asked, coming, waiting, setupSec));
+    // Wide screens: jobs (and "Did you apply?") on the left, what's coming up and your applications on the right.
+    h('div', { class: 'home' + (coming || waiting || setupSec ? '' : ' home-one') },
+      h('div', { class: 'home-col' }, jobs, asked),
+      coming || waiting || setupSec ? h('div', { class: 'home-col' }, coming, waiting, setupSec) : ''));
 }
