@@ -1,8 +1,8 @@
 /**
- * First-run setup: one question per step. The same field blocks make up the Preferences part of Settings.
+ * First-run setup in three steps (CV, check what we found, job emails). The field blocks also make up Profile and Settings.
  */
 import { h, chipInput, segmented, busy, errText, extLink, icon } from './ui.js';
-import { LEVELS, JOB_TYPES, JOBS_PER_UPDATE, DAYS, ROLE_RANGES, SINCE_DAYS, ARCHIVE_DAYS, ATS, COMPANY_SUGGESTIONS, INDIA_BOARDS, companyKey, normalizeCompany, parseCareerUrl, placeMatches, profileFromCv, applyCvProfile } from './core.js';
+import { LEVELS, JOB_TYPES, JOBS_PER_UPDATE, DAYS, ROLE_RANGES, SINCE_DAYS, ARCHIVE_DAYS, ATS, COMPANY_SUGGESTIONS, INDIA_BOARDS, companyKey, normalizeCompany, parseCareerUrl, placeMatches, placesFor, profileFromCv, applyCvProfile } from './core.js';
 import { fetchBoard } from './sources.js';
 import { readCvFile, CV_ACCEPT } from './files.js';
 
@@ -237,78 +237,108 @@ export function gmailBlock(ctx) {
   return { el, collect: () => {} };
 }
 
-// ---------- the wizard ----------
-const FROM_CV = 'Filled in from your CV. Change anything that isn’t right.';
+// ---------- the wizard: three steps ----------
+// 1. your CV, 2. check what we found, 3. job emails yes or no. Everything else starts at a good default
+// (skip list, companies, routine, Gmail look-back, old applications) and can be changed in Settings. Gmail is a card on Home.
+const LOOKING_FOR = { fresher: 'A fresher job', intern: 'An internship', both: 'Either' };
+const TYPE_FOR = { fresher: 'fulltime', intern: 'internship', both: 'both' };
+
+/** Step 2: name, city, roles, what you're looking for, places, paid only. */
+function checkBlock(d, fromCv) {
+  const name = h('input', { type: 'text', value: d.name, autocomplete: 'name', maxLength: 80 });
+  const city = h('input', { type: 'text', value: d.city, placeholder: 'e.g. Hyderabad', maxLength: 60 });
+  const roles = chipInput(d.prefs.roles, { placeholder: 'Add a role and press Enter', suggestions: [...new Set([...fromCv, ...ROLE_SUGGESTIONS])], label: 'Jobs you want', max: 6 });
+  const looking = segmented(LOOKING_FOR, d.prefs.level in LOOKING_FOR ? d.prefs.level : 'both', 'Looking for');
+  const places = chipInput(d.prefs.locations, { placeholder: 'Start typing a city', suggestions: PLACE_SUGGESTIONS, label: 'Places', search: (q, have) => placeMatches(q, have) });
+  const paid = check(d.prefs.paidOnly, 'Paid jobs only');
+  // Typing your city fills in the places, until you change them yourself.
+  let placesTouched = false;
+  places.el.addEventListener('input', () => { placesTouched = true; });
+  places.el.addEventListener('click', (e) => { if (e.target.closest('button')) placesTouched = true; });
+  return {
+    el: h('div', { class: 'stack' },
+      h('div', { class: 'two' }, field('Your name', name), field('City you live in', city)),
+      field('Jobs you want', roles.el, 'Pick up to three, or type your own.'),
+      group('Looking for', looking.el),
+      field('Where you’d like to work', places.el),
+      paid.el),
+    collect: (dd) => {
+      dd.name = name.value.trim(); dd.city = city.value.trim();
+      const lv = looking.get();
+      Object.assign(dd.prefs, { roles: roles.get(), level: lv, jobType: TYPE_FOR[lv], paidOnly: paid.get() });
+      const picked = places.get();
+      dd.prefs.locations = !placesTouched && dd.city ? placesFor(dd.city) : picked.length ? picked : placesFor(dd.city);
+    },
+  };
+}
+
+/** Step 3: email new jobs? Asked, never turned on for you. */
+function alertsBlock(ctx) {
+  return {
+    el: h('div', { class: 'stack' },
+      h('ul', { class: 'ticks-list' },
+        h('li', {}, 'Once a day, at about 9 in the morning. Change the time and days in Settings.'),
+        h('li', {}, 'Even when Job Hunter is closed.'),
+        h('li', {}, 'One click in any email turns them off.')),
+      h('p', { class: 'hint' }, 'For this, Job Hunter keeps your roles, places, skill names and email address on its server, never your CV or Gmail. ',
+        h('a', { href: '/privacy.html#alerts', target: '_blank', rel: 'noopener' }, 'What’s kept')),
+      ctx.demo ? h('p', { class: 'hint' }, 'In the demo, nothing is emailed.') : ''),
+    collect: () => {},
+  };
+}
+
+const FROM_CV = 'We filled this in from your CV. Change anything that isn’t right.';
 const STEPS = [
-  { id: 'cv', title: 'Start with your CV', intro: 'We read it to fill in the next questions, pick jobs that fit you and make a resume for each.', block: (d, ctx, w) => cvBlock(d.cv, d.cvFile, { onRead: w.onCvRead }) },
-  { id: 'you', title: 'About you', intro: (d, w) => (!w.fromCv ? 'You can change any answer later.' : w.profile.found.name && w.profile.found.city ? FROM_CV
-    : w.profile.found.name ? 'Your name is from your CV. Add the city you live in now.' : 'Your name wasn’t clear in the CV, so please check it.'), block: (d) => youBlock(d) },
-  { id: 'want', title: 'What are you looking for?', intro: (d, w) => (w.fromCv ? (w.profile.roles.length ? 'Roles that match your CV. Add or remove any.' : 'Your CV didn’t point clearly to a role, so pick a few.') : ''), block: (d, ctx, w) => wantBlock(d, w.profile.roles) },
-  { id: 'where', title: 'Where would you like to work?', block: (d) => whereBlock(d) },
-  { id: 'avoid', title: 'Anything to skip?', intro: 'Openings with these are left out.', block: (d) => avoidBlock(d) },
-  { id: 'gmail', title: 'Connect Gmail (optional)', intro: 'So your applications track themselves: confirmations, tests, interviews, offers and rejections, straight from your inbox.', block: (d, ctx) => gmailBlock(ctx) },
-  { id: 'companies', title: 'Companies (optional)', intro: 'Job Hunter already searches a list of companies hiring in India, and reads your job-alert emails if Gmail is connected. Add any company’s career page for more.', block: (d, ctx) => companiesBlock(d.companies, { demo: ctx.demo, auto: d.autoCompanies }) },
-  { id: 'routine', title: 'Your routine', block: (d, ctx) => routineBlock(d, { email: ctx.me && ctx.me.email }) },
+  { id: 'cv', title: 'Upload your CV', intro: 'We use it to find jobs that fit you and to make a resume for each one.', block: (d, ctx, w) => cvBlock(d.cv, d.cvFile, { onRead: w.onCvRead }) },
+  { id: 'check', title: 'Check what we found', intro: (d, w) => (w.fromCv ? FROM_CV : 'Tell us a little about the jobs you want.'), block: (d, ctx, w) => checkBlock(d, w.profile.roles) },
+  { id: 'alerts', title: 'Get new jobs by email?', intro: 'We can email you jobs that fit you, so you don’t miss any.', block: (d, ctx) => alertsBlock(ctx) },
 ];
 
 /** Renders the wizard into root. ctx.finish(draft) saves and starts the app. */
 export function runWizard(root, ctx) {
   const d = JSON.parse(JSON.stringify(ctx.data.settings));
   d.cv = ctx.data.cv; d.cvFile = ctx.data.cvFile; d.cvUpload = null;
-  // A new user gets the whole routine set up here: the daily schedule, the built-in company list and email alerts
-  // (shown, with what's kept, on the routine step; untick to skip). All of it can be changed later in Settings.
-  if (!ctx.data.settings.onboarded) Object.assign(d, { emailAlerts: !ctx.demo, autoCompanies: true });
+  if (!ctx.data.settings.onboarded) Object.assign(d, { autoCompanies: true });
   // The CV fills in later answers once, and only the ones still at their defaults.
   const w = { fromCv: false, profile: { roles: [], found: {} } };
   const hint = ctx.me && !ctx.demo ? ctx.me.name : '';
   w.onCvRead = (text) => { w.profile = profileFromCv(text, new Date(), { hint }); applyCvProfile(d, w.profile); w.fromCv = true; };
   if (d.cv) w.profile = profileFromCv(d.cv, new Date(), { hint });
   let i = 0, cur = null;
-  const total = STEPS.length + 1;
+  const total = STEPS.length;
   const draw = () => {
-    const done = i === STEPS.length;
-    const back = h('button', { type: 'button', class: 'btn btn-quiet', disabled: i === 0, onclick: () => { if (cur) cur.collect(d); i--; draw(); } }, 'Back');
+    const st = STEPS[i];
     const status = h('div', { class: 'status', role: 'status' });
-    let body, next;
-    if (!done) {
-      const st = STEPS[i];
-      cur = st.block(d, ctx, w);
-      const intro = typeof st.intro === 'function' ? st.intro(d, w) : st.intro;
-      body = [h('h1', { class: 'wiz-title', tabIndex: -1 }, st.title), intro ? h('p', { class: 'wiz-intro' }, intro) : '', cur.el];
-      next = h('button', { type: 'button', class: 'btn btn-primary', onclick: () => {
+    const back = h('button', { type: 'button', class: 'btn btn-quiet', disabled: i === 0, onclick: () => { cur.collect(d); i--; draw(); } }, 'Back');
+    cur = st.block(d, ctx, w);
+    const intro = typeof st.intro === 'function' ? st.intro(d, w) : st.intro;
+    const finish = (alerts) => (e) => busy(e.currentTarget, 'Starting…', () => { d.emailAlerts = alerts && !ctx.demo; return ctx.finish(d); }, status);
+    let acts;
+    if (st.id === 'alerts') {
+      acts = [h('button', { type: 'button', class: 'btn btn-quiet', onclick: finish(false) }, 'No thanks'),
+        h('button', { type: 'button', class: 'btn btn-primary', onclick: finish(true) }, 'Yes, email me')];
+    } else {
+      const next = h('button', { type: 'button', class: 'btn btn-primary', onclick: () => {
         cur.collect(d);
         if (st.id === 'cv') {
           if (d.cv && !w.fromCv) w.onCvRead(d.cv); // pasted text, not a file
           if (!d.name && ctx.me && ctx.me.name) d.name = ctx.me.name;
         }
-        if (st.id === 'want' && !d.prefs.roles.length) { status.className = 'status err'; status.textContent = 'Add at least one role you want.'; return; }
+        if (st.id === 'check' && !d.prefs.roles.length) { status.className = 'status err'; status.textContent = 'Add at least one job you want.'; return; }
         i++; draw();
-      } }, (st.id === 'companies' && !(d.companies || []).length) || (st.id === 'cv' && !d.cv) || (st.id === 'gmail' && !(ctx.gmailOn && ctx.gmailOn())) ? 'Skip for now' : 'Next');
-      if (st.id === 'companies' || st.id === 'cv' || st.id === 'gmail') ['click', 'input', 'drop'].forEach(ev => cur.el.addEventListener(ev, () => {
-        if (st.id !== 'gmail' || (ctx.gmailOn && ctx.gmailOn())) { next.textContent = 'Next'; next.className = 'btn btn-primary'; }
-      }));
-      if (next.textContent === 'Skip for now') next.className = 'btn btn-quiet';
-    } else {
-      cur = null;
-      const p = d.prefs;
-      const row = (k, v) => h('div', { class: 'sum-row' }, h('span', {}, k), h('b', {}, v || '—'));
-      body = [h('h1', { class: 'wiz-title', tabIndex: -1 }, 'All set. Here’s your plan'),
-        h('div', { class: 'sum' },
-          row('Roles', p.roles.join(', ')), row('Level', LEVELS[p.level]), row('Job type', JOB_TYPES[p.jobType]),
-          row('Pay', (p.paidOnly ? 'Paid only' : 'Unpaid OK') + (p.minPay ? `, at least ${p.minPay}` : '')),
-          row('Locations', p.locations.join(', ') + (p.relocate ? ' · open to relocating' : '')),
-          row('Skip', p.avoid.join(', ')), row('CV', d.cv ? `${d.cv.length.toLocaleString()} characters${d.cvUpload ? ' · ' + d.cvUpload.name : ''}` : 'Not added yet'),
-          row('Gmail', ctx.gmailOn && ctx.gmailOn() ? 'Connected (read-only)' : 'Not connected. You can connect it any time'),
-          row('Companies', [(d.autoCompanies !== false) && `Job Hunter’s list (${INDIA_BOARDS.length})`, ...(d.companies || []).map(c => c.name)].filter(Boolean).join(', ') || 'None yet'),
-                    row('Updates', `${scheduleLabel(d.schedule)} · ${d.jobsPerUpdate || 'no'} new jobs a day · ${ROLE_RANGES[d.prefs.roleRange]}${d.emailAlerts ? ' · emailed to you' : ''}`)),
-        h('p', { class: 'hint' }, ctx.gmailOn && ctx.gmailOn() ? 'Start reads your Gmail (read-only) from the last ' + d.sinceDays + ' days. Applications appear as they’re sorted.' : 'Start checks the companies you follow for openings.')];
-      next = h('button', { type: 'button', class: 'btn btn-primary', onclick: () => busy(next, 'Saving…', () => ctx.finish(d), status) }, 'Start');
+      } }, st.id === 'cv' && !d.cv ? 'Skip for now' : 'Next');
+      if (st.id === 'cv') {
+        if (!d.cv) next.className = 'btn btn-quiet';
+        ['click', 'input', 'drop'].forEach(ev => cur.el.addEventListener(ev, () => { if (cur.textarea && cur.textarea.value.trim()) { next.textContent = 'Next'; next.className = 'btn btn-primary'; } }));
+      }
+      acts = [next];
     }
     root.replaceChildren(h('div', { class: 'wizard' },
       h('div', { class: 'progress', role: 'progressbar', 'aria-valuemin': 1, 'aria-valuemax': total, 'aria-valuenow': i + 1 },
         h('div', { class: 'progress-bar' })),
       h('div', { class: 'step-count' }, `Step ${i + 1} of ${total}`),
-      ...body, status, h('div', { class: 'wiz-nav' }, back, next)));
+      h('h1', { class: 'wiz-title', tabIndex: -1 }, st.title), intro ? h('p', { class: 'wiz-intro' }, intro) : '', cur.el,
+      status, h('div', { class: 'wiz-nav' }, back, h('div', { class: 'row' }, ...acts))));
     root.querySelector('.progress-bar').style.width = ((i + 1) / total * 100) + '%';
     const t = root.querySelector('.wiz-title'); if (t) t.focus();
   };

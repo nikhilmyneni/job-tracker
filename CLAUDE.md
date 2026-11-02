@@ -13,9 +13,10 @@ the owner's free Groq + Gemini keys from environment variables) and `workday.js`
 - `/app` (Home), `/app/matches` (Jobs for you), `/app/applications` (My applications), `/app/tailor[/<jobId>]` (Resume for a job), `/app/profile`, `/app/settings`: the app
   (`app.html`; Vercel rewrites `/app/*` to it, and `scripts/serve.js` does the same locally).
 
-Flow: sign in → first-run **setup wizard**, CV first (drop a file or paste; `profileFromCv` then fills in name,
-city, roles, level and locations), then roles, level, job type, pay, locations (city search from the first letter,
-`placeMatches`), skip list, **Connect Gmail (optional)**, companies to follow, routine → **Home**. Everything from setup can be changed in
+Flow: sign in → first-run **setup in 3 steps** (`onboarding.js` `STEPS`): 1. your CV (drop a file or paste; `profileFromCv` fills in the rest),
+2. *Check what we found*: name, city, roles, looking for (fresher job / internship / either), places (`placesFor(city)` until you change them;
+city search with `placeMatches`), paid only, 3. *Get new jobs by email?* Yes / No thanks (never on by default) → **Home**. Everything else
+(skip list, companies, routine, look-back, old applications) keeps its default and lives in Settings; Gmail is a card on Home. Everything from setup can be changed in
 Profile and CV or Settings.
 
 Home (`view-home.js`, built from the pure `homeFeed`): the top 3 new jobs with Apply, "Did you apply?" (jobs whose page you opened),

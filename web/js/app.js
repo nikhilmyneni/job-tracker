@@ -459,6 +459,7 @@ async function finishWizard(d) {
   C.addLog(ctx.data, 'Set up Job Hunter');
   await persist();
   if (ctx.data.settings.emailAlerts) await syncAlerts(false).catch(() => { ctx.data.settings.emailAlerts = false; toast('Email alerts couldn’t be turned on. Try again in Settings.', true); });
+  history.replaceState(null, '', '/app' + location.search);
   show('app'); render();
   if (!DEMO) updateNow();
 }

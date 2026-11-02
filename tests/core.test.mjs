@@ -577,3 +577,13 @@ test('the Show filter maps to a minimum fit and back', () => {
   for (const k of Object.keys(C.SHOW_LEVELS)) assert.equal(C.showOf(C.SHOW_LEVELS[k].min), k);
   assert.equal(C.fieldHint('Core'), ''); assert.equal(C.fieldHint('Related'), 'Close to your field'); assert.equal(C.fieldHint('Stretch'), 'A stretch');
 });
+
+test('places to look default to your own city, then Remote and anywhere in India', () => {
+  assert.deepEqual(C.placesFor('Pune'), ['Pune', 'Remote', 'Anywhere in India']);
+  assert.deepEqual(C.placesFor(''), ['Remote', 'Anywhere in India']);
+  assert.deepEqual(C.placesFor('remote'), ['remote', 'Anywhere in India']); // no repeats, any case
+  const d = C.defaultSettings();
+  C.applyCvProfile(d, { name: 'A', city: 'Chennai', roles: ['SOC Analyst'], found: {} });
+  assert.deepEqual(d.prefs.locations, ['Chennai', 'Remote', 'Anywhere in India']);
+  assert.equal(d.emailAlerts, false); // job emails are asked for in setup, never on by default
+});

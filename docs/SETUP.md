@@ -10,15 +10,14 @@ data stays in a hidden app folder in your own Google Drive.
 
 1. Open the site and click **Sign in with Google**. This only shares your name and email, and gives Job Hunter
    a hidden folder in your Drive for your data.
-2. Setup starts with your CV: drop a PDF, Word or text file, or paste the text. Job Hunter fills in the next
-   questions from it (name, city, roles, level, locations). Check them, then add pay, places and things to skip.
-3. **Connect Gmail (optional).** It lets your applications track themselves. Google shows a "Google hasn't
-   verified this app" screen here: click **Advanced → Go to Job Hunter**, tick the box to read your email, and
-   click **Continue**. Skip it and you can connect later, or paste application emails yourself.
-4. Job Hunter already searches about 40 companies hiring in India (start-ups and MNCs like Accenture, Cisco, Adobe,
-   Salesforce, Citi and Visa). Follow any others you like. The last step sets your routine: daily times, how many jobs a day,
-   and email alerts (on unless you untick it). Then click **Start**. All of it can be changed later in Settings. With Gmail connected, the first sync reads the last
-   30–120 days and applications appear as they're sorted.
+2. Setup is three steps. **Upload your CV** (a PDF, Word or text file, or paste the text). **Check what we found**: your name,
+   city, the jobs you want, fresher job or internship, and where (your city, Remote and anywhere in India to start).
+   **Get new jobs by email?** Yes or No thanks. Then you're on Home.
+3. Job Hunter already searches about 40 companies hiring in India (start-ups and MNCs like Accenture, Cisco, Adobe,
+   Salesforce, Citi and Visa) every day at 9. Change the routine, companies and skip list any time in Settings.
+4. **Connect Gmail (optional)** from the card on Home. It lets your applications track themselves. Google shows a
+   "Google hasn't verified this app" screen: click **Advanced → Go to Job Hunter**, tick the box to read your email, and
+   click **Continue**. The first check reads the last 30–120 days and applications appear as they're sorted.
 
 There's nothing else to set up: the AI is built in and free.
 
@@ -32,7 +31,7 @@ There's nothing else to set up: the AI is built in and free.
   need 2+ years, are unpaid, ask for a fee, or are bulk "Dear Candidate" invites; at least half your picks are your core
   roles when there are good ones. **Which jobs to show** can also be *Also a stretch*: other roles where you'd only need one more skill. On the day you sign up, Job Hunter also looks for jobs every two hours
   while it's open, until you have that day's matches.
-- **Email alerts (optional):** turn on *Email me when new jobs are ready* in setup or **Settings → Routine**. At your
+- **Email alerts (optional):** say yes in setup, or turn on *Email me when new jobs are ready* in **Settings → Routine**. At your
   "New jobs ready by" time, Job Hunter looks through the companies you follow even while it's closed and emails you the
   new jobs (and they're waiting in Jobs for you next time you open it). It keeps only what matching needs, never your
   CV or Gmail; turning it off, or *Stop these emails* in an alert, deletes it.

@@ -1244,13 +1244,18 @@ export function profileFromCv(text, now = new Date(), { hint } = {}) {
 }
 
 /** Fills the setup answers from the CV, but only where you haven't answered yet. */
+/** Where to look when you haven't said: your city first, then Remote and anywhere in India (plus any you picked). */
+export function placesFor(city, picked = []) {
+  return [city, ...picked, 'Remote', 'Anywhere in India'].map(x => String(x || '').trim()).filter((x, i, a) => x && a.findIndex(y => y.toLowerCase() === x.toLowerCase()) === i);
+}
+
 export function applyCvProfile(d, p) {
   const def = defaultSettings();
   if (!d.name && p.name) d.name = p.name;
   if (!d.city && p.city) d.city = p.city;
   if (!d.prefs.roles.length && p.roles.length) d.prefs.roles = p.roles.slice();
   if (p.level && d.prefs.level === def.prefs.level) d.prefs.level = p.level;
-  if (p.city && JSON.stringify(d.prefs.locations) === JSON.stringify(def.prefs.locations)) d.prefs.locations = [p.city, 'Remote', 'Anywhere in India'].filter((x, i, a) => a.indexOf(x) === i);
+  if (p.city && JSON.stringify(d.prefs.locations) === JSON.stringify(def.prefs.locations)) d.prefs.locations = placesFor(p.city);
   return d;
 }
 
