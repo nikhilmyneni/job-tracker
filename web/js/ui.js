@@ -113,6 +113,45 @@ const ICONS = {
   file: [['path', 'M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z'], ['path', 'M14 3v5h5']],
   grip: [['path', 'M9 6h.01M9 12h.01M9 18h.01M15 6h.01M15 12h.01M15 18h.01']],
 };
+/**
+ * <details class="menu"> menus: each opens toward the side with room (never cut off by the sidebar or the window edge),
+ * only one is open at a time, and a click outside or Esc closes it.
+ */
+export function placeMenu(menu) {
+  const list = menu.querySelector('.menu-list');
+  if (!list) return;
+  list.style.left = ''; list.style.right = '';
+  const box = (menu.closest('.canvas, dialog') || document.documentElement).getBoundingClientRect();
+  const lo = Math.max(box.left, 0) + 8, hi = Math.min(box.right, innerWidth) - 8;
+  let r = list.getBoundingClientRect();
+  if (r.left < lo) { list.style.left = '0'; list.style.right = 'auto'; r = list.getBoundingClientRect(); }
+  if (r.right > hi) { list.style.left = 'auto'; list.style.right = '0'; r = list.getBoundingClientRect(); }
+  if (r.left < lo) { list.style.left = (lo - menu.getBoundingClientRect().left) + 'px'; list.style.right = 'auto'; } // narrower than both: pin to the edge
+  // Up or down: below unless it would run under the window's edge (or the phone tab bar) and there's more room above.
+  list.style.top = ''; list.style.bottom = '';
+  const bar = document.querySelector('.side-nav');
+  const barTop = bar && getComputedStyle(bar).position === 'fixed' ? bar.getBoundingClientRect().top : innerHeight;
+  const floor = Math.min(innerHeight, barTop, box.bottom) - 8, head = menu.getBoundingClientRect();
+  r = list.getBoundingClientRect();
+  if (r.bottom > floor && head.top - r.height - 6 > Math.max(box.top, 0)) { list.style.top = 'auto'; list.style.bottom = 'calc(100% + 6px)'; }
+  else if (r.bottom > floor) list.scrollIntoView({ block: 'nearest' });
+}
+if (typeof document !== 'undefined') {
+  document.addEventListener('toggle', (e) => {
+    const m = e.target;
+    if (!(m instanceof HTMLDetailsElement) || !m.classList.contains('menu') || !m.open) return;
+    document.querySelectorAll('details.menu[open]').forEach(o => { if (o !== m) o.open = false; });
+    placeMenu(m);
+  }, true);
+  document.addEventListener('click', (e) => {
+    document.querySelectorAll('details.menu[open]').forEach(o => { if (!o.contains(e.target)) o.open = false; });
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    document.querySelectorAll('details.menu[open]').forEach(o => { o.open = false; const s = o.querySelector('summary'); if (s) s.focus(); });
+  });
+}
+
 export function icon(name) {
   const NS = 'http://www.w3.org/2000/svg';
   const svg = document.createElementNS(NS, 'svg');
